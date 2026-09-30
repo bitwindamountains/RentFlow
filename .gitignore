@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.angular/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.idea/
+.vscode/
+apps/api/prisma/migrations/*/migration_lock.toml
+apps/api/.data/
+apps/api/backups/
+apps/web/.ui-review/
+*.tsbuildinfo

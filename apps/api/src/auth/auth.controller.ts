@@ -1,106 +1,178 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Inject,
-  Post,
-  Req,
-  Res,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import {
-  IsEmail,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { FastifyReply } from 'fastify';
-import { DOMAIN_SERVICE, type DomainService } from '../core/domain-service.js';
-import type { AuthenticatedRequest } from './session.guard.js';
-import { Public } from './public.decorator.js';
+import { PASSWORD_MAX_LENGTH } from '../common/crypto.js';
+import { environment, sessionCookieName } from '../config/environment.js';
+import { AuthService, type IssuedSession } from './auth.service.js';
+import { ALL_ROLES, Auth, Public, RateLimit, Roles } from './decorators.js';
+import type { SessionContext } from './session.types.js';
 
 class RegisterDto {
-  @IsEmail() email!: string;
-  @IsString() @MinLength(12) @MaxLength(128) password!: string;
+  @IsEmail() @MaxLength(254) email!: string;
+  @IsString() @MinLength(12) @MaxLength(PASSWORD_MAX_LENGTH) password!: string;
   @IsString() @MinLength(2) @MaxLength(100) name!: string;
   @IsString() @MinLength(2) @MaxLength(120) organizationName!: string;
 }
-
 class LoginDto {
-  @IsEmail() email!: string;
-  @IsString() @MinLength(1) @MaxLength(128) password!: string;
+  @IsEmail() @MaxLength(254) email!: string;
+  @IsString() @MinLength(1) @MaxLength(PASSWORD_MAX_LENGTH) password!: string;
   @IsOptional() @IsString() @MaxLength(160) workspace?: string;
+}
+class EmailDto {
+  @IsEmail() @MaxLength(254) email!: string;
+}
+class TokenDto {
+  @IsString() @MinLength(20) @MaxLength(100) token!: string;
+}
+class ResetPasswordDto extends TokenDto {
+  @IsString() @MinLength(12) @MaxLength(PASSWORD_MAX_LENGTH) password!: string;
+}
+class ChangePasswordDto {
+  @IsString() @MinLength(1) @MaxLength(PASSWORD_MAX_LENGTH) currentPassword!: string;
+  @IsString() @MinLength(12) @MaxLength(PASSWORD_MAX_LENGTH) newPassword!: string;
+}
+class SwitchWorkspaceDto {
+  @IsString() @MinLength(1) @MaxLength(160) workspace!: string;
 }
 
 type CookieReply = FastifyReply & {
-  setCookie(
-    name: string,
-    value: string,
-    options: Record<string, unknown>,
-  ): void;
+  setCookie(name: string, value: string, options: Record<string, unknown>): void;
   clearCookie(name: string, options: Record<string, unknown>): void;
 };
 
 @ApiTags('authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(DOMAIN_SERVICE) private readonly store: DomainService) {}
+  constructor(private readonly auth: AuthService) {}
 
   @Public()
+  @RateLimit(5, '1 hour')
   @Post('register')
   async register(
     @Body() input: RegisterDto,
+    @Headers('user-agent') userAgent: string | undefined,
     @Res({ passthrough: true }) reply: CookieReply,
   ) {
-    const result = (await this.store.register(input)) as {
-      session: { sessionId: string };
-    };
-    this.setSessionCookie(reply, result.session.sessionId);
-    return this.store.profile(result.session as never);
+    return this.startSession(reply, await this.auth.register({ ...input, userAgent }));
   }
 
   @Public()
+  @RateLimit(10, '15 minutes')
   @HttpCode(200)
   @Post('login')
   async login(
     @Body() input: LoginDto,
+    @Headers('user-agent') userAgent: string | undefined,
     @Res({ passthrough: true }) reply: CookieReply,
   ) {
-    const result = (await this.store.login(
-      input.email,
-      input.password,
-      input.workspace?.trim().toLowerCase(),
-    )) as { session: { sessionId: string } } | undefined;
-    if (!result) throw new UnauthorizedException('Invalid email or password');
-    this.setSessionCookie(reply, result.session.sessionId);
-    return this.store.profile(result.session as never);
+    return this.startSession(reply, await this.auth.login({ ...input, userAgent }));
   }
 
+  @Roles(...ALL_ROLES)
   @Get('me')
-  me(@Req() request: AuthenticatedRequest) {
-    return this.store.profile(request.auth);
+  me(@Auth() session: SessionContext) {
+    return this.auth.profile(session);
   }
 
+  @Roles(...ALL_ROLES)
   @HttpCode(204)
   @Post('logout')
-  async logout(
-    @Req() request: AuthenticatedRequest,
-    @Res({ passthrough: true }) reply: CookieReply,
-  ) {
-    await this.store.logout(request.auth.sessionId);
-    reply.clearCookie('rentflow_session', { path: '/' });
+  async logout(@Auth() session: SessionContext, @Res({ passthrough: true }) reply: CookieReply) {
+    await this.auth.logout(session.sessionId);
+    reply.clearCookie(sessionCookieName(), this.cookieOptions());
   }
 
-  private setSessionCookie(reply: CookieReply, sessionId: string): void {
-    reply.setCookie('rentflow_session', sessionId, {
+  @Roles(...ALL_ROLES)
+  @HttpCode(200)
+  @Post('switch-workspace')
+  async switchWorkspace(
+    @Auth() session: SessionContext,
+    @Body() input: SwitchWorkspaceDto,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Res({ passthrough: true }) reply: CookieReply,
+  ) {
+    return this.startSession(reply, await this.auth.switchWorkspace(session, input.workspace, userAgent));
+  }
+
+  @Public()
+  @RateLimit(5, '15 minutes')
+  @HttpCode(202)
+  @Post('password/forgot')
+  async forgotPassword(@Body() input: EmailDto) {
+    await this.auth.requestPasswordReset(input.email);
+    return { accepted: true };
+  }
+
+  @Public()
+  @RateLimit(10, '15 minutes')
+  @HttpCode(200)
+  @Post('password/reset')
+  async resetPassword(@Body() input: ResetPasswordDto) {
+    await this.auth.resetPassword(input.token, input.password);
+    return { reset: true };
+  }
+
+  @Public()
+  @RateLimit(20, '15 minutes')
+  @HttpCode(200)
+  @Post('email/verify')
+  async verifyEmail(@Body() input: TokenDto) {
+    await this.auth.verifyEmail(input.token);
+    return { verified: true };
+  }
+
+  @Roles(...ALL_ROLES)
+  @RateLimit(3, '15 minutes')
+  @HttpCode(202)
+  @Post('email/resend')
+  async resendVerification(@Auth() session: SessionContext) {
+    await this.auth.resendVerification(session);
+    return { accepted: true };
+  }
+
+  @Roles(...ALL_ROLES)
+  @RateLimit(10, '15 minutes')
+  @HttpCode(204)
+  @Post('password')
+  async changePassword(@Auth() session: SessionContext, @Body() input: ChangePasswordDto) {
+    await this.auth.changePassword(session, input.currentPassword, input.newPassword);
+  }
+
+  @Roles(...ALL_ROLES)
+  @Get('sessions')
+  sessions(@Auth() session: SessionContext) {
+    return this.auth.listSessions(session);
+  }
+
+  @Roles(...ALL_ROLES)
+  @HttpCode(200)
+  @Post('sessions/revoke-others')
+  async revokeOthers(@Auth() session: SessionContext) {
+    return { revoked: await this.auth.revokeOtherSessions(session) };
+  }
+
+  @Roles(...ALL_ROLES)
+  @HttpCode(204)
+  @Delete('sessions/:id')
+  async revokeSession(@Auth() session: SessionContext, @Param('id', ParseUUIDPipe) id: string) {
+    await this.auth.revokeSession(session, id);
+  }
+
+  private async startSession(reply: CookieReply, issued: IssuedSession) {
+    reply.setCookie(sessionCookieName(), issued.token, {
+      ...this.cookieOptions(),
+      maxAge: environment().SESSION_ABSOLUTE_HOURS * 3600,
+    });
+    return this.auth.profile(issued.context);
+  }
+
+  private cookieOptions() {
+    return {
       httpOnly: true,
       sameSite: 'strict',
-      secure: process.env['NODE_ENV'] === 'production',
+      secure: environment().NODE_ENV === 'production',
       path: '/',
-      maxAge: 8 * 60 * 60,
-    });
+    };
   }
 }

@@ -1,35 +1,34 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { AppController } from './app.controller.js';
-import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { SessionGuard } from './auth/session.guard.js';
-import { validateEnvironment } from './config/environment.js';
-import { CoreModule } from './core/core.module.js';
-import { DomainErrorFilter } from './core/domain-error.filter.js';
-import { DomainModule } from './core/domain.module.js';
+import { BillingModule } from './billing/billing.module.js';
+import { CommonModule } from './common/common.module.js';
+import { ErrorFilter } from './common/error.filter.js';
 import { HealthModule } from './health/health.module.js';
-import { OperationsModule } from './operations/operations.module.js';
+import { JobsModule } from './jobs/jobs.module.js';
+import { PaymentsModule } from './payments/payments.module.js';
+import { RentalsModule } from './rentals/rentals.module.js';
+import { ReportsModule } from './reports/reports.module.js';
+import { StaffModule } from './staff/staff.module.js';
+import { WorkModule } from './work/work.module.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      cache: true,
-      isGlobal: true,
-      validate: validateEnvironment,
-    }),
-    DomainModule,
+    CommonModule,
     AuthModule,
-    CoreModule,
+    RentalsModule,
+    BillingModule,
+    PaymentsModule,
+    ReportsModule,
+    StaffModule,
+    WorkModule,
+    JobsModule,
     HealthModule,
-    OperationsModule,
   ],
-  controllers: [AppController],
   providers: [
-    AppService,
     { provide: APP_GUARD, useClass: SessionGuard },
-    { provide: APP_FILTER, useClass: DomainErrorFilter },
+    { provide: APP_FILTER, useClass: ErrorFilter },
   ],
 })
 export class AppModule {}

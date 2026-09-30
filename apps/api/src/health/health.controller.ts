@@ -1,9 +1,11 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Public } from '../auth/public.decorator.js';
-import { PrismaService } from '../core/prisma.service.js';
+import { SkipThrottle } from './skip-throttle.js';
+import { Public } from '../auth/decorators.js';
+import { PrismaService } from '../common/prisma.service.js';
 
 @Public()
+@SkipThrottle()
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
@@ -12,27 +14,17 @@ export class HealthController {
   @Get('live')
   @ApiOperation({ summary: 'Process liveness probe' })
   live() {
-    return {
-      status: 'ok',
-      service: 'rentflow-api',
-      timestamp: new Date().toISOString(),
-    };
+    return { status: 'ok', timestamp: new Date().toISOString() };
   }
 
   @Get('ready')
-  @ApiOperation({ summary: 'Service readiness probe' })
+  @ApiOperation({ summary: 'Readiness probe: database reachable and migrated' })
   async ready() {
-    const usesDatabase =
-      Boolean(process.env['DATABASE_URL']) &&
-      process.env['USE_IN_MEMORY_STORE'] !== 'true';
-    if (usesDatabase) await this.prisma.$queryRaw`SELECT 1`;
-    return {
-      status: 'ready',
-      checks: {
-        configuration: 'ok',
-        database: usesDatabase ? 'ok' : 'not-configured',
-      },
-      timestamp: new Date().toISOString(),
-    };
+    try {
+      await this.prisma.$queryRaw`SELECT 1 FROM "JobLock" LIMIT 1`;
+    } catch {
+      throw new ServiceUnavailableException({ code: 'NOT_READY', message: 'Database unavailable' });
+    }
+    return { status: 'ready', timestamp: new Date().toISOString() };
   }
 }

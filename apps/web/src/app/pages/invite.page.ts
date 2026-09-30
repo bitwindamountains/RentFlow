@@ -1,7 +1,8 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { ApiClient } from '../core/api-client.service';
+import { Router, RouterLink } from '@angular/router';
+import { ApiClient, type ApiError } from '../core/api-client.service';
+import { takeFragmentToken } from './token.page';
 
 @Component({
   selector: 'app-invite-page',
@@ -11,23 +12,23 @@ import { ApiClient } from '../core/api-client.service';
 export class InvitePage {
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
   protected name = '';
   protected password = '';
   protected readonly saving = signal(false);
   protected readonly error = signal('');
   protected readonly existingAccount = signal(false);
-  private readonly token = this.route.snapshot.queryParamMap.get('token') ?? '';
+  private readonly token = takeFragmentToken();
+
   protected accept(): void {
     if (this.saving()) return;
     if (!this.token) {
-      this.error.set('This invitation link is incomplete.');
+      this.error.set('This invitation link is incomplete. Ask the owner for a new link.');
       return;
     }
     this.saving.set(true);
     this.error.set('');
     this.api
-      .acceptInvitation({
+      .publicPost<{ accepted: boolean; email: string; workspace: string }>('/staff/invitations/accept', {
         token: this.token,
         ...(this.existingAccount() ? {} : { name: this.name }),
         password: this.password,
@@ -40,18 +41,10 @@ export class InvitePage {
             replaceUrl: true,
           });
         },
-        error: (response) => {
+        error: (error: ApiError) => {
           this.saving.set(false);
-          this.error.set(
-            response?.error?.message === 'ALREADY_A_MEMBER'
-              ? 'You already have membership in this workspace. Sign in, or ask the owner to check your access.'
-              : response?.error?.message === 'INVITATION_INVALID'
-                ? 'This invitation is expired, revoked, or already used. Ask the owner for a new link.'
-                : response?.error?.message === 'NAME_AND_STRONG_PASSWORD_REQUIRED'
-                  ? 'New accounts need a name and a password of at least 12 characters.'
-                  : (response?.error?.message ??
-                    'The invitation could not be accepted. Please try again.'),
-          );
+          if (error.code === 'INVALID_CREDENTIALS' && !this.existingAccount()) this.existingAccount.set(true);
+          this.error.set(error.message);
         },
       });
   }

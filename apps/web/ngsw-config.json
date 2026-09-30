@@ -5,7 +5,18 @@
     {
       "name": "app-shell",
       "installMode": "prefetch",
-      "resources": { "files": ["/favicon.ico", "/index.html", "/manifest.webmanifest", "/icons/*.svg", "/*.css", "/*.js"] }
+      "resources": {
+        "files": ["/favicon.ico", "/index.html", "/manifest.webmanifest", "/*.css", "/*.js"]
+      }
+    },
+    {
+      "name": "icons",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": { "files": ["/icons/**"] }
     }
-  ]
+  ],
+  "dataGroups": [],
+  "navigationUrls": ["/**", "!/api/**", "!/**/*.*", "!/**/*__*", "!/**/*__*/**"],
+  "navigationRequestStrategy": "performance"
 }

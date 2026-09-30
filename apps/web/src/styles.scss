@@ -220,3 +220,87 @@ button {
     font-size: 16px;
   }
 }
+
+/* Toggle filters show their state without relying on colour alone. */
+.app-shell .filter-button[aria-pressed='true'] {
+  background: #102c22;
+  color: #fff;
+  font-weight: 650;
+}
+.app-shell .resource-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.app-shell .attention-item input[type='radio'] {
+  width: 20px;
+  height: 20px;
+  accent-color: #227e61;
+}
+
+/* Receipts and reports print without navigation chrome. */
+@media print {
+  .app-shell :is(.sidebar, .topbar, .mobile-nav, .offline-banner, .skip-link, .toast, .scrim) {
+    display: none !important;
+  }
+  .app-shell main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+}
+
+/* In-flow notices (update available, verify email) never cover the top bar. */
+.app-shell .app-banner {
+  margin: 12px 24px 0;
+  padding: 10px 14px;
+  border: 1px solid #f0d9b5;
+  border-radius: 10px;
+  background: #fff8ec;
+  color: #5c3a0e;
+  font-size: 14px;
+}
+.app-shell .app-banner .text-button {
+  color: #5c3a0e;
+  font-weight: 700;
+  text-decoration: underline;
+}
+/* Cards and profile rows that are links keep their card styling. */
+.app-shell a.metric-card,
+.app-shell a.profile {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+.app-shell a.profile {
+  display: grid;
+}
+.app-shell a.metric-card:hover {
+  border-color: #227e61;
+}
+.app-shell .sidebar-foot > .secondary {
+  width: 100%;
+  margin-top: 8px;
+}
+@media print {
+  .app-shell .app-banner {
+    display: none !important;
+  }
+}
+
+/* Visually hidden tables must not inherit table min-widths (caused sideways scroll on phones). */
+table.sr-only {
+  min-width: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+}
+@media (max-width: 760px) {
+  .app-shell .app-banner {
+    margin: 10px 16px 0;
+  }
+}

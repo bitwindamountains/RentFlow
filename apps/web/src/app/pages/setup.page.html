@@ -1,0 +1,208 @@
+<div class="page setup-page">
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">GUIDED SETUP · STEP {{ step() }} OF 4</p>
+      <h1>Set up a rental</h1>
+      <p>
+        Create a new property, unit, tenant, lease and first charge together. To use existing
+        records, create a lease from Leases instead.
+      </p>
+    </div>
+    <a routerLink="/dashboard" class="secondary button-link">Cancel setup</a>
+  </section>
+  <div class="step-dots setup-steps">
+    <i class="done"></i><i [class.done]="step() > 1"></i><i [class.done]="step() > 2"></i
+    ><i [class.done]="step() > 3"></i>
+  </div>
+  @if (error()) {
+    <div class="inline-notice" role="alert">{{ error() }}</div>
+  }
+  <form
+    #setupForm="ngForm"
+    class="panel setup-form"
+    (ngSubmit)="step() === 4 ? finish() : next(setupForm.valid)"
+  >
+    @switch (step()) {
+      @case (1) {
+        <div class="panel-title">
+          <div>
+            <h2>Property and unit</h2>
+            <p>Where the tenant will live and the standard monthly rent.</p>
+          </div>
+        </div>
+        <label class="field"
+          ><span>Property name</span
+          ><input
+            name="propertyName"
+            [(ngModel)]="property.name"
+            required
+            minlength="2"
+            placeholder="e.g. Sunrise Apartments"
+        /></label>
+        <div class="field-row">
+          <label class="field"
+            ><span>Property type</span
+            ><select name="propertyType" [(ngModel)]="property.type">
+              <option>Apartment</option>
+              <option>Boarding house</option>
+              <option>Commercial</option>
+              <option>House</option>
+            </select></label
+          ><label class="field"
+            ><span>City</span
+            ><input name="city" [(ngModel)]="property.city" required placeholder="Cebu City"
+          /></label>
+        </div>
+        <label class="field"
+          ><span>Street address</span
+          ><input name="address" [(ngModel)]="property.address" required minlength="5"
+        /></label>
+        <div class="field-row">
+          <label class="field"
+            ><span>Unit number</span
+            ><input name="unitNumber" [(ngModel)]="unit.number" required placeholder="201" /></label
+          ><label class="field"
+            ><span>Unit type</span><input name="unitType" [(ngModel)]="unit.type" required
+          /></label>
+        </div>
+        <label class="field"
+          ><span>Monthly rent</span>
+          <div class="money-input">
+            <b>PHP</b
+            ><input
+              name="unitRent"
+              [(ngModel)]="unit.monthlyRent"
+              required
+              pattern="[0-9]+(\.[0-9]{1,2})?"
+              inputmode="decimal"
+              placeholder="6500.00"
+            /></div
+        ></label>
+      }
+      @case (2) {
+        <div class="panel-title">
+          <div>
+            <h2>Tenant</h2>
+            <p>Add the primary tenant and reliable contact details.</p>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field"
+            ><span>First name</span
+            ><input name="firstName" [(ngModel)]="tenant.firstName" required /></label
+          ><label class="field"
+            ><span>Last name</span><input name="lastName" [(ngModel)]="tenant.lastName" required
+          /></label>
+        </div>
+        <div class="field-row">
+          <label class="field"
+            ><span>Email <em>Optional</em></span
+            ><input name="tenantEmail" [(ngModel)]="tenant.email" type="email" /></label
+          ><label class="field"
+            ><span>Phone <em>Optional</em></span
+            ><input name="tenantPhone" [(ngModel)]="tenant.phone"
+          /></label>
+        </div>
+      }
+      @case (3) {
+        <div class="panel-title">
+          <div>
+            <h2>Lease and first charge</h2>
+            <p>Activate the tenancy and post the initial rent due.</p>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field"
+            ><span>Move-in date</span
+            ><input name="startDate" [(ngModel)]="lease.startDate" type="date" required /></label
+          ><label class="field"
+            ><span>Lease rent</span>
+            <div class="money-input">
+              <b>PHP</b
+              ><input
+                name="leaseRent"
+                [(ngModel)]="lease.monthlyRent"
+                required
+                pattern="[0-9]+(\.[0-9]{1,2})?"
+              /></div
+          ></label>
+        </div>
+        <div class="field-row">
+          <label class="field"
+            ><span>Billing day</span
+            ><input
+              name="billingDay"
+              [(ngModel)]="lease.billingDay"
+              type="number"
+              min="1"
+              max="28"
+              required /></label
+          ><label class="field"
+            ><span>Due day</span
+            ><input
+              name="dueDay"
+              [(ngModel)]="lease.dueDay"
+              type="number"
+              min="1"
+              max="28"
+              required
+          /></label>
+        </div>
+        <label class="field"
+          ><span>Charge description</span
+          ><input name="chargeDescription" [(ngModel)]="charge.description" required
+        /></label>
+        <div class="field-row">
+          <label class="field"
+            ><span>Due date</span
+            ><input name="dueDate" [(ngModel)]="charge.dueDate" type="date" required /></label
+          ><label class="field"
+            ><span>Billing period</span
+            ><input
+              name="billingPeriod"
+              [(ngModel)]="charge.billingPeriod"
+              pattern="[0-9]{4}-[0-9]{2}"
+              required
+          /></label>
+        </div>
+      }
+      @default {
+        <div class="panel-title">
+          <div>
+            <h2>Review and create</h2>
+            <p>
+              All records are saved together. A failure will not leave a partial rental. After a
+              connection error, retry submits the same reviewed details.
+            </p>
+          </div>
+        </div>
+        <div class="review-card">
+          <div>
+            <span>Property</span><strong>{{ property.name }} · Unit {{ unit.number }}</strong>
+          </div>
+          <div>
+            <span>Tenant</span><strong>{{ tenant.firstName }} {{ tenant.lastName }}</strong>
+          </div>
+          <div>
+            <span>Lease starts</span><strong>{{ lease.startDate }}</strong>
+          </div>
+          <hr />
+          <div>
+            <span>First charge</span><strong>PHP {{ lease.monthlyRent }}</strong>
+          </div>
+          <div>
+            <span>Due</span><strong>{{ charge.dueDate }}</strong>
+          </div>
+        </div>
+      }
+    }
+    <div class="modal-actions">
+      @if (step() > 1) {
+        <button class="secondary" type="button" (click)="back()" [disabled]="saving()">Back</button>
+      }
+      <button class="primary" type="submit" [disabled]="saving() || !setupForm.valid">
+        {{ saving() ? 'Creating records…' : step() === 4 ? 'Create rental' : 'Continue' }}
+      </button>
+    </div>
+  </form>
+</div>

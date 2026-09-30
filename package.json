@@ -1,0 +1,26 @@
+{
+  "name": "rentflow",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace api && npm run build --workspace web",
+    "dev:api": "npm run start:dev --workspace api",
+    "dev:web": "npm run start --workspace web",
+    "lint": "npm run lint --workspace api",
+    "test": "npm run test --workspace api && npm run test --workspace web -- --watch=false",
+    "db:generate": "npm run db:generate --workspace api",
+    "db:seed:test": "npm run db:seed:test --workspace api",
+    "db:validate": "npm run db:validate --workspace api"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
+  },
+  "dependencies": {
+    "@angular/service-worker": "^22.1.7"
+  }
+}

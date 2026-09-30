@@ -1,0 +1,222 @@
+@use './ui';
+
+:root {
+  color-scheme: light;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  background: #f6f7f9;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #17211b;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Shared interaction polish. No animation runtime or continuous effects. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid #227e61;
+  outline-offset: 3px;
+}
+.app-shell .skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  padding: 14px 20px;
+  border-radius: 10px;
+  background: white;
+  color: #102c22;
+  transform: translateY(-160%);
+}
+.app-shell .skip-link:focus {
+  transform: translateY(0);
+}
+.app-shell .sidebar {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.app-shell .nav-section {
+  margin: 18px 12px 6px;
+  color: #b4c9bf;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.app-shell .nav-item {
+  min-height: 44px;
+}
+.app-shell .sidebar-foot {
+  padding-top: 24px;
+}
+.app-shell .upgrade-card a {
+  color: #d8f36b;
+  line-height: 2.5;
+  font-size: 13px;
+}
+.app-shell .navigation-search {
+  position: relative;
+  margin-left: auto;
+}
+.app-shell .search {
+  margin-left: 0;
+  min-height: 44px;
+}
+.app-shell .search:focus-within {
+  outline: 2px solid #227e61;
+  outline-offset: 2px;
+}
+.app-shell .search input:focus-visible {
+  outline: none;
+}
+.app-shell .navigation-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max(100%, 240px);
+  z-index: 30;
+  padding: 8px;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 12px 30px #102c221a;
+}
+.app-shell .navigation-results a {
+  display: block;
+  padding: 14px 12px;
+  border-radius: 8px;
+  color: #173e30;
+  text-decoration: none;
+  font-size: 14px;
+}
+.app-shell .navigation-results a:hover {
+  background: #edf5ef;
+}
+.app-shell .navigation-results p {
+  padding: 8px;
+  color: #58655e;
+  font-size: 14px;
+}
+.app-shell .reminder-link {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+.app-shell :is(.primary, .secondary, .icon-button, .menu-button) {
+  min-height: 44px;
+}
+.app-shell :is(.field input, .field select, .field textarea) {
+  min-height: 44px;
+  font-size: 14px;
+}
+.app-shell :is(.field small, .review-warning, .upgrade-card p) {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.app-shell .mobile-nav button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  color: #58655e;
+}
+.app-shell .mobile-nav button[aria-expanded='true'] {
+  color: #176b4d;
+  background: #edf5ef;
+}
+.app-shell button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.operations-form fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.resource-page > .field {
+  max-width: 560px;
+  margin-bottom: 20px;
+}
+.resource-page .operations-form {
+  margin-bottom: 24px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell :is(.payment-modal, .navigation-results, .toast) {
+    animation: surface-enter 160ms ease-out;
+  }
+  .app-shell :is(.primary, .secondary, .nav-item) {
+    transition: transform 120ms ease-out;
+  }
+  .app-shell :is(.primary, .secondary):not(:disabled):active {
+    transform: translateY(1px);
+  }
+  @keyframes surface-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media (max-width: 760px) {
+  .app-shell .navigation-search {
+    display: none;
+  }
+  .app-shell .sidebar {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+  .app-shell .mobile-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app-shell :is(.field input, .field select, .field textarea) {
+    font-size: 16px;
+  }
+}

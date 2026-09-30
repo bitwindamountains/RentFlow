@@ -1,0 +1,69 @@
+<main class="auth-page">
+  <section class="auth-story">
+    <a class="auth-brand" routerLink="/auth"><span>R</span>RentFlow</a>
+    <div>
+      <p class="eyebrow">TEAM ACCESS</p>
+      <h1>Join the rental team.</h1>
+      <p>Your role controls which operational and financial actions you can perform.</p>
+    </div>
+    <small>Invitation links expire after seven days.</small>
+  </section>
+  <section class="auth-form-wrap">
+    <form
+      #inviteForm="ngForm"
+      class="auth-form"
+      (ngSubmit)="inviteForm.valid && accept()"
+      [attr.aria-busy]="saving()"
+    >
+      <a class="auth-mobile-brand" routerLink="/auth"><span>R</span>RentFlow</a>
+      <p class="eyebrow">ACCEPT INVITATION</p>
+      <h2>{{ existingAccount() ? 'Join with your account' : 'Create your account' }}</h2>
+      <p>
+        {{
+          existingAccount()
+            ? 'Enter the current password for the invited email. Your password and existing workspace access will not change.'
+            : 'Create an account for the email address that received this invitation.'
+        }}
+      </p>
+      @if (!existingAccount()) {
+        <label class="field"
+          ><span>Your name</span
+          ><input
+            name="name"
+            [(ngModel)]="name"
+            required
+            minlength="2"
+            maxlength="100"
+            autocomplete="name"
+        /></label>
+      }
+      <label class="field"
+        ><span>{{ existingAccount() ? 'Current password' : 'New password' }}</span
+        ><input
+          name="password"
+          [(ngModel)]="password"
+          required
+          [minlength]="existingAccount() ? 1 : 12"
+          maxlength="128"
+          type="password"
+          [autocomplete]="existingAccount() ? 'current-password' : 'new-password'"
+      /></label>
+      @if (error()) {
+        <div class="auth-error" role="alert">{{ error() }}</div>
+      }
+      <button class="primary auth-submit" type="submit" [disabled]="saving() || !inviteForm.valid">
+        {{ saving() ? 'Joining…' : 'Join team' }}
+      </button>
+      <div class="auth-switch">
+        <button
+          type="button"
+          [disabled]="saving()"
+          (click)="existingAccount.set(!existingAccount()); password = ''; error.set('')"
+        >
+          {{ existingAccount() ? 'I need a new account' : 'I already have an account' }}
+        </button>
+      </div>
+      <div class="auth-switch"><a routerLink="/auth">Back to sign in</a></div>
+    </form>
+  </section>
+</main>

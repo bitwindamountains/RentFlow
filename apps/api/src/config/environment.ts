@@ -1,57 +1,115 @@
-type Environment = 'development' | 'test' | 'production';
+export type Environment = 'development' | 'test' | 'production';
+export type MailProvider = 'log' | 'resend' | 'smtp';
 
 export interface AppEnvironment {
   NODE_ENV: Environment;
   PORT: number;
   WEB_ORIGIN: string;
+  APP_URL: string;
   DATABASE_URL: string;
-  REDIS_URL: string;
-  LOG_LEVEL: string;
+  TRUST_PROXY: number;
+  LOG_LEVEL: 'error' | 'warn' | 'log' | 'debug' | 'verbose';
+  ENABLE_JOBS: boolean;
+  MAIL_PROVIDER: MailProvider;
+  MAIL_FROM: string;
+  RESEND_API_KEY: string;
+  SMTP_URL: string;
+  SESSION_ABSOLUTE_HOURS: number;
+  SESSION_IDLE_MINUTES: number;
 }
 
-const allowedEnvironments = new Set<Environment>([
-  'development',
-  'test',
-  'production',
-]);
+const environments = new Set<Environment>(['development', 'test', 'production']);
+const logLevels = new Set(['error', 'warn', 'log', 'debug', 'verbose']);
+const mailProviders = new Set<MailProvider>(['log', 'resend', 'smtp']);
 
-export function validateEnvironment(
-  input: Record<string, unknown>,
-): AppEnvironment {
-  const nodeEnv = String(input['NODE_ENV'] ?? 'development') as Environment;
-  const port = Number(input['PORT'] ?? 3000);
-  const webOrigin = String(input['WEB_ORIGIN'] ?? 'http://localhost:4200');
+function integer(input: Record<string, unknown>, name: string, fallback: number, min: number, max: number) {
+  const value = Number(input[name] ?? fallback);
+  if (!Number.isInteger(value) || value < min || value > max)
+    throw new Error(`${name} must be an integer between ${min} and ${max}`);
+  return value;
+}
+
+function origin(value: string, name: string): string {
+  try {
+    const url = new URL(value.trim());
+    if (!['http:', 'https:'].includes(url.protocol) || url.pathname !== '/' || url.search)
+      throw new Error();
+    return url.origin;
+  } catch {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+}
+
+/**
+ * Fails closed: nothing security-relevant is inferred from a missing value.
+ * NODE_ENV and DATABASE_URL must always be set explicitly.
+ */
+export function validateEnvironment(input: Record<string, unknown>): AppEnvironment {
+  const nodeEnv = String(input['NODE_ENV'] ?? '') as Environment;
+  if (!environments.has(nodeEnv))
+    throw new Error('NODE_ENV must be set to development, test, or production');
+  const production = nodeEnv === 'production';
+
   const databaseUrl = String(input['DATABASE_URL'] ?? '');
-  const redisUrl = String(input['REDIS_URL'] ?? 'redis://localhost:6379');
-  const logLevel = String(input['LOG_LEVEL'] ?? 'info');
+  if (!/^postgres(ql)?:\/\//.test(databaseUrl))
+    throw new Error('DATABASE_URL must be a PostgreSQL connection string');
+  if ('USE_IN_MEMORY_STORE' in input)
+    throw new Error('USE_IN_MEMORY_STORE has been removed; use PostgreSQL');
 
-  if (!allowedEnvironments.has(nodeEnv)) {
-    throw new Error('NODE_ENV must be development, test, or production');
-  }
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error('PORT must be an integer between 1 and 65535');
-  }
-  if (!databaseUrl && nodeEnv === 'production') {
-    throw new Error('DATABASE_URL is required in production');
-  }
-  if (nodeEnv === 'production' && input['USE_IN_MEMORY_STORE'] === 'true') {
-    throw new Error('USE_IN_MEMORY_STORE is forbidden in production');
-  }
-  for (const origin of webOrigin.split(',')) {
-    try {
-      const url = new URL(origin.trim());
-      if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
-    } catch {
-      throw new Error(`Invalid WEB_ORIGIN: ${origin}`);
-    }
-  }
+  const origins = String(input['WEB_ORIGIN'] ?? (production ? '' : 'http://localhost:4200'))
+    .split(',')
+    .filter(Boolean)
+    .map((item) => origin(item, 'WEB_ORIGIN'));
+  if (!origins.length) throw new Error('WEB_ORIGIN is required in production');
+  if (production && origins.some((item) => !item.startsWith('https://')))
+    throw new Error('WEB_ORIGIN must use https in production');
+  const appUrl = origin(String(input['APP_URL'] ?? origins[0]), 'APP_URL');
+
+  const logLevel = String(input['LOG_LEVEL'] ?? (production ? 'log' : 'debug'));
+  if (!logLevels.has(logLevel)) throw new Error('LOG_LEVEL must be error, warn, log, debug, or verbose');
+
+  const mailProvider = String(input['MAIL_PROVIDER'] ?? 'log') as MailProvider;
+  if (!mailProviders.has(mailProvider)) throw new Error('MAIL_PROVIDER must be log, resend, or smtp');
+  if (production && mailProvider === 'log')
+    throw new Error('MAIL_PROVIDER must be resend or smtp in production (password reset needs email)');
+  const mailFrom = String(input['MAIL_FROM'] ?? 'RentFlow <no-reply@localhost>');
+  const resendKey = String(input['RESEND_API_KEY'] ?? '');
+  const smtpUrl = String(input['SMTP_URL'] ?? '');
+  if (mailProvider === 'resend' && !resendKey) throw new Error('RESEND_API_KEY is required for MAIL_PROVIDER=resend');
+  if (mailProvider === 'smtp' && !/^smtps?:\/\//.test(smtpUrl))
+    throw new Error('SMTP_URL (smtp:// or smtps://) is required for MAIL_PROVIDER=smtp');
+  if (production && mailProvider !== 'log' && !input['MAIL_FROM'])
+    throw new Error('MAIL_FROM is required in production');
 
   return {
     NODE_ENV: nodeEnv,
-    PORT: port,
-    WEB_ORIGIN: webOrigin,
+    PORT: integer(input, 'PORT', 3000, 1, 65_535),
+    WEB_ORIGIN: origins.join(','),
+    APP_URL: appUrl,
     DATABASE_URL: databaseUrl,
-    REDIS_URL: redisUrl,
-    LOG_LEVEL: logLevel,
+    TRUST_PROXY: integer(input, 'TRUST_PROXY', production ? 1 : 0, 0, 5),
+    LOG_LEVEL: logLevel as AppEnvironment['LOG_LEVEL'],
+    ENABLE_JOBS: String(input['ENABLE_JOBS'] ?? (nodeEnv === 'test' ? 'false' : 'true')) === 'true',
+    MAIL_PROVIDER: mailProvider,
+    MAIL_FROM: mailFrom,
+    RESEND_API_KEY: resendKey,
+    SMTP_URL: smtpUrl,
+    SESSION_ABSOLUTE_HOURS: integer(input, 'SESSION_ABSOLUTE_HOURS', 12, 1, 720),
+    SESSION_IDLE_MINUTES: integer(input, 'SESSION_IDLE_MINUTES', 120, 5, 43_200),
   };
 }
+
+let cached: AppEnvironment | undefined;
+
+/** The validated environment for code that runs outside Nest's DI (bootstrap). */
+export function environment(): AppEnvironment {
+  cached ??= validateEnvironment(process.env);
+  return cached;
+}
+
+export function resetEnvironmentCache(): void {
+  cached = undefined;
+}
+
+export const sessionCookieName = () =>
+  environment().NODE_ENV === 'production' ? '__Host-rentflow_session' : 'rentflow_session';

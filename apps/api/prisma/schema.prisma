@@ -159,61 +159,94 @@ enum InvitationStatus {
 }
 
 model Organization {
-  id              String             @id @default(uuid()) @db.Uuid
-  name            String
-  slug            String             @unique
-  currency        String             @default("PHP") @db.Char(3)
-  timezone        String             @default("Asia/Manila")
-  receiptPrefix   String             @default("RF")
-  status          OrganizationStatus @default(ACTIVE)
-  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime           @updatedAt @db.Timestamptz(3)
-  memberships     Membership[]
-  properties      Property[]
-  tenants         Tenant[]
-  leases          Lease[]
-  charges         Charge[]
-  payments        Payment[]
-  ledgerEntries   LedgerEntry[]
-  depositAccounts DepositAccount[]
-  receiptSequence ReceiptSequence?
-  receipts        Receipt[]
-  auditLogs       AuditLog[]
-  idempotencyKeys IdempotencyKey[]
-  outboxEvents    OutboxEvent[]
-  sessions        Session[]
-  expenses        Expense[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  name                String
+  slug                String               @unique
+  currency            String               @default("PHP") @db.Char(3)
+  timezone            String               @default("Asia/Manila")
+  receiptPrefix       String               @default("RF")
+  status              OrganizationStatus   @default(ACTIVE)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
+  memberships         Membership[]
+  properties          Property[]
+  tenants             Tenant[]
+  leases              Lease[]
+  charges             Charge[]
+  payments            Payment[]
+  ledgerEntries       LedgerEntry[]
+  depositAccounts     DepositAccount[]
+  receiptSequence     ReceiptSequence?
+  receipts            Receipt[]
+  auditLogs           AuditLog[]
+  idempotencyKeys     IdempotencyKey[]
+  outboxEvents        OutboxEvent[]
+  sessions            Session[]
+  expenses            Expense[]
   maintenanceRequests MaintenanceRequest[]
-  documents       DocumentRecord[]
-  staffInvitations StaffInvitation[]
+  documents           DocumentRecord[]
+  staffInvitations    StaffInvitation[]
+  units               Unit[]
+  rentableSpaces      RentableSpace[]
+  billingSchedules    BillingSchedule[]
+  chargeAdjustments   ChargeAdjustment[]
+  depositTransactions DepositTransaction[]
 }
 
 model User {
-  id           String       @id @default(uuid()) @db.Uuid
-  email        String       @unique
-  displayName  String
-  passwordHash String
-  emailVerifiedAt DateTime? @db.Timestamptz(3)
-  disabledAt   DateTime?    @db.Timestamptz(3)
-  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime     @updatedAt @db.Timestamptz(3)
-  memberships  Membership[]
-  auditEvents  AuditLog[]
-  sessions     Session[]
+  id              String       @id @default(uuid()) @db.Uuid
+  email           String       @unique
+  displayName     String
+  passwordHash    String
+  emailVerifiedAt DateTime?    @db.Timestamptz(3)
+  disabledAt      DateTime?    @db.Timestamptz(3)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
+  memberships     Membership[]
+  auditEvents     AuditLog[]
+  sessions        Session[]
+  tokens          UserToken[]
+}
+
+enum UserTokenType {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+
+model UserToken {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @db.Uuid
+  type      UserTokenType
+  tokenHash String        @unique @db.Char(64)
+  expiresAt DateTime      @db.Timestamptz(3)
+  usedAt    DateTime?     @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+model JobLock {
+  name        String   @id
+  owner       String
+  lockedUntil DateTime @db.Timestamptz(3)
 }
 
 model Session {
-  id             String       @id @default(uuid()) @db.Uuid
-  tokenHash      String       @unique @db.Char(64)
+  id             String         @id @default(uuid()) @db.Uuid
+  tokenHash      String         @unique @db.Char(64)
   csrfToken      String
-  userId         String       @db.Uuid
-  organizationId String       @db.Uuid
+  userId         String         @db.Uuid
+  organizationId String         @db.Uuid
   role           MembershipRole
-  expiresAt      DateTime     @db.Timestamptz(3)
-  revokedAt      DateTime?    @db.Timestamptz(3)
-  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expiresAt      DateTime       @db.Timestamptz(3)
+  revokedAt      DateTime?      @db.Timestamptz(3)
+  lastSeenAt     DateTime       @default(now()) @db.Timestamptz(3)
+  userAgent      String?
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
   @@index([organizationId, expiresAt])
@@ -248,23 +281,23 @@ model PropertyGrant {
 }
 
 model Property {
-  id             String         @id @default(uuid()) @db.Uuid
-  organizationId String         @db.Uuid
-  name           String
-  type           String
-  addressLine1   String
-  addressLine2   String?
-  city           String
-  province       String
-  postalCode     String?
-  country        String         @default("PH") @db.Char(2)
-  status         PropertyStatus @default(ACTIVE)
-  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  units          Unit[]
-  grants         PropertyGrant[]
-  expenses       Expense[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  organizationId      String               @db.Uuid
+  name                String
+  type                String
+  addressLine1        String
+  addressLine2        String?
+  city                String
+  province            String
+  postalCode          String?
+  country             String               @default("PH") @db.Char(2)
+  status              PropertyStatus       @default(ACTIVE)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  units               Unit[]
+  grants              PropertyGrant[]
+  expenses            Expense[]
   maintenanceRequests MaintenanceRequest[]
 
   @@unique([organizationId, name])
@@ -272,17 +305,18 @@ model Property {
 }
 
 model Unit {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @db.Uuid
-  propertyId     String       @db.Uuid
-  number         String
-  floor          String?
-  type           String
-  capacity       Int          @default(1)
-  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
-  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  spaces         RentableSpace[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  organizationId      String               @db.Uuid
+  propertyId          String               @db.Uuid
+  number              String
+  floor               String?
+  type                String
+  capacity            Int                  @default(1)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  property            Property             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  spaces              RentableSpace[]
   maintenanceRequests MaintenanceRequest[]
 
   @@unique([propertyId, number])
@@ -290,63 +324,64 @@ model Unit {
 }
 
 model RentableSpace {
-  id              String      @id @default(uuid()) @db.Uuid
-  organizationId  String      @db.Uuid
-  unitId           String      @db.Uuid
-  label            String
-  defaultRent      Decimal     @db.Decimal(19, 4)
-  depositRequired  Decimal     @default(0) @db.Decimal(19, 4)
-  status           SpaceStatus @default(AVAILABLE)
-  createdAt        DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime    @updatedAt @db.Timestamptz(3)
-  unit             Unit        @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  leases           Lease[]
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @db.Uuid
+  unitId          String       @db.Uuid
+  label           String
+  defaultRent     Decimal      @db.Decimal(19, 4)
+  depositRequired Decimal      @default(0) @db.Decimal(19, 4)
+  status          SpaceStatus  @default(AVAILABLE)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  unit            Unit         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  leases          Lease[]
 
   @@unique([unitId, label])
   @@index([organizationId, status])
 }
 
 model Tenant {
-  id              String       @id @default(uuid()) @db.Uuid
-  organizationId  String       @db.Uuid
-  firstName       String
-  lastName        String
-  email           String?
-  phone           String?
+  id               String          @id @default(uuid()) @db.Uuid
+  organizationId   String          @db.Uuid
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
   permanentAddress String?
-  status          TenantStatus @default(PENDING)
-  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
-  archivedAt      DateTime?    @db.Timestamptz(3)
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  primaryLeases   Lease[]      @relation("PrimaryTenant")
-  occupancies     LeaseOccupant[]
-  payments        Payment[]
+  status           TenantStatus    @default(PENDING)
+  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
+  archivedAt       DateTime?       @db.Timestamptz(3)
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  primaryLeases    Lease[]         @relation("PrimaryTenant")
+  occupancies      LeaseOccupant[]
+  payments         Payment[]
 
   @@index([organizationId, status])
   @@index([organizationId, lastName, firstName])
 }
 
 model Lease {
-  id               String      @id @default(uuid()) @db.Uuid
-  organizationId   String      @db.Uuid
-  rentableSpaceId  String      @db.Uuid
-  primaryTenantId  String      @db.Uuid
-  startDate        DateTime    @db.Date
-  endDate          DateTime?   @db.Date
-  monthlyRent      Decimal     @db.Decimal(19, 4)
-  depositRequired  Decimal     @default(0) @db.Decimal(19, 4)
+  id               String            @id @default(uuid()) @db.Uuid
+  organizationId   String            @db.Uuid
+  rentableSpaceId  String            @db.Uuid
+  primaryTenantId  String            @db.Uuid
+  startDate        DateTime          @db.Date
+  endDate          DateTime?         @db.Date
+  monthlyRent      Decimal           @db.Decimal(19, 4)
+  depositRequired  Decimal           @default(0) @db.Decimal(19, 4)
   billingDay       Int
   dueDay           Int
-  gracePeriodDays  Int         @default(0)
-  status           LeaseStatus @default(DRAFT)
-  activatedAt      DateTime?   @db.Timestamptz(3)
-  terminatedAt     DateTime?   @db.Timestamptz(3)
-  createdAt        DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime    @updatedAt @db.Timestamptz(3)
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  rentableSpace    RentableSpace @relation(fields: [rentableSpaceId], references: [id], onDelete: Restrict)
-  primaryTenant    Tenant       @relation("PrimaryTenant", fields: [primaryTenantId], references: [id], onDelete: Restrict)
+  gracePeriodDays  Int               @default(0)
+  status           LeaseStatus       @default(DRAFT)
+  activatedAt      DateTime?         @db.Timestamptz(3)
+  terminatedAt     DateTime?         @db.Timestamptz(3)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  rentableSpace    RentableSpace     @relation(fields: [rentableSpaceId], references: [id], onDelete: Restrict)
+  primaryTenant    Tenant            @relation("PrimaryTenant", fields: [primaryTenantId], references: [id], onDelete: Restrict)
   occupants        LeaseOccupant[]
   billingSchedules BillingSchedule[]
   charges          Charge[]
@@ -355,17 +390,19 @@ model Lease {
 
   @@index([organizationId, status])
   @@index([rentableSpaceId, startDate, endDate])
+  @@index([primaryTenantId])
 }
 
 model LeaseOccupant {
-  leaseId   String   @db.Uuid
-  tenantId  String   @db.Uuid
-  moveInAt  DateTime @db.Date
+  leaseId   String    @db.Uuid
+  tenantId  String    @db.Uuid
+  moveInAt  DateTime  @db.Date
   moveOutAt DateTime? @db.Date
-  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  lease     Lease     @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@id([leaseId, tenantId])
+  @@index([tenantId])
 }
 
 model BillingSchedule {
@@ -382,35 +419,38 @@ model BillingSchedule {
   status         ScheduleStatus @default(ACTIVE)
   createdAt      DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   lease          Lease          @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   charges        Charge[]
 
   @@index([organizationId, status, startsOn])
+  @@index([leaseId])
 }
 
 model Charge {
-  id                String       @id @default(uuid()) @db.Uuid
-  organizationId    String       @db.Uuid
-  leaseId           String       @db.Uuid
-  billingScheduleId String?      @db.Uuid
+  id                String              @id @default(uuid()) @db.Uuid
+  organizationId    String              @db.Uuid
+  leaseId           String              @db.Uuid
+  billingScheduleId String?             @db.Uuid
   type              ChargeType
   description       String
-  amount            Decimal      @db.Decimal(19, 4)
+  amount            Decimal             @db.Decimal(19, 4)
   billingPeriod     String?
-  dueDate           DateTime     @db.Date
-  status            ChargeStatus @default(DRAFT)
-  postedAt          DateTime?    @db.Timestamptz(3)
-  voidedAt          DateTime?    @db.Timestamptz(3)
-  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  lease             Lease        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  billingSchedule   BillingSchedule? @relation(fields: [billingScheduleId], references: [id], onDelete: Restrict)
+  dueDate           DateTime            @db.Date
+  status            ChargeStatus        @default(DRAFT)
+  postedAt          DateTime?           @db.Timestamptz(3)
+  voidedAt          DateTime?           @db.Timestamptz(3)
+  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  lease             Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  billingSchedule   BillingSchedule?    @relation(fields: [billingScheduleId], references: [id], onDelete: Restrict)
   adjustments       ChargeAdjustment[]
   allocations       PaymentAllocation[]
   ledgerEntries     LedgerEntry[]
 
   @@unique([billingScheduleId, billingPeriod])
   @@index([organizationId, dueDate, status])
+  @@index([leaseId, status])
 }
 
 model ChargeAdjustment {
@@ -422,28 +462,30 @@ model ChargeAdjustment {
   reason         String
   createdBy      String         @db.Uuid
   createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   charge         Charge         @relation(fields: [chargeId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, chargeId])
+  @@index([chargeId])
 }
 
 model Payment {
-  id              String        @id @default(uuid()) @db.Uuid
-  organizationId  String        @db.Uuid
-  tenantId        String        @db.Uuid
-  leaseId         String?       @db.Uuid
-  amount          Decimal       @db.Decimal(19, 4)
+  id              String              @id @default(uuid()) @db.Uuid
+  organizationId  String              @db.Uuid
+  tenantId        String              @db.Uuid
+  leaseId         String?             @db.Uuid
+  amount          Decimal             @db.Decimal(19, 4)
   method          PaymentMethod
   referenceNumber String?
-  paidAt          DateTime      @db.Timestamptz(3)
-  status          PaymentStatus @default(PENDING)
+  paidAt          DateTime            @db.Timestamptz(3)
+  status          PaymentStatus       @default(PENDING)
   notes           String?
-  recordedBy      String        @db.Uuid
-  postedAt        DateTime?     @db.Timestamptz(3)
-  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  lease           Lease?        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  recordedBy      String              @db.Uuid
+  postedAt        DateTime?           @db.Timestamptz(3)
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  lease           Lease?              @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   allocations     PaymentAllocation[]
   reversals       PaymentReversal[]
   ledgerEntries   LedgerEntry[]
@@ -451,6 +493,8 @@ model Payment {
 
   @@index([organizationId, paidAt, status])
   @@index([organizationId, referenceNumber])
+  @@index([tenantId])
+  @@index([leaseId])
 }
 
 model PaymentAllocation {
@@ -479,14 +523,14 @@ model PaymentReversal {
 }
 
 model DepositAccount {
-  id               String   @id @default(uuid()) @db.Uuid
-  organizationId   String   @db.Uuid
-  leaseId           String   @unique @db.Uuid
-  requiredAmount   Decimal  @db.Decimal(19, 4)
-  createdAt        DateTime @default(now()) @db.Timestamptz(3)
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  lease            Lease    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  transactions     DepositTransaction[]
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @db.Uuid
+  leaseId        String               @unique @db.Uuid
+  requiredAmount Decimal              @db.Decimal(19, 4)
+  createdAt      DateTime             @default(now()) @db.Timestamptz(3)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  lease          Lease                @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  transactions   DepositTransaction[]
 }
 
 model DepositTransaction {
@@ -499,9 +543,11 @@ model DepositTransaction {
   recordedBy       String                 @db.Uuid
   occurredAt       DateTime               @db.Timestamptz(3)
   createdAt        DateTime               @default(now()) @db.Timestamptz(3)
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   depositAccount   DepositAccount         @relation(fields: [depositAccountId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, depositAccountId, occurredAt])
+  @@index([depositAccountId])
 }
 
 model LedgerEntry {
@@ -520,6 +566,8 @@ model LedgerEntry {
   payment        Payment?        @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, leaseId, occurredAt])
+  @@index([chargeId])
+  @@index([paymentId])
 }
 
 model ReceiptSequence {
@@ -611,6 +659,8 @@ model Expense {
   reference      String?
   createdBy      String          @db.Uuid
   createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  voidedAt       DateTime?       @db.Timestamptz(3)
+  voidReason     String?
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   property       Property?       @relation(fields: [propertyId], references: [id], onDelete: Restrict)
 
@@ -651,6 +701,7 @@ model DocumentRecord {
   url            String
   createdBy      String       @db.Uuid
   createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  deletedAt      DateTime?    @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, category, createdAt])

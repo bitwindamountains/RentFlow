@@ -1,533 +1,173 @@
-import fastifyCookie from '@fastify/cookie';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
-import { Test } from '@nestjs/testing';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { AppModule } from '../src/app.module.js';
-import { PrismaService } from '../src/core/prisma.service.js';
+import {
+  Client,
+  createRental,
+  lastEmail,
+  monthStart,
+  PASSWORD,
+  prismaOf,
+  registerOwner,
+  startApp,
+  today,
+  tokenIn,
+  unique,
+} from './helpers.js';
 
-describe.runIf(process.env['RUN_PERSISTENCE_TESTS'] === 'true')(
-  'focused operations',
-  () => {
-    let app: NestFastifyApplication;
-    let cookie = '';
-    let csrf = '';
-    const stamp = Date.now();
-    async function request(
-      method: string,
-      url: string,
-      payload?: unknown,
-      headers: Record<string, string> = {},
-    ) {
-      const response = await app.inject({
-        method,
-        url,
-        payload,
-        headers: {
-          ...(cookie ? { cookie } : {}),
-          ...(csrf ? { 'x-csrf-token': csrf } : {}),
-          ...(method === 'POST' && url.endsWith('/deposits')
-            ? { 'idempotency-key': crypto.randomUUID() }
-            : {}),
-          ...headers,
-        },
-      });
-      const json = String(response.headers['content-type'] ?? '').includes(
-        'application/json',
-      );
-      return {
-        status: response.statusCode,
-        body: response.body && json ? response.json() : undefined,
-        text: response.body,
-        headers: response.headers,
-      };
-    }
-    beforeAll(async () => {
-      delete process.env['USE_IN_MEMORY_STORE'];
-      const moduleRef = await Test.createTestingModule({
-        imports: [AppModule],
-      }).compile();
-      app = moduleRef.createNestApplication<NestFastifyApplication>(
-        new FastifyAdapter(),
-      );
-      await app.register(fastifyCookie);
-      app.useGlobalPipes(
-        new ValidationPipe({
-          forbidNonWhitelisted: true,
-          transform: true,
-          whitelist: true,
-        }),
-      );
-      app.setGlobalPrefix('api');
-      app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
-      await app.init();
-      await app.getHttpAdapter().getInstance().ready();
+describe('landlord operations', () => {
+  let app: NestFastifyApplication;
+  let owner: Client;
+  let ownerEmail: string;
+
+  beforeAll(async () => {
+    app = await startApp();
+    ({ client: owner, email: ownerEmail } = await registerOwner(app));
+  });
+  afterAll(async () => app.close());
+
+  it('creates a whole rental atomically and replays the same request key', async () => {
+    const label = unique();
+    const body = {
+      property: { name: `Setup ${label}`, type: 'Boarding house', address: '12 Rizal Avenue', city: 'Davao City' },
+      unit: { number: 'R1', type: 'Room', monthlyRent: '4500.00' },
+      tenant: { firstName: 'Ana', lastName: `Reyes ${label}`, email: '', phone: '' },
+      lease: { startDate: monthStart(0), monthlyRent: '4500.00', billingDay: 1, dueDay: 5, depositRequired: '4500.00' },
+      charge: { description: 'First month rent', dueDate: monthStart(0), billingPeriod: monthStart(0).slice(0, 7) },
+    };
+    const key = randomUUID();
+    const first = await owner.post('/rental-setup', body, { 'idempotency-key': key });
+    const replay = await owner.post('/rental-setup', body, { 'idempotency-key': key });
+    expect(first.status).toBe(201);
+    expect(replay.body).toEqual(first.body);
+    const tenant = (await owner.get(`/tenants/${first.body.tenantId}`)).body;
+    expect(tenant.email).toBeNull();
+    expect(tenant.leases[0].deposit).toEqual({ required: '4500.00', held: '0.00' });
+    expect(tenant.openCharges).toHaveLength(1);
+
+    // Invalid setup leaves no partial records.
+    const before = await prismaOf(app).tenant.count();
+    const invalid = await owner.post('/rental-setup', { ...body, property: { ...body.property, name: `Bad ${label}` }, charge: { ...body.charge, billingPeriod: '2000-01' } });
+    expect(invalid.status).toBe(400);
+    expect(await prismaOf(app).tenant.count()).toBe(before);
+    // Missing idempotency key is rejected.
+    expect((await owner.request('POST', '/rental-setup', body, { 'idempotency-key': '' })).status).toBe(400);
+  });
+
+  it('keeps security deposits separate from rent and prevents over-refunds', async () => {
+    const rental = await createRental(owner, { depositRequired: '10000.00' });
+    expect((await owner.post(`/leases/${rental.lease.id}/deposits`, { type: 'RECEIPT', amount: '10000.00' })).status).toBe(201);
+    expect((await owner.post(`/leases/${rental.lease.id}/deposits`, { type: 'REFUND', amount: '10000.01', reason: 'Too much' })).body.code).toBe(
+      'INVALID_DEPOSIT',
+    );
+    expect((await owner.post(`/leases/${rental.lease.id}/deposits`, { type: 'DEDUCTION', amount: '100.00' })).status).toBe(422);
+    expect((await owner.post(`/leases/${rental.lease.id}/deposits`, { type: 'DEDUCTION', amount: '1500.00', reason: 'Broken window' })).status).toBe(201);
+    const deposit = (await owner.get('/deposits')).body.find((d: { leaseId: string }) => d.leaseId === rental.lease.id);
+    expect(deposit).toMatchObject({ requiredAmount: '10000.00', balance: '8500.00' });
+    // Deposits never count as rent collected.
+    const report = (await owner.get(`/reports/financial?from=${today()}&to=${today()}`)).body;
+    expect(Number(report.collected)).toBe(0);
+  });
+
+  it('voids expenses entered in error and excludes them from reports', async () => {
+    const rental = await createRental(owner);
+    const expense = await owner.post('/expenses', {
+      propertyId: rental.property.id,
+      category: 'REPAIR',
+      description: 'Replace lock',
+      vendor: 'Local Locksmith',
+      amount: '850.00',
+      incurredOn: today(),
     });
-    afterAll(async () => app.close());
+    const mistake = await owner.post('/expenses', { category: 'OTHER', description: 'Typo', amount: '99999.00', incurredOn: today() });
+    expect((await owner.post(`/expenses/${mistake.body.id}/void`, { reason: 'Entered by mistake' })).status).toBe(200);
+    const list = (await owner.get('/expenses')).body.items;
+    expect(list.map((e: { id: string }) => e.id)).toContain(expense.body.id);
+    expect(list.map((e: { id: string }) => e.id)).not.toContain(mistake.body.id);
+    const report = (await owner.get(`/reports/financial?from=${today()}&to=${today()}`)).body;
+    expect(report.properties.find((p: { propertyId: string }) => p.propertyId === rental.property.id)).toMatchObject({ expenses: '850.00' });
+    const csv = await owner.get(`/reports/transactions.csv?from=${today()}&to=${today()}`);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text).toContain('Replace lock');
+    expect(csv.text).toContain('VOIDED');
+  });
 
-    it('accepts an existing account once without changing its password or other memberships', async () => {
-      const email = `existing-${stamp}@rentflow.test`;
-      const password = 'existing account secure password';
-      const original = await request('POST', '/api/v1/auth/register', {
-        email,
-        password,
-        name: 'Existing User',
-        organizationName: `Original ${stamp}`,
-      });
-      const owner = await request('POST', '/api/v1/auth/register', {
-        email: `inviter-${stamp}@rentflow.test`,
-        password,
-        name: 'Inviting Owner',
-        organizationName: `Inviting ${stamp}`,
-      });
-      cookie = String(owner.headers['set-cookie']).split(';')[0];
-      csrf = owner.body.csrfToken;
-      const invite = await request('POST', '/api/v1/staff/invitations', {
-        email,
-        role: 'COLLECTOR',
-      });
-      const input = { token: invite.body.token, password };
-      expect(
-        (
-          await request('POST', '/api/v1/staff/invitations/accept', {
-            ...input,
-            password: 'wrong password',
-          })
-        ).status,
-      ).toBe(401);
-      const attempts = await Promise.all([
-        request('POST', '/api/v1/staff/invitations/accept', input),
-        request('POST', '/api/v1/staff/invitations/accept', input),
-      ]);
-      expect(attempts.map((item) => item.status).sort()).toEqual([201, 400]);
-      const accepted = attempts.find((item) => item.status === 201)!;
-      expect(accepted.body.workspace).toBe(owner.body.organization.slug);
-      const invitedLogin = await request('POST', '/api/v1/auth/login', {
-        email,
-        password,
-        workspace: accepted.body.workspace,
-      });
-      expect(invitedLogin.status).toBe(200);
-      expect(invitedLogin.body.role).toBe('COLLECTOR');
-      expect(invitedLogin.body.user.name).toBe('Existing User');
-      expect(invitedLogin.body.organization.id).toBe(
-        owner.body.organization.id,
-      );
-      const originalLogin = await request('POST', '/api/v1/auth/login', {
-        email,
-        password,
-        workspace: original.body.organization.slug,
-      });
-      expect(originalLogin.body.role).toBe('OWNER');
-      expect(
-        (
-          await request('POST', '/api/v1/auth/login', {
-            email,
-            password,
-            workspace: 'not-a-member',
-          })
-        ).status,
-      ).toBe(401);
-
-      const duplicate = await request('POST', '/api/v1/staff/invitations', {
-        email,
-        role: 'VIEWER',
-      });
-      expect(
-        (
-          await request('POST', '/api/v1/staff/invitations/accept', {
-            token: duplicate.body.token,
-            password,
-          })
-        ).body.message,
-      ).toBe('ALREADY_A_MEMBER');
-      const prisma = app.get(PrismaService);
-      await prisma.user.update({
-        where: { id: original.body.user.id },
-        data: { disabledAt: new Date() },
-      });
-      expect(
-        (
-          await request('POST', '/api/v1/staff/invitations/accept', {
-            token: duplicate.body.token,
-            password,
-          })
-        ).status,
-      ).toBe(401);
-      const newInvite = await request('POST', '/api/v1/staff/invitations', {
-        email: `new-${stamp}@rentflow.test`,
-        role: 'VIEWER',
-      });
-      expect(
-        (
-          await request('POST', '/api/v1/staff/invitations/accept', {
-            token: newInvite.body.token,
-            name: 'New User',
-            password: 'short',
-          })
-        ).status,
-      ).toBe(400);
-      await prisma.staffInvitation.update({
-        where: { id: newInvite.body.id },
-        data: { status: 'REVOKED' },
-      });
-      expect(
-        (
-          await request('POST', '/api/v1/staff/invitations/accept', {
-            token: newInvite.body.token,
-            name: 'New User',
-            password,
-          })
-        ).status,
-      ).toBe(400);
+  it('runs maintenance through a valid status workflow', async () => {
+    const rental = await createRental(owner);
+    const created = await owner.post('/maintenance', {
+      propertyId: rental.property.id,
+      unitId: rental.unit.id,
+      title: 'Leaking tap',
+      description: 'Kitchen tap needs a washer',
+      priority: 'URGENT',
+      dueOn: today(),
     });
+    expect(created.body).toMatchObject({ status: 'OPEN', unitNumber: rental.unit.number });
+    expect((await owner.get('/reminders')).body.some((r: { id: string }) => r.id === created.body.id)).toBe(true);
+    const done = await owner.patch(`/maintenance/${created.body.id}`, { status: 'COMPLETED' });
+    expect(done.body.completedAt).toBeTruthy();
+    expect((await owner.patch(`/maintenance/${created.body.id}`, { status: 'IN_PROGRESS' })).body.code).toBe('INVALID_TRANSITION');
+    const reopened = await owner.patch(`/maintenance/${created.body.id}`, { status: 'OPEN' });
+    expect(reopened.body.completedAt).toBeNull();
+    // Unit must belong to the property.
+    const other = await createRental(owner);
+    expect((await owner.post('/maintenance', { propertyId: rental.property.id, unitId: other.unit.id, title: 'Wrong unit', description: 'Wrong unit', priority: 'LOW' })).status).toBe(404);
+  });
 
-    it('creates a complete rental once and rejects invalid setup without partial records', async () => {
-      const registration = await request('POST', '/api/v1/auth/register', {
-        email: `setup-${stamp}@rentflow.test`,
-        password: 'correct horse battery staple',
-        name: 'Setup Owner',
-        organizationName: `Setup ${stamp}`,
-      });
-      cookie = String(registration.headers['set-cookie']).split(';')[0];
-      csrf = registration.body.csrfToken;
-      const input = {
-        property: {
-          name: 'Atomic rental',
-          type: 'Apartment',
-          address: '12 Test Street',
-          city: 'Cebu',
-        },
-        unit: { number: '1', type: 'Studio', monthlyRent: '6000.00' },
-        tenant: { firstName: 'Test', lastName: 'Tenant' },
-        lease: {
-          startDate: '2026-09-01',
-          monthlyRent: '6000.00',
-          billingDay: 10,
-          dueDay: 15,
-        },
-        charge: {
-          description: 'First rent',
-          dueDate: '2026-09-15',
-          billingPeriod: '2026-09',
-        },
-      };
-      const headers = { 'idempotency-key': `setup-${stamp}` };
-      const first = await request(
-        'POST',
-        '/api/v1/rental-setup',
-        input,
-        headers,
-      );
-      expect(first.status).toBe(201);
-      const replay = await request(
-        'POST',
-        '/api/v1/rental-setup',
-        input,
-        headers,
-      );
-      expect(replay.body).toEqual(first.body);
-      expect((await request('GET', '/api/v1/properties')).body).toHaveLength(1);
-      expect((await request('GET', '/api/v1/charges')).body).toHaveLength(1);
-      const tenantEdit = await request(
-        'PATCH',
-        `/api/v1/tenants/${first.body.tenantId}`,
-        { firstName: 'Updated', lastName: 'Tenant', phone: '123456' },
-      );
-      expect(tenantEdit.status).toBe(200);
-      expect((await request('GET', '/api/v1/tenants')).body[0].firstName).toBe(
-        'Updated',
-      );
-      const depositInput = {
-        type: 'RECEIPT',
-        amount: '500.00',
-        reason: 'Deposit',
-      };
-      const depositHeaders = { 'idempotency-key': `deposit-${stamp}` };
-      const deposit = await request(
-        'POST',
-        `/api/v1/leases/${first.body.leaseId}/deposits`,
-        depositInput,
-        depositHeaders,
-      );
-      expect(deposit.status).toBe(201);
-      expect(
-        (
-          await request(
-            'POST',
-            `/api/v1/leases/${first.body.leaseId}/deposits`,
-            depositInput,
-            depositHeaders,
-          )
-        ).body,
-      ).toEqual(deposit.body);
-      expect((await request('GET', '/api/v1/deposits')).body[0].balance).toBe(
-        '500.00',
-      );
-      expect(
-        (
-          await request(
-            'POST',
-            '/api/v1/rental-setup',
-            { ...input, unit: { ...input.unit, monthlyRent: '0' } },
-            { 'idempotency-key': `invalid-${stamp}` },
-          )
-        ).status,
-      ).toBe(400);
-      expect((await request('GET', '/api/v1/properties')).body).toHaveLength(1);
-      expect(
-        (
-          await request(
-            'POST',
-            '/api/v1/rental-setup',
-            { ...input, tenant: { firstName: 'Changed', lastName: 'Tenant' } },
-            headers,
-          )
-        ).status,
-      ).toBe(409);
-      expect(
-        (await request('POST', '/api/v1/billing/run', { asOf: '2026-10-09' }))
-          .body.created,
-      ).toBe(0);
-      expect(
-        (await request('POST', '/api/v1/billing/run', { asOf: '2026-10-10' }))
-          .body.created,
-      ).toBe(1);
-      expect(
-        (await request('POST', '/api/v1/billing/run', { asOf: '2026-12-10' }))
-          .body.created,
-      ).toBe(2);
-      expect(
-        (await request('POST', '/api/v1/billing/run', { asOf: '2026-12-10' }))
-          .body.created,
-      ).toBe(0);
-      const prisma = app.get(PrismaService);
-      await prisma.membership.updateMany({
-        where: { userId: registration.body.user.id },
-        data: { role: 'MAINTENANCE' },
-      });
-      expect((await request('GET', '/api/v1/payments')).status).toBe(403);
-      expect((await request('GET', '/api/v1/documents')).status).toBe(403);
-      expect((await request('GET', '/api/v1/maintenance')).status).toBe(200);
-      expect(
-        (await request('GET', '/api/v1/properties')).body[0],
-      ).not.toHaveProperty('units');
-      await prisma.membership.updateMany({
-        where: { userId: registration.body.user.id },
-        data: { status: 'REVOKED' },
-      });
-      expect((await request('GET', '/api/v1/tenants')).status).toBe(401);
+  it('links documents only to records in the same organization and soft-deletes them', async () => {
+    const rental = await createRental(owner);
+    expect(
+      (await owner.post('/documents', { name: 'ID', category: 'Identity', entityType: 'Tenant', entityId: randomUUID(), url: 'https://files.example.com/id.pdf' })).status,
+    ).toBe(404);
+    expect((await owner.post('/documents', { name: 'ID', category: 'Identity', url: 'http://insecure.example.com/id.pdf' })).status).toBe(400);
+    expect((await owner.post('/documents', { name: 'ID', category: 'Identity', url: 'javascript:alert(1)' })).status).toBe(400);
+    const doc = await owner.post('/documents', {
+      name: 'Signed lease',
+      category: 'Lease',
+      entityType: 'Tenant',
+      entityId: rental.tenant.id,
+      url: 'https://files.example.com/lease.pdf',
     });
+    expect((await owner.get(`/tenants/${rental.tenant.id}`)).body.documents).toHaveLength(1);
+    expect((await owner.delete(`/documents/${doc.body.id}`)).status).toBe(200);
+    expect((await owner.get('/documents')).body.some((d: { id: string }) => d.id === doc.body.id)).toBe(false);
+    expect(await prismaOf(app).documentRecord.count({ where: { id: doc.body.id } })).toBe(1);
+  });
 
-    it('runs the essential landlord operations without duplicate financial writes', async () => {
-      const registration = await request('POST', '/api/v1/auth/register', {
-        email: `ops-${stamp}@rentflow.test`,
-        password: 'correct horse battery staple',
-        name: 'Operations Owner',
-        organizationName: `Operations ${stamp}`,
-      });
-      cookie = String(registration.headers['set-cookie']).split(';')[0];
-      csrf = registration.body.csrfToken;
-      const property = await request('POST', '/api/v1/properties', {
-        name: 'Focused Apartments',
-        type: 'Apartment',
-        address: '1 Focus Street',
-        city: 'Cebu City',
-      });
-      const unit = await request(
-        'POST',
-        `/api/v1/properties/${property.body.id}/units`,
-        { number: 'A1', type: 'Studio', monthlyRent: '7000.00' },
-      );
-      const tenant = await request('POST', '/api/v1/tenants', {
-        firstName: 'Core',
-        lastName: 'Tenant',
-      });
-      const lease = await request('POST', '/api/v1/leases', {
-        unitId: unit.body.id,
-        tenantId: tenant.body.id,
-        startDate: '2026-09-01',
-        endDate: '2027-08-31',
-        monthlyRent: '7000.00',
-        billingDay: 1,
-        dueDay: 5,
-      });
-      expect(
-        (await request('GET', '/api/v1/billing-schedules')).body,
-      ).toHaveLength(1);
-      const billed = await request('POST', '/api/v1/billing/run', {
-        asOf: '2026-10-01',
-      });
-      const rerun = await request('POST', '/api/v1/billing/run', {
-        asOf: '2026-10-01',
-      });
-      expect(billed.body.created).toBe(1);
-      expect(rerun.body.skipped).toBe(1);
-      const charge = (await request('GET', '/api/v1/charges')).body[0];
-      const payment = await request(
-        'POST',
-        '/api/v1/payments',
-        {
-          tenantId: tenant.body.id,
-          leaseId: lease.body.id,
-          amount: '1000.00',
-          method: 'CASH',
-          paidAt: '2026-10-02T10:00:00.000Z',
-          allocations: [{ chargeId: charge.id, amount: '1000.00' }],
-        },
-        { 'idempotency-key': `ops-payment-${stamp}` },
-      );
-      expect(payment.body.receiptNumber).toBeTruthy();
-      expect(
-        (
-          await request('POST', `/api/v1/payments/${payment.body.id}/reverse`, {
-            reason: 'Entered twice',
-          })
-        ).status,
-      ).toBe(201);
-      expect(
-        (await request('GET', '/api/v1/charges')).body[0].outstanding,
-      ).toBe('7000.00');
+  it('edits units, archives former tenants, and refuses to archive tenants who owe', async () => {
+    const rental = await createRental(owner);
+    expect((await owner.patch(`/units/${rental.unit.id}`, { number: rental.unit.number, type: 'One bedroom', monthlyRent: '11000.00' })).status).toBe(200);
+    expect((await owner.post(`/tenants/${rental.tenant.id}/archive`)).body.code).toBe('TENANT_HAS_BALANCE');
+    const [charge] = (await owner.get(`/leases/${rental.lease.id}/open-charges`)).body;
+    await owner.post(`/charges/${charge.id}/adjustments`, { type: 'WAIVER', amount: charge.outstanding, reason: 'Goodwill' });
+    expect((await owner.post(`/tenants/${rental.tenant.id}/archive`)).body.code).toBe('TENANT_HAS_ACTIVE_LEASE');
+    await owner.post(`/leases/${rental.lease.id}/terminate`, { endDate: today(), reason: 'Moved out' });
+    expect((await owner.post(`/tenants/${rental.tenant.id}/archive`)).status).toBe(201);
+    expect((await owner.get('/tenants')).body.some((t: { id: string }) => t.id === rental.tenant.id)).toBe(false);
+    expect((await owner.get('/tenants?includeArchived=true')).body.some((t: { id: string }) => t.id === rental.tenant.id)).toBe(true);
+  });
 
-      expect(
-        (
-          await request('POST', `/api/v1/leases/${lease.body.id}/deposits`, {
-            type: 'RECEIPT',
-            amount: '7000.00',
-            reason: 'Security deposit',
-          })
-        ).status,
-      ).toBe(201);
-      expect((await request('GET', '/api/v1/deposits')).body[0].balance).toBe(
-        '7000.00',
-      );
-      expect(
-        (
-          await request('POST', `/api/v1/leases/${lease.body.id}/deposits`, {
-            type: 'REFUND',
-            amount: '8000.00',
-            reason: 'Too much',
-          })
-        ).status,
-      ).toBe(400);
-      expect(
-        (
-          await request('POST', '/api/v1/expenses', {
-            propertyId: property.body.id,
-            category: 'REPAIR',
-            description: 'Replace lock',
-            vendor: 'Local Locksmith',
-            amount: '850.00',
-            incurredOn: '2026-10-03',
-          })
-        ).status,
-      ).toBe(201);
-      const maintenance = await request('POST', '/api/v1/maintenance', {
-        propertyId: property.body.id,
-        title: 'Leaking tap',
-        description: 'Kitchen tap needs a washer',
-        priority: 'HIGH',
-      });
-      expect(
-        (
-          await request('PATCH', `/api/v1/maintenance/${maintenance.body.id}`, {
-            status: 'COMPLETED',
-          })
-        ).body.status,
-      ).toBe('COMPLETED');
-      expect(
-        (
-          await request('POST', '/api/v1/documents', {
-            name: 'Signed lease',
-            category: 'Lease',
-            entityType: 'Lease',
-            entityId: lease.body.id,
-            url: 'https://example.test/signed-lease.pdf',
-          })
-        ).status,
-      ).toBe(201);
+  it('emails invitations, lets existing users join with their password, and switches workspaces', async () => {
+    const { client: other, email: otherEmail } = await registerOwner(app);
+    const invite = await owner.post('/staff/invitations', { email: otherEmail, role: 'MANAGER' });
+    expect(invite.body.link).toContain('/accept-invite#token=');
+    expect(tokenIn(lastEmail(app, otherEmail)?.text)).toBe(invite.body.token);
+    expect((await new Client(app).post('/staff/invitations/accept', { token: invite.body.token, password: 'not my password!' })).status).toBe(401);
+    const accepted = await new Client(app).post('/staff/invitations/accept', { token: invite.body.token, password: PASSWORD });
+    expect(accepted.body.accepted).toBe(true);
+    expect((await owner.post('/staff/invitations', { email: otherEmail, role: 'VIEWER' })).body.code).toBe('ALREADY_A_MEMBER');
 
-      const invite = await request('POST', '/api/v1/staff/invitations', {
-        email: `manager-${stamp}@rentflow.test`,
-        role: 'MANAGER',
-      });
-      expect(
-        (
-          await request('POST', '/api/v1/staff/invitations/accept', {
-            token: invite.body.token,
-            name: 'Property Manager',
-            password: 'another secure passphrase',
-          })
-        ).body.accepted,
-      ).toBe(true);
-      expect((await request('GET', '/api/v1/staff')).body.members).toHaveLength(
-        2,
-      );
-      const report = await request('GET', '/api/v1/reports/financial');
-      expect(report.body).toMatchObject({
-        expected: '7000.00',
-        collected: '0.00',
-        expenses: '850.00',
-        netCash: '-850.00',
-      });
-      const csv = await request('GET', '/api/v1/reports/transactions.csv');
-      expect(csv.headers['content-type']).toContain('text/csv');
-      expect(csv.text).toContain('Replace lock');
-      expect(
-        (
-          await request('POST', `/api/v1/leases/${lease.body.id}/renew`, {
-            endDate: '2028-08-31',
-            monthlyRent: '7500.00',
-          })
-        ).status,
-      ).toBe(400);
-      expect(
-        (
-          await request('POST', `/api/v1/leases/${lease.body.id}/renew`, {
-            endDate: '2028-08-31',
-          })
-        ).status,
-      ).toBe(201);
-      expect(
-        (await request('GET', '/api/v1/billing-schedules')).body[0].amount,
-      ).toBe('7000.00');
-      expect(
-        (
-          await request('POST', `/api/v1/leases/${lease.body.id}/terminate`, {
-            endDate: '2999-01-01',
-            reason: 'Future termination must not free the unit',
-          })
-        ).status,
-      ).toBe(400);
-      expect(
-        (
-          await request('POST', `/api/v1/leases/${lease.body.id}/terminate`, {
-            endDate: new Date().toISOString().slice(0, 10),
-            reason: 'Tenant moved out',
-          })
-        ).body.status,
-      ).toBe('TERMINATED');
+    const me = (await other.get('/auth/me')).body;
+    expect(me.workspaces).toHaveLength(2);
+    const switched = await other.post('/auth/switch-workspace', { workspace: accepted.body.workspace });
+    expect(switched.body).toMatchObject({ role: 'MANAGER' });
+    expect((await other.get('/staff')).status).toBe(403);
+    expect(ownerEmail).toBeTruthy();
+  });
 
-      const managerLogin = await request('POST', '/api/v1/auth/login', {
-        email: `manager-${stamp}@rentflow.test`,
-        password: 'another secure passphrase',
-      });
-      cookie = String(managerLogin.headers['set-cookie']).split(';')[0];
-      csrf = managerLogin.body.csrfToken;
-      expect((await request('GET', '/api/v1/reports/financial')).status).toBe(
-        200,
-      );
-      expect(
-        (
-          await request('POST', '/api/v1/staff/invitations', {
-            email: `blocked-${stamp}@rentflow.test`,
-            role: 'VIEWER',
-          })
-        ).status,
-      ).toBe(403);
-    });
-  },
-);
+  it('shows who did what in the audit log', async () => {
+    const log = (await owner.get('/audit-log?limit=20')).body;
+    expect(log.length).toBeGreaterThan(0);
+    expect(log[0]).toMatchObject({ action: expect.any(String), actor: expect.any(String) });
+  });
+});

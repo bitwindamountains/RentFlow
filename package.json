@@ -14,7 +14,9 @@
     "test": "npm run test --workspace api && npm run test --workspace web -- --watch=false",
     "db:generate": "npm run db:generate --workspace api",
     "db:seed:test": "npm run db:seed:test --workspace api",
-    "db:validate": "npm run db:validate --workspace api"
+    "db:validate": "npm run db:validate --workspace api",
+    "test:e2e": "npm run test:e2e --workspace api",
+    "typecheck": "npm run typecheck --workspace api"
   },
   "engines": {
     "node": ">=24.0.0",

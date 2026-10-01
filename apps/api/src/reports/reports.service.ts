@@ -113,7 +113,7 @@ export class ReportsService {
   async reminders(organizationId: string) {
     const org = await this.organization(organizationId);
     const today = todayInZone(org.timezone);
-    const [arrears, leases, maintenance] = await Promise.all([
+    const [arrears, leases, maintenance, notices] = await Promise.all([
       this.balances.arrears(organizationId, today, 50),
       this.prisma.lease.findMany({
         where: {
@@ -134,8 +134,24 @@ export class ReportsService {
         orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
         take: 50,
       }),
+      this.prisma.paymentNotice.findMany({
+        where: { organizationId, status: 'SUBMITTED' },
+        include: { tenant: { select: { firstName: true, lastName: true } } },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+      }),
     ]);
     return [
+      ...notices.map((notice) => ({
+        id: notice.id,
+        type: 'PAYMENT_NOTICE',
+        title: `${notice.tenant.firstName} ${notice.tenant.lastName} reported a payment`,
+        detail: `${formatMoney(notice.amount)} · ${notice.method.replace('_', ' ').toLowerCase()} · paid ${formatDateOnly(notice.paidOn)}`,
+        route: '/payments',
+        severity: 'high',
+        tenantId: notice.tenantId,
+        amount: formatMoney(notice.amount),
+      })),
       ...arrears.map((row) => ({
         id: row.leaseId,
         type: 'OVERDUE_BALANCE',

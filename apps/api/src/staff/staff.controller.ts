@@ -1,15 +1,16 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { MembershipRole } from '@prisma/client';
-import { IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { Auth, Public, RateLimit, Roles } from '../auth/decorators.js';
+import type { MembershipRole } from '@prisma/client';
+import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ALL_ROLES, Auth, Public, RateLimit, Roles } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { PASSWORD_MAX_LENGTH } from '../common/crypto.js';
 import { StaffService } from './staff.service.js';
 
 class InvitationDto {
   @IsEmail() @MaxLength(254) email!: string;
-  @IsEnum(MembershipRole) role!: MembershipRole;
+  // Staff roles only; tenants are invited from their tenant record.
+  @IsIn(ALL_ROLES) role!: MembershipRole;
 }
 class AcceptInvitationDto {
   @IsString() @MinLength(20) @MaxLength(100) token!: string;
@@ -17,7 +18,7 @@ class AcceptInvitationDto {
   @IsString() @MinLength(1) @MaxLength(PASSWORD_MAX_LENGTH) password!: string;
 }
 class UpdateMemberDto {
-  @IsOptional() @IsEnum(MembershipRole) role?: MembershipRole;
+  @IsOptional() @IsIn(ALL_ROLES) role?: MembershipRole;
   @IsOptional() @IsIn(['ACTIVE', 'SUSPENDED']) status?: 'ACTIVE' | 'SUSPENDED';
 }
 

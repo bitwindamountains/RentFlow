@@ -5,7 +5,7 @@ import type { FastifyReply } from 'fastify';
 import { PASSWORD_MAX_LENGTH } from '../common/crypto.js';
 import { environment, sessionCookieName } from '../config/environment.js';
 import { AuthService, type IssuedSession } from './auth.service.js';
-import { ALL_ROLES, Auth, Public, RateLimit, Roles } from './decorators.js';
+import { ANY_MEMBER, Auth, Public, RateLimit, Roles } from './decorators.js';
 import type { SessionContext } from './session.types.js';
 
 class RegisterDto {
@@ -69,13 +69,13 @@ export class AuthController {
     return this.startSession(reply, await this.auth.login({ ...input, userAgent }));
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @Get('me')
   me(@Auth() session: SessionContext) {
     return this.auth.profile(session);
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @HttpCode(204)
   @Post('logout')
   async logout(@Auth() session: SessionContext, @Res({ passthrough: true }) reply: CookieReply) {
@@ -83,7 +83,7 @@ export class AuthController {
     reply.clearCookie(sessionCookieName(), this.cookieOptions());
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @HttpCode(200)
   @Post('switch-workspace')
   async switchWorkspace(
@@ -122,7 +122,7 @@ export class AuthController {
     return { verified: true };
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @RateLimit(3, '15 minutes')
   @HttpCode(202)
   @Post('email/resend')
@@ -131,7 +131,7 @@ export class AuthController {
     return { accepted: true };
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @RateLimit(10, '15 minutes')
   @HttpCode(204)
   @Post('password')
@@ -139,20 +139,20 @@ export class AuthController {
     await this.auth.changePassword(session, input.currentPassword, input.newPassword);
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @Get('sessions')
   sessions(@Auth() session: SessionContext) {
     return this.auth.listSessions(session);
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @HttpCode(200)
   @Post('sessions/revoke-others')
   async revokeOthers(@Auth() session: SessionContext) {
     return { revoked: await this.auth.revokeOtherSessions(session) };
   }
 
-  @Roles(...ALL_ROLES)
+  @Roles(...ANY_MEMBER)
   @HttpCode(204)
   @Delete('sessions/:id')
   async revokeSession(@Auth() session: SessionContext, @Param('id', ParseUUIDPipe) id: string) {

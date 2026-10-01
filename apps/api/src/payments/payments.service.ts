@@ -5,7 +5,7 @@ import { todayInZone } from '../common/dates.js';
 import { DomainError, notFound } from '../common/errors.js';
 import { IdempotencyService } from '../common/idempotency.service.js';
 import { formatMoney, parseMoney, sumMoney, ZERO } from '../common/money.js';
-import { PrismaService } from '../common/prisma.service.js';
+import { PrismaService, type Tx } from '../common/prisma.service.js';
 import { decodeCursor, encodeCursor, type Page } from '../common/validation.js';
 import { BalancesService } from '../billing/balances.service.js';
 
@@ -116,7 +116,17 @@ export class PaymentsService {
     }));
   }
 
-  async create(organizationId: string, actorUserId: string, input: PaymentInput, key: string) {
+  /**
+   * Records a payment exactly once per idempotency key. `withinTransaction` runs in the same
+   * serializable transaction (e.g. to mark a tenant's payment notice confirmed atomically).
+   */
+  async create(
+    organizationId: string,
+    actorUserId: string,
+    input: PaymentInput,
+    key: string,
+    withinTransaction?: (tx: Tx, payment: { id: string; receiptNumber: string }) => Promise<void>,
+  ) {
     const amount = parseMoney(input.amount);
     const paidAt = new Date(input.paidAt);
     if (Number.isNaN(paidAt.getTime()) || paidAt.getTime() > Date.now() + 5 * 60_000)
@@ -192,6 +202,7 @@ export class PaymentsService {
           entityId: payment.id,
           after: { amount, method: input.method, paidAt, receiptNumber, allocations },
         });
+        if (withinTransaction) await withinTransaction(tx, { id: payment.id, receiptNumber });
         return paymentView(payment);
       },
     );

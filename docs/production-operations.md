@@ -17,6 +17,13 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
 - **Personal data.** Audit logs record who changed what, but personal fields (names, emails, phones, document URLs) are redacted. Tokens in emailed links travel in the URL fragment and never reach server logs.
 - **Uploaded documents.** PDF, JPEG, PNG, and WebP only, identified by their content (a renamed HTML or SVG file is rejected), up to `UPLOAD_MAX_MB` each and `STORAGE_QUOTA_MB` per workspace. Files sit in private storage under server-generated names and are served only through the API after the same workspace and role checks as every other record, with `nosniff` and a sandboxing CSP; PDFs always download rather than render. Removing a document erases the file immediately; the record of who uploaded and removed it stays in the audit log.
 
+## Tenant portal
+
+- **Access.** Owners and managers invite a tenant from the tenant's page. The invitation goes to the tenant's email, and the link is also shown once so it can be sent by SMS or Messenger. Tenants use the same sign-in, password reset, and session rules as staff.
+- **Isolation.** A portal account is bound to one tenant record by the database, and every portal query is scoped to that tenant. Tenants cannot call any staff endpoint, and staff screens cannot list, promote, or suspend portal accounts. Removing access or archiving the tenant signs them out immediately.
+- **Payment reports.** A tenant's "I paid" report posts nothing. Collectors, managers, and owners see the reports and any screenshot on the Payments page. **Confirm** records the payment against the oldest charges and issues the receipt in one transaction, so a double click or retry cannot post twice. **Not received** needs a reason, which the tenant sees. Tenants are emailed either way. Reports older than 90 days are refused, and a tenant can have at most 10 pending.
+- **Repairs.** Requests go to the maintenance list against the tenant's own unit, marked as reported by the tenant.
+
 ## Background jobs
 
 When `ENABLE_JOBS=true` (the default outside tests), the job runs every 15 minutes, holding a database lease so only one instance runs it at a time. For each active organization, in its own time zone, it:
@@ -37,6 +44,6 @@ It also purges expired idempotency keys, used or expired tokens, and old session
 ## Known limitations
 
 - Uploaded files are not virus-scanned. They are never executed or rendered inside the app, but staff should still only open files from people they know.
-- No tenant portal or online payment gateway yet. Payments are recorded by staff.
+- No online payment gateway yet. Tenants report payments; staff confirm them.
 - Rate-limit counters are per API instance. Use one API instance, or add a shared store before scaling horizontally.
 - Receipts are acknowledgement receipts, not BIR official receipts.

@@ -2,9 +2,15 @@
   <section class="auth-story">
     <a class="auth-brand" routerLink="/auth"><span>R</span>RentFlow</a>
     <div>
-      <p class="eyebrow">TEAM ACCESS</p>
-      <h1>Join the rental team.</h1>
-      <p>Your role controls which operational and financial actions you can perform.</p>
+      @if (forTenant) {
+        <p class="eyebrow">TENANT PORTAL</p>
+        <h1>Your rental, in one place.</h1>
+        <p>See what you owe, download receipts, tell your landlord about payments, and report repairs.</p>
+      } @else {
+        <p class="eyebrow">TEAM ACCESS</p>
+        <h1>Join the rental team.</h1>
+        <p>Your role controls which operational and financial actions you can perform.</p>
+      }
     </div>
     <small>Invitation links expire after seven days.</small>
   </section>

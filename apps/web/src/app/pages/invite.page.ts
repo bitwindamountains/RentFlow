@@ -17,6 +17,8 @@ export class InvitePage {
   protected readonly saving = signal(false);
   protected readonly error = signal('');
   protected readonly existingAccount = signal(false);
+  /** Portal invitations add `for=tenant` to the link fragment; read it before the token clears the fragment. */
+  protected readonly forTenant = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('for') === 'tenant';
   private readonly token = takeFragmentToken();
 
   protected accept(): void {

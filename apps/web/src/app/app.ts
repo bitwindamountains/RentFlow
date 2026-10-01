@@ -64,6 +64,9 @@ export class App {
   @ViewChild('globalSearch') private searchInput?: ElementRef<HTMLInputElement>;
 
   protected readonly navItems: NavItem[] = [
+    { label: 'Home', route: '/portal', roles: ['TENANT'], section: 'My rental' },
+    { label: 'Payments', route: '/portal/payments', roles: ['TENANT'] },
+    { label: 'Repairs', route: '/portal/repairs', roles: ['TENANT'] },
     { label: 'Dashboard', route: '/dashboard', roles: FINANCE, section: 'Workspace' },
     { label: 'Properties', route: '/properties', roles: FINANCE },
     { label: 'Tenants', route: '/tenants', roles: FINANCE },
@@ -77,7 +80,7 @@ export class App {
     { label: 'Documents', route: '/documents', roles: FINANCE },
     { label: 'Reminders', route: '/reminders', roles: FINANCE },
     { label: 'Staff & access', route: '/staff', roles: ['OWNER'] },
-    { label: 'Account', route: '/account', roles: [...FINANCE, 'MAINTENANCE'] },
+    { label: 'Account', route: '/account', roles: [...FINANCE, 'MAINTENANCE', 'TENANT'] },
   ];
   protected readonly navigationIcons: Record<string, string> = {
     '/dashboard': 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -94,6 +97,9 @@ export class App {
     '/reports': 'M4 3v18h17 M8 17v-5 M13 17V7 M18 17V4',
     '/staff': 'M12 3a4 4 0 1 0 0 8a4 4 0 0 0 0-8 M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2',
     '/account': 'M12 2a5 5 0 1 0 0 10a5 5 0 0 0 0-10 M3 22a9 9 0 0 1 18 0',
+    '/portal': 'M3 11l9-8 9 8 M5 9.5V21h5v-6h4v6h5V9.5',
+    '/portal/payments': 'M3 6h18v14H3z M3 10h18 M7 15h4',
+    '/portal/repairs': 'M14 6a5 5 0 0 0-6 6L2 18l4 4 6-6a5 5 0 0 0 6-6l-4 2-3-3z',
   };
   protected readonly visibleNav = computed(() => {
     const role = this.profile()?.role;
@@ -102,6 +108,7 @@ export class App {
   protected readonly mobileNav = computed(() => {
     const role = this.profile()?.role;
     if (role === 'MAINTENANCE') return this.navItems.filter((item) => ['/maintenance', '/account'].includes(item.route));
+    if (role === 'TENANT') return this.visibleNav();
     return this.navItems.filter((item) => ['/dashboard', '/tenants', '/billing', '/payments'].includes(item.route));
   });
 

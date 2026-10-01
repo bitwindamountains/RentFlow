@@ -95,7 +95,7 @@ export class PortalAdminService {
       });
       return { ...created, organizationName: tenant.organization.name, firstName: tenant.firstName };
     });
-    const link = this.mailer.link('/accept-invite', { token });
+    const link = this.mailer.link('/accept-invite', { token, for: 'tenant' });
     this.mailer.sendInBackground(
       {
         to: invitation.email,

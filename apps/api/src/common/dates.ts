@@ -27,6 +27,13 @@ export function todayInZone(timeZone: string, now = new Date()): string {
   }).format(now);
 }
 
+/** The hour (0–23) on the wall clock in an IANA time zone. */
+export function hourInZone(timeZone: string, now = new Date()): number {
+  return Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(now),
+  );
+}
+
 export function addDays(date: string, days: number): string {
   const value = parseDateOnly(date);
   value.setUTCDate(value.getUTCDate() + days);

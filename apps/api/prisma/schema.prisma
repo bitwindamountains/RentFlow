@@ -201,6 +201,8 @@ model Organization {
   chargeAdjustments   ChargeAdjustment[]
   depositTransactions DepositTransaction[]
   paymentNotices      PaymentNotice[]
+  reminderSettings    ReminderSettings?
+  reminderDeliveries  ReminderDelivery[]
 }
 
 model User {
@@ -356,24 +358,24 @@ model RentableSpace {
 }
 
 model Tenant {
-  id               String          @id @default(uuid()) @db.Uuid
-  organizationId   String          @db.Uuid
+  id               String               @id @default(uuid()) @db.Uuid
+  organizationId   String               @db.Uuid
   firstName        String
   lastName         String
   email            String?
   phone            String?
   permanentAddress String?
-  status           TenantStatus    @default(PENDING)
-  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
-  archivedAt       DateTime?       @db.Timestamptz(3)
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  primaryLeases    Lease[]         @relation("PrimaryTenant")
+  status           TenantStatus         @default(PENDING)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
+  archivedAt       DateTime?            @db.Timestamptz(3)
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  primaryLeases    Lease[]              @relation("PrimaryTenant")
   occupancies      LeaseOccupant[]
   payments         Payment[]
   memberships      Membership[]
   invitations      StaffInvitation[]
-  paymentNotices      PaymentNotice[]
+  paymentNotices   PaymentNotice[]
   maintenance      MaintenanceRequest[]
 
   @@index([organizationId, status])
@@ -381,31 +383,32 @@ model Tenant {
 }
 
 model Lease {
-  id               String            @id @default(uuid()) @db.Uuid
-  organizationId   String            @db.Uuid
-  rentableSpaceId  String            @db.Uuid
-  primaryTenantId  String            @db.Uuid
-  startDate        DateTime          @db.Date
-  endDate          DateTime?         @db.Date
-  monthlyRent      Decimal           @db.Decimal(19, 4)
-  depositRequired  Decimal           @default(0) @db.Decimal(19, 4)
-  billingDay       Int
-  dueDay           Int
-  gracePeriodDays  Int               @default(0)
-  status           LeaseStatus       @default(DRAFT)
-  activatedAt      DateTime?         @db.Timestamptz(3)
-  terminatedAt     DateTime?         @db.Timestamptz(3)
-  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  rentableSpace    RentableSpace     @relation(fields: [rentableSpaceId], references: [id], onDelete: Restrict)
-  primaryTenant    Tenant            @relation("PrimaryTenant", fields: [primaryTenantId], references: [id], onDelete: Restrict)
-  occupants        LeaseOccupant[]
-  billingSchedules BillingSchedule[]
-  charges          Charge[]
-  payments         Payment[]
-  depositAccount   DepositAccount?
-  paymentNotices      PaymentNotice[]
+  id                 String             @id @default(uuid()) @db.Uuid
+  organizationId     String             @db.Uuid
+  rentableSpaceId    String             @db.Uuid
+  primaryTenantId    String             @db.Uuid
+  startDate          DateTime           @db.Date
+  endDate            DateTime?          @db.Date
+  monthlyRent        Decimal            @db.Decimal(19, 4)
+  depositRequired    Decimal            @default(0) @db.Decimal(19, 4)
+  billingDay         Int
+  dueDay             Int
+  gracePeriodDays    Int                @default(0)
+  status             LeaseStatus        @default(DRAFT)
+  activatedAt        DateTime?          @db.Timestamptz(3)
+  terminatedAt       DateTime?          @db.Timestamptz(3)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(3)
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  rentableSpace      RentableSpace      @relation(fields: [rentableSpaceId], references: [id], onDelete: Restrict)
+  primaryTenant      Tenant             @relation("PrimaryTenant", fields: [primaryTenantId], references: [id], onDelete: Restrict)
+  occupants          LeaseOccupant[]
+  billingSchedules   BillingSchedule[]
+  charges            Charge[]
+  payments           Payment[]
+  depositAccount     DepositAccount?
+  paymentNotices     PaymentNotice[]
+  reminderDeliveries ReminderDelivery[]
 
   @@index([organizationId, status])
   @@index([rentableSpaceId, startDate, endDate])
@@ -786,4 +789,58 @@ model PaymentNotice {
   @@index([organizationId, status, createdAt])
   @@index([tenantId, createdAt])
   @@index([leaseId])
+}
+
+enum ReminderKind {
+  RENT_DUE_SOON
+  RENT_DUE_TODAY
+  RENT_OVERDUE
+  LEASE_EXPIRING
+}
+
+enum ReminderDeliveryStatus {
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/// Automatic reminder rules for one workspace. A missing row means the defaults.
+model ReminderSettings {
+  organizationId   String       @id @db.Uuid
+  /// Emails tenants about rent. Off until an owner or manager turns it on.
+  tenantReminders  Boolean      @default(false)
+  /// Days before the due date for the "due soon" email; 0 turns it off.
+  daysBeforeDue    Int          @default(3)
+  onDueDate        Boolean      @default(true)
+  /// Days after the grace period ends for each overdue email.
+  overdueDays      Int[]        @default([3, 7])
+  /// Emails owners and managers before a lease ends.
+  staffLeaseAlerts Boolean      @default(true)
+  leaseExpiryDays  Int[]        @default([60, 30, 7])
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(3)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/// One automatic reminder per lease, kind, subject date, and step: the unique key makes sending at-most-once.
+model ReminderDelivery {
+  id             String                 @id @default(uuid()) @db.Uuid
+  organizationId String                 @db.Uuid
+  leaseId        String                 @db.Uuid
+  kind           ReminderKind
+  /// The due date (rent) or end date (lease) the reminder is about.
+  subjectDate    DateTime               @db.Date
+  /// Days relative to the subject date: negative before it, positive after.
+  step           Int
+  status         ReminderDeliveryStatus @default(SENDING)
+  recipients     Int                    @default(0)
+  amount         Decimal?               @db.Decimal(19, 4)
+  attempts       Int                    @default(1)
+  createdAt      DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @db.Timestamptz(3)
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lease          Lease                  @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@unique([leaseId, kind, subjectDate, step])
+  @@index([organizationId, createdAt])
 }

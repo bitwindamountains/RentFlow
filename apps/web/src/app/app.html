@@ -3,11 +3,6 @@
 } @else {
   <div class="app-shell">
     <a class="skip-link" href="#workspace">Skip to workspace</a>
-    @if (!online()) {
-      <div class="offline-banner" role="status">
-        You’re offline. Records and payments need a connection; nothing is saved on this device.
-      </div>
-    }
     <aside id="primary-navigation" class="sidebar" [class.open]="menuOpen()" aria-label="Primary navigation">
       <a class="brand" routerLink="/dashboard" (click)="closeMenu()"
         ><span class="brand-mark" aria-hidden="true">R</span><span>RentFlow</span></a
@@ -49,7 +44,7 @@
     </aside>
 
     @if (menuOpen()) {
-      <button class="scrim" type="button" aria-label="Close menu" (click)="toggleMenu()"></button>
+      <button class="scrim" type="button" animate.enter="enter" animate.leave="leave" aria-label="Close menu" (click)="toggleMenu()"></button>
     }
 
     <main id="workspace" tabindex="-1">
@@ -62,7 +57,7 @@
           [attr.aria-expanded]="menuOpen()"
           (click)="toggleMenu()"
         >
-          ☰
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M4 12h16 M4 17h16" /></svg>
         </button>
         <div class="org-switcher">
           <span class="org-logo" aria-hidden="true">{{ profile()?.organization?.name?.slice(0, 2)?.toUpperCase() || 'RF' }}</span
@@ -70,9 +65,12 @@
             ><small>Workspace</small><strong>{{ profile()?.organization?.name || 'RentFlow' }}</strong></span
           >
         </div>
+        @if (!online()) {
+          <span class="offline-pill">Offline</span>
+        }
         <div class="navigation-search">
           <label class="search"
-            ><span aria-hidden="true">⌕</span><span class="sr-only">Find a workspace page</span
+            ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 0 0 0-14 M20 20l-4-4" /></svg><span class="sr-only">Find a workspace page</span
             ><input
               #globalSearch
               placeholder="Go to a page…"
@@ -83,7 +81,7 @@
             /><kbd>⌘ K</kbd></label
           >
           @if (navigationQuery().trim()) {
-            <div class="navigation-results" aria-label="Matching pages">
+            <div class="navigation-results" aria-label="Matching pages" animate.enter="enter">
               @for (item of navigationMatches(); track item.route) {
                 <a [routerLink]="item.route"><span>{{ item.label }}</span><span aria-hidden="true">&rarr;</span></a>
               } @empty {
@@ -93,23 +91,28 @@
           }
         </div>
         @if (profile()?.role !== 'MAINTENANCE') {
-          <a class="icon-button reminder-link" routerLink="/reminders" aria-label="View reminders">!</a>
+          <a class="icon-button reminder-link" routerLink="/reminders" aria-label="View reminders"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v5l-2 4h16l-2-4z M10 21h4" /></svg></a>
         }
         @if (installReady()) {
           <button class="secondary install-action" type="button" (click)="installApp()">Install app</button>
         }
         @if (canRecordPayment()) {
-          <button class="primary top-action" type="button" (click)="startPayment()"><span aria-hidden="true">＋</span> Record payment</button>
+          <button class="primary top-action" type="button" (click)="startPayment()" aria-label="Record payment"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14 M5 12h14" /></svg><span class="label">Record payment</span></button>
         }
       </header>
+      @if (!online()) {
+        <div class="app-banner" role="status" animate.enter="enter">
+          You’re offline. Records and payments need a connection; nothing is saved on this device.
+        </div>
+      }
       @if (update.available()) {
-        <div class="app-banner" role="status">
+        <div class="app-banner" role="status" animate.enter="enter">
           A new version of RentFlow is ready.
           <button class="text-button" type="button" (click)="update.apply()">Reload now</button>
         </div>
       }
       @if (profile() && !profile()!.user.emailVerified) {
-        <div class="app-banner" role="status">
+        <div class="app-banner" role="status" animate.enter="enter">
           Confirm your email so you can reset your password if you forget it.
           <button class="text-button" type="button" (click)="resendVerification()">Resend link</button>
         </div>
@@ -126,17 +129,17 @@
         >
       }
       <button type="button" (click)="toggleMenu()" aria-controls="primary-navigation" [attr.aria-expanded]="menuOpen()">
-        <span aria-hidden="true">•••</span><small>More</small>
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01 M12 12h.01 M19 12h.01" /></svg><small>More</small>
       </button>
     </nav>
 
     @if (paymentOpen()) {
-      <div class="modal-layer" role="presentation" (click)="closePayment()">
+      <div class="modal-layer" role="presentation" (click)="closePayment()" animate.enter="enter" animate.leave="leave">
         <section class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-title" (click)="$event.stopPropagation()">
-          <button class="modal-close" type="button" aria-label="Close payment form" (click)="closePayment()">×</button>
+          <button class="modal-close" type="button" aria-label="Close payment form" (click)="closePayment()"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18" /></svg></button>
           @if (paymentComplete(); as done) {
-            <div class="success-state">
-              <span class="success-icon" aria-hidden="true">✓</span>
+            <div class="success-state" animate.enter="enter">
+              <span class="success-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" /></svg></span>
               <h2 id="payment-title">Payment recorded</h2>
               <p>{{ done.amount | money }} from {{ done.tenantName }}.</p>
               <p><strong>Receipt {{ done.receiptNumber }}</strong></p>
@@ -166,6 +169,7 @@
             }
             @switch (paymentStep()) {
               @case (1) {
+                <div class="step-body" animate.enter="enter">
                 <label class="field"
                   ><span>Search tenant or unit</span
                   ><input type="search" [ngModel]="optionQuery()" (ngModelChange)="optionQuery.set($event)" [disabled]="paymentLoading()" autocomplete="off"
@@ -189,8 +193,10 @@
                     }
                   }
                 </div>
+                </div>
               }
               @case (2) {
+                <div class="step-body" animate.enter="enter">
                 <p>
                   <strong>{{ selected()?.tenantName }}</strong> · Unit {{ selected()?.unitNumber }} · owes {{ selected()?.outstanding | money }}
                 </p>
@@ -221,8 +227,10 @@
                     ><span>Reference no. <em>Optional</em></span><input [(ngModel)]="paymentReference" maxlength="100" placeholder="e.g. GCash ref 7845120369"
                   /></label>
                 </div>
+                </div>
               }
               @default {
+                <div class="step-body" animate.enter="enter">
                 <div class="review-card">
                   <div><span>Tenant</span><strong>{{ selected()?.tenantName }}</strong></div>
                   <div><span>Amount</span><strong>{{ paymentAmount | money }}</strong></div>
@@ -238,6 +246,7 @@
                   <div class="remaining"><span>Balance after payment</span><strong>{{ remainingAfter() | money }}</strong></div>
                 </div>
                 <p class="review-warning">Recording issues a receipt. Mistakes are corrected with a reversal, not a delete.</p>
+                </div>
               }
             }
             <div class="modal-actions">
@@ -261,7 +270,7 @@
     }
 
     @if (toast()) {
-      <div class="toast" role="status"><span aria-hidden="true">✓</span>{{ toast() }}</div>
+      <div class="toast" role="status" animate.enter="enter" animate.leave="leave"><span aria-hidden="true">✓</span>{{ toast() }}</div>
     }
   </div>
 }

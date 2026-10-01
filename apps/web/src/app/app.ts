@@ -3,7 +3,6 @@ import {
   ElementRef,
   HostListener,
   ViewChild,
-  ViewEncapsulation,
   computed,
   effect,
   inject,
@@ -19,6 +18,7 @@ import { LabelPipe, MoneyPipe } from './core/format';
 import type { Charge, CollectionOption, Payment, Role } from './core/models';
 import { allocateOldestFirst, fromCents, isMoney, sumCents, toCents } from './core/money';
 import { PaymentLauncher } from './core/payment-launcher.service';
+import { ThemeService } from './core/theme.service';
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -50,15 +50,15 @@ const FINANCE: Role[] = ['OWNER', 'MANAGER', 'COLLECTOR', 'VIEWER'];
 @Component({
   selector: 'app-root',
   imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet, MoneyPipe, LabelPipe],
-  styleUrl: './app.scss',
   templateUrl: './app.html',
-  encapsulation: ViewEncapsulation.None,
 })
 export class App {
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
   private readonly launcher = inject(PaymentLauncher);
   protected readonly update = inject(AppUpdate);
+  // Applies the saved light/dark preference before the first page renders.
+  private readonly theme = inject(ThemeService);
   protected readonly profile = this.api.profile;
   protected readonly online = this.api.online;
   @ViewChild('globalSearch') private searchInput?: ElementRef<HTMLInputElement>;

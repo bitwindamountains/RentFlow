@@ -15,7 +15,9 @@
       @if (api.hasRole('OWNER', 'MANAGER')) {
         <a class="secondary button-link" routerLink="/setup">Guided setup</a>
       }
-      <button class="secondary" type="button" (click)="refresh()" [disabled]="loading()">Refresh</button>
+      <button class="secondary" type="button" (click)="refresh()" [disabled]="loading()">
+        {{ loading() && data() ? 'Refreshing…' : 'Refresh' }}
+      </button>
     </div>
   </section>
 
@@ -26,45 +28,60 @@
   }
 
   @if (data(); as d) {
-    <section class="metric-grid" aria-label="This month" [attr.aria-busy]="loading()">
-      <a class="metric-card" routerLink="/billing">
-        <div class="metric-head"><span class="metric-icon blue" aria-hidden="true">₱</span></div>
-        <p>Billed this month</p>
-        <strong>{{ d.billedThisMonth | money }}</strong>
-        <small>{{ d.activeLeases }} active leases</small>
-      </a>
-      <a class="metric-card" routerLink="/payments">
-        <div class="metric-head">
-          <span class="metric-icon green" aria-hidden="true">✓</span>
+    <section class="bento" aria-label="This month at a glance" [attr.aria-busy]="loading()" [class.is-refreshing]="loading()">
+      <a class="tile tile-hero" routerLink="/payments">
+        <p class="tile-label">
+          Collected this month
           @if (d.collectionRate !== null) {
-            <span class="trend">{{ d.collectionRate }}%</span>
+            <span class="rate-badge">{{ d.collectionRate }}% collected</span>
           }
+        </p>
+        <strong class="tile-value">{{ d.collectedThisMonth | money }}</strong>
+        <p class="tile-note">
+          {{ d.collectionRate === null ? 'Nothing billed yet this month.' : 'Payments received against this month’s charges.' }}
+        </p>
+        <div class="hero-meter">
+          <span class="meter" role="img" [attr.aria-label]="collectionLabel(d)"
+            ><span [style.--value]="d.collectionRate ?? 0"></span
+          ></span>
+          <div class="hero-meter-legend">
+            <span>Billed <strong>{{ d.billedThisMonth | money }}</strong></span>
+            <span>Still to collect <strong>{{ remainingThisMonth(d) | money }}</strong></span>
+          </div>
         </div>
-        <p>Collected this month</p>
-        <strong>{{ d.collectedThisMonth | money }}</strong>
-        <small>{{ d.collectionRate === null ? 'Nothing billed yet this month' : 'of this month’s charges paid' }}</small>
       </a>
-      <a class="metric-card" routerLink="/billing" [queryParams]="{ status: 'overdue' }">
-        <div class="metric-head"><span class="metric-icon orange" aria-hidden="true">!</span></div>
-        <p>Overdue now</p>
-        <strong [class.danger-text]="d.overdue !== '0.00'">{{ d.overdue | money }}</strong>
-        <small>{{ d.outstanding | money }} total outstanding</small>
-      </a>
-      <a class="metric-card" routerLink="/properties">
-        <div class="metric-head">
-          <span class="metric-icon violet" aria-hidden="true">#</span>
-          @if (d.occupancyRate !== null) {
-            <span class="trend">{{ d.occupancyRate }}%</span>
-          }
-        </div>
-        <p>Occupancy</p>
-        <strong>{{ d.occupiedUnits }} / {{ d.totalUnits }}</strong>
-        <small>Units with an active lease</small>
-      </a>
-    </section>
 
-    <section class="content-grid">
-      <article class="panel attention-panel">
+      <a class="tile tile-overdue" [class.has-overdue]="d.overdue !== '0.00'" routerLink="/billing" [queryParams]="{ status: 'overdue' }">
+        <p class="tile-label">Overdue now</p>
+        <strong class="tile-value" [class.danger-text]="d.overdue !== '0.00'">{{ d.overdue | money }}</strong>
+        <p class="tile-note">{{ d.outstanding | money }} total outstanding</p>
+      </a>
+
+      <a class="tile tile-billed" routerLink="/billing">
+        <p class="tile-label">Billed this month</p>
+        <strong class="tile-value">{{ d.billedThisMonth | money }}</strong>
+        <p class="tile-note">{{ d.activeLeases }} active {{ d.activeLeases === 1 ? 'lease' : 'leases' }}</p>
+      </a>
+
+      <a class="tile tile-occupancy" routerLink="/properties">
+        <p class="tile-label">Occupancy</p>
+        <div class="ring" role="img" [attr.aria-label]="d.occupiedUnits + ' of ' + d.totalUnits + ' units occupied'">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-track" cx="60" cy="60" r="50" pathLength="100" />
+            <circle class="ring-value" cx="60" cy="60" r="50" pathLength="100" [style.--value]="d.occupancyRate ?? 0" />
+          </svg>
+          <div class="ring-label" aria-hidden="true">
+            <strong>{{ d.occupancyRate ?? 0 }}%</strong>
+            <small>occupied</small>
+          </div>
+        </div>
+        <dl class="occupancy-facts">
+          <div><dt>Occupied</dt><dd>{{ d.occupiedUnits }} / {{ d.totalUnits }}</dd></div>
+          <div><dt>Ending in 30 days</dt><dd>{{ d.leasesEndingSoon }}</dd></div>
+        </dl>
+      </a>
+
+      <article class="tile tile-arrears">
         <div class="panel-title">
           <div>
             <h2>Who owes you</h2>
@@ -75,7 +92,7 @@
         <div class="attention-list">
           @for (row of d.topArrears; track row.leaseId) {
             <div class="attention-item">
-              <span [class]="'attention-icon ' + (row.daysOverdue > 30 ? 'red' : 'orange')" aria-hidden="true">!</span>
+              <span [class]="'attention-icon ' + (row.daysOverdue > 30 ? 'red' : 'orange')" aria-hidden="true">{{ row.daysOverdue > 30 ? '!!' : '!' }}</span>
               <span>
                 <a [routerLink]="['/tenants', row.tenantId]"><strong>{{ row.tenantName }}</strong></a>
                 <small>{{ row.overdue | money }} · {{ row.daysOverdue }} days late · Unit {{ row.unitNumber }}</small>
@@ -93,12 +110,68 @@
         </div>
       </article>
 
-      <article class="panel attention-panel">
+      <article class="tile tile-trend">
+        <div class="panel-title">
+          <div>
+            <h2>Billed vs collected</h2>
+            <p>Last six months</p>
+          </div>
+          <div class="legend">
+            <span><i class="expected" aria-hidden="true"></i>Billed</span><span><i class="collected" aria-hidden="true"></i>Collected</span>
+          </div>
+        </div>
+        @if (showTable()) {
+          <div class="chart-table table-wrap">
+            <table>
+              <caption class="sr-only">Billed and collected per month</caption>
+              <thead><tr><th scope="col">Month</th><th scope="col">Billed</th><th scope="col">Collected</th></tr></thead>
+              <tbody>
+                @for (month of d.trend; track month.month) {
+                  <tr><td>{{ monthLabel(month.month, 'long') }}</td><td>{{ month.billed | money }}</td><td>{{ month.collected | money }}</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <div class="chart">
+            <div class="y-axis" aria-hidden="true"><span>{{ axisLabel(chartMax()) }}</span><span>{{ axisLabel(chartMax() / 2) }}</span><span>0</span></div>
+            <div class="bars" role="list" aria-label="Billed and collected per month">
+              @for (month of d.trend; track month.month) {
+                <div
+                  class="bar-group"
+                  role="listitem"
+                  tabindex="0"
+                  [attr.aria-label]="monthLabel(month.month, 'long') + ': billed ' + (month.billed | money) + ', collected ' + (month.collected | money)"
+                >
+                  <div class="bar-pair" aria-hidden="true">
+                    <span class="bar expected" [style.height.%]="barHeight(month.billed)"></span>
+                    <span class="bar collected" [style.height.%]="barHeight(month.collected)"></span>
+                  </div>
+                  <small aria-hidden="true">{{ monthLabel(month.month) }}</small>
+                  <span class="bar-tip" aria-hidden="true">
+                    <b>{{ monthLabel(month.month, 'long') }}</b>
+                    <span><i class="legend-swatch" [style.background]="'var(--chart-billed)'"></i><em>Billed</em>{{ month.billed | money }}</span>
+                    <span><i class="legend-swatch" [style.background]="'var(--chart-collected)'"></i><em>Collected</em>{{ month.collected | money }}</span>
+                  </span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+        <div class="tile-foot">
+          <button class="text-button" type="button" [attr.aria-pressed]="showTable()" (click)="showTable.set(!showTable())">
+            {{ showTable() ? 'Show chart' : 'Show as table' }}
+          </button>
+        </div>
+      </article>
+
+      <article class="tile tile-upcoming">
         <div class="panel-title">
           <div>
             <h2>Coming up</h2>
             <p>{{ d.leasesEndingSoon }} leases end within 30 days · {{ d.openMaintenance }} open work orders</p>
           </div>
+          <a routerLink="/reminders" class="text-button">All reminders &rarr;</a>
         </div>
         <div class="attention-list">
           @if (!d.totalUnits) {
@@ -123,45 +196,18 @@
             }
           }
         </div>
-        <a routerLink="/reminders" class="all-actions">View all reminders</a>
       </article>
     </section>
-
-    <article class="panel collection-panel">
-      <div class="panel-title">
-        <div>
-          <h2>Billed vs collected</h2>
-          <p>Last six months</p>
-        </div>
-        <div class="legend" aria-hidden="true">
-          <span><i class="expected"></i>Billed</span><span><i class="collected"></i>Collected</span>
-        </div>
-      </div>
-      <div class="chart" role="img" [attr.aria-label]="'Billed and collected per month for the last six months'">
-        <div class="y-axis" aria-hidden="true"><span>{{ chartMax() / 100 | money }}</span><span>0</span></div>
-        <div class="bars">
-          @for (month of d.trend; track month.month) {
-            <div class="bar-group">
-              <div class="bar-pair" [title]="monthLabel(month.month) + ': billed ' + month.billed + ', collected ' + month.collected">
-                <span class="bar expected" [style.height.%]="barHeight(month.billed)"></span>
-                <span class="bar collected" [style.height.%]="barHeight(month.collected)"></span>
-              </div>
-              <small>{{ monthLabel(month.month) }}</small>
-            </div>
-          }
-        </div>
-      </div>
-      <table class="sr-only">
-        <caption>Billed and collected per month</caption>
-        <thead><tr><th scope="col">Month</th><th scope="col">Billed</th><th scope="col">Collected</th></tr></thead>
-        <tbody>
-          @for (month of d.trend; track month.month) {
-            <tr><td>{{ month.month }}</td><td>{{ month.billed | money }}</td><td>{{ month.collected | money }}</td></tr>
-          }
-        </tbody>
-      </table>
-    </article>
   } @else if (loading()) {
-    <p role="status" class="inline-notice">Loading your dashboard…</p>
+    <section class="bento" aria-busy="true" aria-label="Loading your dashboard">
+      @for (area of skeletonAreas; track area) {
+        <div [class]="'tile is-skeleton tile-' + area" aria-hidden="true">
+          <span class="skeleton" style="width: 40%; height: 14px"></span>
+          <span class="skeleton" style="width: 70%; height: 28px"></span>
+          <span class="skeleton" style="width: 55%; height: 12px"></span>
+        </div>
+      }
+      <p class="sr-only" role="status">Loading your dashboard…</p>
+    </section>
   }
 </div>

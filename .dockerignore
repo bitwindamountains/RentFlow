@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.angular
+**/.data
+**/backups
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+**/*.tsbuildinfo
+.git
+.github
+.playwright-mcp
+apps/web/.ui-review

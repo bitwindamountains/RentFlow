@@ -1,58 +1,55 @@
 import {
-  CanActivate,
-  ExecutionContext,
+  type CanActivate,
+  type ExecutionContext,
   ForbiddenException,
   Injectable,
-  Inject,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { FastifyRequest } from 'fastify';
-import type { SessionContext } from '../core/domain.store.js';
-import { DOMAIN_SERVICE, type DomainService } from '../core/domain-service.js';
-import { IS_PUBLIC } from './public.decorator.js';
-import { ROLES } from './roles.decorator.js';
 import type { MembershipRole } from '@prisma/client';
+import { timingSafeEqual } from 'node:crypto';
+import { sessionCookieName } from '../config/environment.js';
+import { AuthService } from './auth.service.js';
+import { IS_PUBLIC, ROLES } from './decorators.js';
+import type { AuthenticatedRequest } from './session.types.js';
 
-export type AuthenticatedRequest = FastifyRequest & {
-  auth: SessionContext;
-  cookies: Record<string, string | undefined>;
-};
+const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+function sameSecret(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+/**
+ * Global guard: authenticates the session cookie, enforces @Roles on the
+ * server, and requires the session-bound CSRF token on state-changing calls.
+ * Routes are closed by default; only @Public() routes skip it.
+ */
 @Injectable()
 export class SessionGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    @Inject(DOMAIN_SERVICE) private readonly store: DomainService,
+    private readonly auth: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    if (
-      this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
-        context.getHandler(),
-        context.getClass(),
-      ])
-    )
-      return true;
+    const targets = [context.getHandler(), context.getClass()];
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const session = (await this.store.getSession(
-      request.cookies?.['rentflow_session'],
-    )) as SessionContext | undefined;
-    if (!session) throw new UnauthorizedException('Authentication required');
-    const requiredRoles = this.reflector.getAllAndOverride<MembershipRole[]>(
-      ROLES,
-      [context.getHandler(), context.getClass()],
+    const session = await this.auth.resolveSession(
+      request.cookies?.[sessionCookieName()],
+      request.headers['user-agent'],
     );
-    if (
-      requiredRoles &&
-      !requiredRoles.includes(session.role as MembershipRole)
-    )
-      throw new ForbiddenException('Your role cannot perform this action');
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+    if (!session) throw new UnauthorizedException('Authentication required');
+    if (!safeMethods.has(request.method)) {
       const csrf = request.headers['x-csrf-token'];
-      if (typeof csrf !== 'string' || csrf !== session.csrfToken)
-        throw new UnauthorizedException('Invalid CSRF token');
+      if (typeof csrf !== 'string' || !sameSecret(csrf, session.csrfToken))
+        throw new ForbiddenException({ code: 'CSRF_INVALID', message: 'Refresh the page and try again.' });
     }
+    const roles = this.reflector.getAllAndOverride<MembershipRole[]>(ROLES, targets);
+    if (!roles?.length || !roles.includes(session.role))
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Your role cannot perform this action.' });
     request.auth = session;
     return true;
   }

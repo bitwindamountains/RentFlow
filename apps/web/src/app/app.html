@@ -3,72 +3,48 @@
 } @else {
   <div class="app-shell">
     <a class="skip-link" href="#workspace">Skip to workspace</a>
-    @if (!online()) {
-      <div class="offline-banner" role="status">
-        You’re offline. Navigation remains available, but private rental data and financial changes
-        require a connection.
-      </div>
-    }
-    <aside
-      id="primary-navigation"
-      class="sidebar"
-      [class.open]="menuOpen()"
-      aria-label="Primary navigation"
-    >
+    <aside id="primary-navigation" class="sidebar" [class.open]="menuOpen()" aria-label="Primary navigation">
       <a class="brand" routerLink="/dashboard" (click)="closeMenu()"
         ><span class="brand-mark" aria-hidden="true">R</span><span>RentFlow</span></a
       >
       <nav>
-        @for (item of navItems; track item.route) {
-          @if (canSee(item)) {
-            @if (item.route === '/dashboard') {
-              <p class="nav-section">Workspace</p>
-            }
-            @if (item.route === '/billing') {
-              <p class="nav-section">Money</p>
-            }
-            @if (item.route === '/maintenance') {
-              <p class="nav-section">Operations</p>
-            }
-            <a
-              class="nav-item"
-              [routerLink]="item.route"
-              routerLinkActive="active"
-              ariaCurrentWhenActive="page"
-              [routerLinkActiveOptions]="{ exact: true }"
-              (click)="closeMenu()"
-            >
-              <span class="nav-icon" aria-hidden="true"
-                ><svg class="ui-icon" viewBox="0 0 24 24">
-                  <path [attr.d]="navigationIcons[item.route]" /></svg></span
-              ><span>{{ item.label }}</span>
-              @if (item.badge) {
-                <span class="nav-badge">{{ item.badge }}</span>
-              }
-            </a>
+        @for (item of visibleNav(); track item.route) {
+          @if (item.section) {
+            <p class="nav-section">{{ item.section }}</p>
           }
+          <a
+            class="nav-item"
+            [routerLink]="item.route"
+            routerLinkActive="active"
+            ariaCurrentWhenActive="page"
+            (click)="closeMenu()"
+            ><span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24"><path [attr.d]="navigationIcons[item.route]" /></svg></span
+            ><span>{{ item.label }}</span></a
+          >
         }
       </nav>
       <div class="sidebar-foot">
-        <div class="upgrade-card">
-          <strong>Your rental workspace</strong>
-          <p>Properties, people, and payments in one place.</p>
-          @if (profile()?.role === 'OWNER' || profile()?.role === 'MANAGER') {
-            <a routerLink="/setup" (click)="closeMenu()">Set up a rental &rarr;</a>
-          }
-        </div>
-        <button type="button" class="profile" (click)="signOut()" aria-label="Sign out">
-          <span class="avatar">{{ profile()?.user?.name?.slice(0, 2)?.toUpperCase() || 'RF' }}</span
+        @if (profile()?.role === 'OWNER' || profile()?.role === 'MANAGER') {
+          <div class="upgrade-card">
+            <strong>New rental?</strong>
+            <p>Property, unit, tenant, and lease in one step.</p>
+            <a routerLink="/setup" (click)="closeMenu()">Guided setup &rarr;</a>
+          </div>
+        }
+        <a class="profile" routerLink="/account" (click)="closeMenu()">
+          <span class="avatar" aria-hidden="true">{{ profile()?.user?.name?.slice(0, 2)?.toUpperCase() || 'RF' }}</span
           ><span
             ><strong>{{ profile()?.user?.name || 'RentFlow user' }}</strong
-            ><small>{{ profile()?.role || 'Member' }} · Sign out</small></span
-          ><span aria-hidden="true">&rarr;</span>
-        </button>
+            ><small>{{ profile()?.role | label }} · Account</small></span
+          >
+        </a>
+        <button type="button" class="secondary" (click)="signOut()">Sign out</button>
       </div>
     </aside>
 
     @if (menuOpen()) {
-      <button class="scrim" type="button" aria-label="Close menu" (click)="toggleMenu()"></button>
+      <button class="scrim" type="button" animate.enter="enter" animate.leave="leave" aria-label="Close menu" (click)="toggleMenu()"></button>
     }
 
     <main id="workspace" tabindex="-1">
@@ -81,20 +57,20 @@
           [attr.aria-expanded]="menuOpen()"
           (click)="toggleMenu()"
         >
-          ☰
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M4 12h16 M4 17h16" /></svg>
         </button>
         <div class="org-switcher">
-          <span class="org-logo">{{
-            profile()?.organization?.name?.slice(0, 2)?.toUpperCase() || 'RF'
-          }}</span
+          <span class="org-logo" aria-hidden="true">{{ profile()?.organization?.name?.slice(0, 2)?.toUpperCase() || 'RF' }}</span
           ><span
-            ><small>Organization</small
-            ><strong>{{ profile()?.organization?.name || 'RentFlow' }}</strong></span
+            ><small>Workspace</small><strong>{{ profile()?.organization?.name || 'RentFlow' }}</strong></span
           >
         </div>
+        @if (!online()) {
+          <span class="offline-pill">Offline</span>
+        }
         <div class="navigation-search">
           <label class="search"
-            ><span aria-hidden="true">⌕</span><span class="sr-only">Find a workspace page</span
+            ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 0 0 0-14 M20 20l-4-4" /></svg><span class="sr-only">Find a workspace page</span
             ><input
               #globalSearch
               placeholder="Go to a page…"
@@ -105,101 +81,87 @@
             /><kbd>⌘ K</kbd></label
           >
           @if (navigationQuery().trim()) {
-            <div class="navigation-results" aria-label="Matching pages">
+            <div class="navigation-results" aria-label="Matching pages" animate.enter="enter">
               @for (item of navigationMatches(); track item.route) {
-                <a [routerLink]="item.route"
-                  ><span>{{ item.label }}</span
-                  ><span aria-hidden="true">&rarr;</span></a
-                >
+                <a [routerLink]="item.route"><span>{{ item.label }}</span><span aria-hidden="true">&rarr;</span></a>
               } @empty {
                 <p role="status">No pages found. Try “Payments” or “Tenants”.</p>
               }
             </div>
           }
         </div>
-        <a class="icon-button reminder-link" routerLink="/reminders" aria-label="View reminders"
-          >!</a
-        >
+        @if (profile()?.role !== 'MAINTENANCE') {
+          <a class="icon-button reminder-link" routerLink="/reminders" aria-label="View reminders"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v5l-2 4h16l-2-4z M10 21h4" /></svg></a>
+        }
         @if (installReady()) {
-          <button class="secondary install-action" type="button" (click)="installApp()">
-            Install app
-          </button>
+          <button class="secondary install-action" type="button" (click)="installApp()">Install app</button>
         }
         @if (canRecordPayment()) {
-          <button class="primary top-action" type="button" (click)="startPayment()">
-            <span>＋</span> Record payment
-          </button>
+          <button class="primary top-action" type="button" (click)="startPayment()" aria-label="Record payment"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14 M5 12h14" /></svg><span class="label">Record payment</span></button>
         }
       </header>
+      @if (!online()) {
+        <div class="app-banner" role="status" animate.enter="enter">
+          You’re offline. Records and payments need a connection; nothing is saved on this device.
+        </div>
+      }
+      @if (update.available()) {
+        <div class="app-banner" role="status" animate.enter="enter">
+          A new version of RentFlow is ready.
+          <button class="text-button" type="button" (click)="update.apply()">Reload now</button>
+        </div>
+      }
+      @if (profile() && !profile()!.user.emailVerified) {
+        <div class="app-banner" role="status" animate.enter="enter">
+          Confirm your email so you can reset your password if you forget it.
+          <button class="text-button" type="button" (click)="resendVerification()">Resend link</button>
+        </div>
+      }
       <router-outlet />
     </main>
 
     <nav class="mobile-nav" aria-label="Mobile navigation">
-      @for (item of mobileNav; track item.route) {
-        @if (canSee(item) || item.label === 'More') {
-          @if (item.label === 'More') {
-            <button
-              type="button"
-              (click)="toggleMenu()"
-              aria-controls="primary-navigation"
-              [attr.aria-expanded]="menuOpen()"
-            >
-              <span aria-hidden="true">•••</span><small>More</small>
-            </button>
-          } @else {
-            <a
-              [routerLink]="item.route"
-              routerLinkActive="active"
-              ariaCurrentWhenActive="page"
-              [routerLinkActiveOptions]="{ exact: true }"
-              ><span aria-hidden="true"
-                ><svg class="ui-icon" viewBox="0 0 24 24">
-                  <path [attr.d]="navigationIcons[item.route]" /></svg></span
-              ><small>{{ item.label }}</small></a
-            >
-          }
-        }
+      @for (item of mobileNav(); track item.route) {
+        <a [routerLink]="item.route" routerLinkActive="active" ariaCurrentWhenActive="page"
+          ><span aria-hidden="true"
+            ><svg class="ui-icon" viewBox="0 0 24 24"><path [attr.d]="navigationIcons[item.route]" /></svg></span
+          ><small>{{ item.label }}</small></a
+        >
       }
+      <button type="button" (click)="toggleMenu()" aria-controls="primary-navigation" [attr.aria-expanded]="menuOpen()">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01 M12 12h.01 M19 12h.01" /></svg><small>More</small>
+      </button>
     </nav>
 
     @if (paymentOpen()) {
-      <div class="modal-layer" role="presentation" (click)="closePayment()">
-        <section
-          class="payment-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="payment-title"
-          (click)="$event.stopPropagation()"
-        >
-          <button
-            class="modal-close"
-            type="button"
-            aria-label="Close payment form"
-            (click)="closePayment()"
-          >
-            ×
-          </button>
-          @if (!paymentComplete()) {
+      <div class="modal-layer" role="presentation" (click)="closePayment()" animate.enter="enter" animate.leave="leave">
+        <section class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-title" (click)="$event.stopPropagation()">
+          <button class="modal-close" type="button" aria-label="Close payment form" (click)="closePayment()"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18" /></svg></button>
+          @if (paymentComplete(); as done) {
+            <div class="success-state" animate.enter="enter">
+              <span class="success-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" /></svg></span>
+              <h2 id="payment-title">Payment recorded</h2>
+              <p>{{ done.amount | money }} from {{ done.tenantName }}.</p>
+              <p><strong>Receipt {{ done.receiptNumber }}</strong></p>
+              <div class="success-actions">
+                <button class="secondary" type="button" (click)="startPayment()">Record another</button
+                ><a class="primary button-link" [routerLink]="['/receipts', done.id]" (click)="closePayment()">View receipt</a>
+              </div>
+            </div>
+          } @else {
             <div class="modal-heading">
               <div>
                 <span class="modal-kicker">PAYMENT {{ paymentStep() }} OF 3</span>
                 <h2 id="payment-title">
                   @switch (paymentStep()) {
-                    @case (1) {
-                      Who paid?
-                    }
-                    @case (2) {
-                      Payment details
-                    }
-                    @default {
-                      Review payment
-                    }
+                    @case (1) { Who paid? }
+                    @case (2) { Payment details }
+                    @default { Review and record }
                   }
                 </h2>
               </div>
-              <div class="step-dots">
-                <i class="done"></i><i [class.done]="paymentStep() > 1"></i
-                ><i [class.done]="paymentStep() > 2"></i>
+              <div class="step-dots" aria-hidden="true">
+                <i class="done"></i><i [class.done]="paymentStep() > 1"></i><i [class.done]="paymentStep() > 2"></i>
               </div>
             </div>
             @if (paymentError()) {
@@ -207,115 +169,91 @@
             }
             @switch (paymentStep()) {
               @case (1) {
+                <div class="step-body" animate.enter="enter">
+                <label class="field"
+                  ><span>Search tenant or unit</span
+                  ><input type="search" [ngModel]="optionQuery()" (ngModelChange)="optionQuery.set($event)" [disabled]="paymentLoading()" autocomplete="off"
+                /></label>
                 @if (paymentLoading()) {
-                  <p class="review-warning">Loading active tenants and balances…</p>
+                  <p role="status">Loading tenants and balances…</p>
                 }
-                <label class="field"
-                  ><span>Tenant</span
-                  ><select
-                    [(ngModel)]="selectedTenantId"
-                    (ngModelChange)="selectTenant()"
-                    [disabled]="paymentLoading()"
-                  >
-                    @for (tenant of paymentTenants(); track tenant.id) {
-                      <option [value]="tenant.id">
-                        {{ tenant.firstName }} {{ tenant.lastName }}
-                      </option>
-                    }</select
-                  ><small>Unit {{ selectedLeaseUnit() }} · Active lease</small></label
-                >
-                <label class="field"
-                  ><span>Lease / unit</span
-                  ><select
-                    [(ngModel)]="selectedLeaseId"
-                    (ngModelChange)="selectLease()"
-                    [disabled]="paymentLoading()"
-                  >
-                    @for (lease of availableTenantLeases(); track lease.id) {
-                      <option [value]="lease.id">Unit {{ lease.unit.number }}</option>
+                <div class="attention-list" role="radiogroup" aria-label="Active leases">
+                  @for (option of filteredOptions(); track option.leaseId) {
+                    <label class="attention-item">
+                      <input type="radio" name="lease" [value]="option.leaseId" [checked]="option.leaseId === selectedLeaseId" (change)="selectLease(option.leaseId)" />
+                      <span
+                        ><strong>{{ option.tenantName }}</strong
+                        ><small>{{ option.propertyName }} · Unit {{ option.unitNumber }}</small></span
+                      >
+                      <strong [class.danger-text]="option.outstanding !== '0.00'">{{ option.outstanding | money }}</strong>
+                    </label>
+                  } @empty {
+                    @if (!paymentLoading()) {
+                      <p>No active leases match.</p>
                     }
-                  </select></label
-                >
-                <div class="balance-preview">
-                  <span
-                    ><small>Current balance</small
-                    ><strong>PHP {{ selectedOutstanding().toFixed(2) }}</strong></span
-                  ><span
-                    ><small>Open charges</small><strong>{{ paymentCharges().length }}</strong></span
-                  >
+                  }
+                </div>
                 </div>
               }
               @case (2) {
+                <div class="step-body" animate.enter="enter">
+                <p>
+                  <strong>{{ selected()?.tenantName }}</strong> · Unit {{ selected()?.unitNumber }} · owes {{ selected()?.outstanding | money }}
+                </p>
                 <div class="field-row">
                   <label class="field"
-                    ><span>Amount</span>
+                    ><span>Amount received</span>
                     <div class="money-input">
-                      <b>PHP</b
-                      ><input [(ngModel)]="paymentAmount" inputmode="decimal" /></div></label
+                      <b>{{ profile()?.organization?.currency }}</b><input [(ngModel)]="paymentAmount" inputmode="decimal" autocomplete="off" />
+                    </div></label
                   ><label class="field"
-                    ><span>Payment method</span
+                    ><span>Method</span
                     ><select [(ngModel)]="paymentMethod">
                       <option value="GCASH">GCash</option>
                       <option value="MAYA">Maya</option>
                       <option value="CASH">Cash</option>
                       <option value="BANK_TRANSFER">Bank transfer</option>
+                      <option value="CHEQUE">Cheque</option>
+                      <option value="CARD">Card</option>
+                      <option value="OTHER">Other</option>
                     </select></label
                   >
                 </div>
-                <label class="field"
-                  ><span>Reference number <em>Optional</em></span
-                  ><input [(ngModel)]="paymentReference" placeholder="e.g. 7845120369"
-                /></label>
-                <div class="allocation-note">
-                  <span aria-hidden="true">✓</span>
-                  <p>
-                    <strong>Smart allocation</strong
-                    ><small
-                      >This payment will be applied to the oldest outstanding charges first.</small
-                    >
-                  </p>
+                <div class="field-row">
+                  <label class="field"
+                    ><span>Date received</span><input type="date" [(ngModel)]="paymentDate" [max]="today()"
+                  /></label>
+                  <label class="field"
+                    ><span>Reference no. <em>Optional</em></span><input [(ngModel)]="paymentReference" maxlength="100" placeholder="e.g. GCash ref 7845120369"
+                  /></label>
+                </div>
                 </div>
               }
               @default {
+                <div class="step-body" animate.enter="enter">
                 <div class="review-card">
-                  <div>
-                    <span>Tenant</span><strong>{{ selectedTenantName() }}</strong>
-                  </div>
-                  <div>
-                    <span>Amount</span><strong>₱{{ paymentAmount }}</strong>
-                  </div>
-                  <div>
-                    <span>Method</span><strong>{{ paymentMethod }}</strong>
-                  </div>
+                  <div><span>Tenant</span><strong>{{ selected()?.tenantName }}</strong></div>
+                  <div><span>Amount</span><strong>{{ paymentAmount | money }}</strong></div>
+                  <div><span>Method</span><strong>{{ paymentMethod | label }}{{ paymentReference ? ' · ' + paymentReference : '' }}</strong></div>
+                  <div><span>Date</span><strong>{{ paymentDate }}</strong></div>
                   <hr />
-                  @for (charge of paymentCharges(); track charge.id) {
-                    @if (charge.leaseId === selectedLeaseId) {
-                      <div>
-                        <span>{{ charge.description }}</span
-                        ><strong>PHP {{ charge.outstanding }}</strong>
-                      </div>
-                    }
+                  @for (line of allocationPreview().lines; track line.chargeId) {
+                    <div><span>{{ line.charge.description }}{{ line.charge.billingPeriod ? ' · ' + line.charge.billingPeriod : '' }}</span><strong>{{ line.amount | money }}</strong></div>
                   }
-                  <div class="remaining">
-                    <span>Balance before payment</span
-                    ><strong>PHP {{ selectedOutstanding().toFixed(2) }}</strong>
-                  </div>
+                  @if (allocationPreview().credit !== '0.00') {
+                    <div><span>Advance / credit</span><strong>{{ allocationPreview().credit | money }}</strong></div>
+                  }
+                  <div class="remaining"><span>Balance after payment</span><strong>{{ remainingAfter() | money }}</strong></div>
                 </div>
-                <p class="review-warning">
-                  Confirm the tenant and amount. This records the payment and issues a receipt.
-                </p>
+                <p class="review-warning">Recording issues a receipt. Mistakes are corrected with a reversal, not a delete.</p>
+                </div>
               }
             }
             <div class="modal-actions">
-              @if (paymentStep() > 1) {
-                <button
-                  class="secondary"
-                  type="button"
-                  (click)="previousPaymentStep()"
-                  [disabled]="paymentLoading() || paymentRetryPending()"
-                >
-                  Back
-                </button>
+              @if (paymentRetryPending()) {
+                <button class="secondary" type="button" (click)="discardPending()" [disabled]="paymentLoading()">Discard</button>
+              } @else if (paymentStep() > 1) {
+                <button class="secondary" type="button" (click)="previousPaymentStep()" [disabled]="paymentLoading()">Back</button>
               }
               <button
                 class="primary"
@@ -323,25 +261,8 @@
                 [disabled]="paymentLoading() || (paymentStep() === 1 && !selectedLeaseId)"
                 (click)="paymentStep() === 3 ? confirmPayment() : nextPaymentStep()"
               >
-                {{ paymentStep() === 3 ? 'Record payment' : 'Continue' }}
+                {{ paymentLoading() ? 'Recording…' : paymentStep() === 3 ? (paymentRetryPending() ? 'Retry safely' : 'Record payment') : 'Continue' }}
               </button>
-            </div>
-          } @else {
-            <div class="success-state">
-              <span class="success-icon">✓</span>
-              <h2>Payment posted</h2>
-              <p>
-                PHP {{ paymentAmount }} from {{ selectedTenantName() }} was recorded successfully.
-              </p>
-              <p>
-                <strong>Receipt {{ receiptNumber() }}</strong>
-              </p>
-              <div class="success-actions">
-                <button class="secondary" type="button" (click)="closePayment()">Close</button
-                ><a class="primary button-link" routerLink="/payments" (click)="closePayment()"
-                  >View payments</a
-                >
-              </div>
             </div>
           }
         </section>
@@ -349,7 +270,7 @@
     }
 
     @if (toast()) {
-      <div class="toast" role="status"><span>✓</span>{{ toast() }}</div>
+      <div class="toast" role="status" animate.enter="enter" animate.leave="leave"><span aria-hidden="true">✓</span>{{ toast() }}</div>
     }
   </div>
 }

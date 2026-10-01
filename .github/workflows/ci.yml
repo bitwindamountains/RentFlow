@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: rentflow_test
+          POSTGRES_USER: rentflow
+          POSTGRES_PASSWORD: rentflow
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rentflow -d rentflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://rentflow:rentflow@localhost:5432/rentflow_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Prisma
+        run: |
+          npm run db:validate --workspace api
+          npm run db:generate --workspace api
+      - run: npm run lint --workspace api
+      - run: npm run typecheck --workspace api
+      - run: npm run test --workspace api
+      - run: npm run test:e2e --workspace api
+      - run: npm run test --workspace web -- --watch=false
+      - run: npm run build

@@ -1,154 +1,55 @@
-import { Routes } from '@angular/router';
-import { DashboardPage } from './pages/dashboard.page';
-import { ResourcePage } from './pages/resource.page';
-import { AuthPage } from './pages/auth.page';
+import type { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
-import { SetupPage } from './pages/setup.page';
-import { OperationsPage } from './pages/operations.page';
-import { InvitePage } from './pages/invite.page';
+import type { Role } from './core/models';
+import { AuthPage } from './pages/auth.page';
+import { DashboardPage } from './pages/dashboard.page';
+
+const FINANCE: Role[] = ['OWNER', 'MANAGER', 'COLLECTOR', 'VIEWER'];
+const MANAGERS: Role[] = ['OWNER', 'MANAGER'];
+const ALL: Role[] = [...FINANCE, 'MAINTENANCE'];
+
+const page = (path: string, title: string, roles: Role[], load: () => Promise<unknown>) => ({
+  path,
+  title: `${title} · RentFlow`,
+  canActivate: [authGuard],
+  data: { roles },
+  loadComponent: load as never,
+});
 
 export const routes: Routes = [
-  { path: 'accept-invite', component: InvitePage, title: 'Accept invitation · RentFlow' },
-  {
-    path: 'deposits', component: OperationsPage, canActivate: [authGuard], title: 'Deposits · RentFlow',
-    data: { kind: 'deposits', title: 'Security deposits', description: 'Keep deposits separate from rental income.', action: 'Record deposit' },
-  },
-  {
-    path: 'reminders', component: OperationsPage, canActivate: [authGuard], title: 'Reminders · RentFlow',
-    data: { kind: 'reminders', title: 'Reminders', description: 'Overdue balances, expiring leases, and urgent work.' },
-  },
   { path: 'auth', component: AuthPage, title: 'Sign in · RentFlow' },
   {
-    path: 'setup',
-    component: SetupPage,
-    canActivate: [authGuard],
-    title: 'Guided setup · RentFlow',
+    path: 'accept-invite',
+    title: 'Accept invitation · RentFlow',
+    loadComponent: () => import('./pages/invite.page').then((m) => m.InvitePage),
   },
   {
-    path: 'dashboard',
-    component: DashboardPage,
-    canActivate: [authGuard],
-    title: 'Dashboard · RentFlow',
+    path: 'reset-password',
+    title: 'Reset password · RentFlow',
+    loadComponent: () => import('./pages/token.page').then((m) => m.ResetPasswordPage),
   },
   {
-    path: 'properties',
-    component: ResourcePage,
-    canActivate: [authGuard],
-    title: 'Properties · RentFlow',
-    data: {
-      kind: 'properties',
-      title: 'Properties',
-      description: 'Manage buildings, units, and rentable spaces.',
-      action: 'Add property',
-    },
+    path: 'verify-email',
+    title: 'Verify email · RentFlow',
+    loadComponent: () => import('./pages/token.page').then((m) => m.VerifyEmailPage),
   },
-  {
-    path: 'tenants',
-    component: ResourcePage,
-    canActivate: [authGuard],
-    title: 'Tenants · RentFlow',
-    data: {
-      kind: 'tenants',
-      title: 'Tenants',
-      description: 'People, balances, leases, and contact details.',
-      action: 'Add tenant',
-    },
-  },
-  {
-    path: 'payments',
-    component: ResourcePage,
-    canActivate: [authGuard],
-    title: 'Payments · RentFlow',
-    data: {
-      kind: 'payments',
-      title: 'Payments',
-      description: 'Review posted, pending, and reversed payments.',
-      action: 'Record payment',
-    },
-  },
-  {
-    path: 'leases',
-    component: ResourcePage,
-    canActivate: [authGuard],
-    title: 'Leases · RentFlow',
-    data: {
-      kind: 'leases',
-      title: 'Leases',
-      description: 'Track active agreements, renewals, and expirations.',
-      action: 'Create lease',
-    },
-  },
-  {
-    path: 'billing',
-    component: ResourcePage,
-    canActivate: [authGuard],
-    title: 'Billing · RentFlow',
-    data: {
-      kind: 'billing',
-      title: 'Billing',
-      description: 'Generate charges and follow up outstanding balances.',
-      action: 'Generate charges',
-    },
-  },
-  {
-    path: 'expenses',
-    component: OperationsPage,
-    canActivate: [authGuard],
-    title: 'Expenses · RentFlow',
-    data: {
-      kind: 'expenses',
-      title: 'Expenses',
-      description: 'Track property costs, vendors, and supporting documents.',
-      action: 'Add expense',
-    },
-  },
-  {
-    path: 'maintenance',
-    component: OperationsPage,
-    canActivate: [authGuard],
-    title: 'Maintenance · RentFlow',
-    data: {
-      kind: 'maintenance',
-      title: 'Maintenance',
-      description: 'Prioritize requests and coordinate repairs.',
-      action: 'New work order',
-    },
-  },
-  {
-    path: 'documents',
-    component: OperationsPage,
-    canActivate: [authGuard],
-    title: 'Documents · RentFlow',
-    data: {
-      kind: 'documents',
-      title: 'Documents',
-      description: 'Organize secure links to leases, IDs, and property files.',
-      action: 'Link document',
-    },
-  },
-  {
-    path: 'reports',
-    component: OperationsPage,
-    canActivate: [authGuard],
-    title: 'Reports · RentFlow',
-    data: {
-      kind: 'reports',
-      title: 'Reports',
-      description: 'Understand collection, income, expenses, and occupancy.',
-    },
-  },
-  {
-    path: 'staff',
-    component: OperationsPage,
-    canActivate: [authGuard],
-    title: 'Staff & access · RentFlow',
-    data: {
-      kind: 'staff',
-      title: 'Staff & access',
-      description: 'Invite staff and control operational permissions by role.',
-      action: 'Invite staff',
-    },
-  },
+  { path: 'dashboard', component: DashboardPage, title: 'Dashboard · RentFlow', canActivate: [authGuard], data: { roles: FINANCE } },
+  page('setup', 'Guided setup', MANAGERS, () => import('./pages/setup.page').then((m) => m.SetupPage)),
+  page('properties', 'Properties', FINANCE, () => import('./pages/properties.page').then((m) => m.PropertiesPage)),
+  page('tenants', 'Tenants', FINANCE, () => import('./pages/tenants.page').then((m) => m.TenantsPage)),
+  page('tenants/:id', 'Tenant', FINANCE, () => import('./pages/tenant-detail.page').then((m) => m.TenantDetailPage)),
+  page('leases', 'Leases', FINANCE, () => import('./pages/leases.page').then((m) => m.LeasesPage)),
+  page('billing', 'Billing', FINANCE, () => import('./pages/billing.page').then((m) => m.BillingPage)),
+  page('payments', 'Payments', FINANCE, () => import('./pages/payments.page').then((m) => m.PaymentsPage)),
+  page('receipts/:id', 'Receipt', FINANCE, () => import('./pages/receipt.page').then((m) => m.ReceiptPage)),
+  page('deposits', 'Deposits', FINANCE, () => import('./pages/deposits.page').then((m) => m.DepositsPage)),
+  page('expenses', 'Expenses', FINANCE, () => import('./pages/expenses.page').then((m) => m.ExpensesPage)),
+  page('maintenance', 'Maintenance', ALL, () => import('./pages/maintenance.page').then((m) => m.MaintenancePage)),
+  page('documents', 'Documents', FINANCE, () => import('./pages/documents.page').then((m) => m.DocumentsPage)),
+  page('reminders', 'Reminders', FINANCE, () => import('./pages/reminders.page').then((m) => m.RemindersPage)),
+  page('reports', 'Reports', FINANCE, () => import('./pages/reports.page').then((m) => m.ReportsPage)),
+  page('staff', 'Staff & access', ['OWNER'], () => import('./pages/staff.page').then((m) => m.StaffPage)),
+  page('account', 'Account & security', ALL, () => import('./pages/account.page').then((m) => m.AccountPage)),
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: '**', redirectTo: 'dashboard' },
 ];

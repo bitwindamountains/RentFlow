@@ -1,0 +1,233 @@
+// Motion. Everything here is behind `prefers-reduced-motion: no-preference`, so
+// people who ask for less motion get instant state changes with nothing lost.
+// Enter/leave classes are applied by Angular's `animate.enter` / `animate.leave`;
+// page changes use the View Transitions API (see app.config.ts).
+
+/* ---------- Page transitions ---------- */
+// Only the routed page animates; the shell stays put.
+.app-shell > main > router-outlet + * {
+  view-transition-name: page;
+}
+.topbar {
+  view-transition-name: topbar;
+}
+.mobile-nav {
+  view-transition-name: tabbar;
+}
+@media (min-width: 1025px) {
+  .sidebar {
+    view-transition-name: sidebar;
+  }
+}
+::view-transition-group(topbar),
+::view-transition-group(tabbar),
+::view-transition-group(sidebar) {
+  z-index: 2;
+  animation: none;
+}
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-group(page) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(page) {
+    animation: page-out var(--dur-fast) var(--ease-in) both;
+  }
+  ::view-transition-new(page) {
+    animation: page-in var(--dur-base) var(--ease-out) both;
+  }
+  @keyframes page-out {
+    to {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+
+  /* ---------- Dashboard ---------- */
+  // Tiles rise in sequence on first render only (refreshes reuse the DOM).
+  .bento > * {
+    animation: rise var(--dur-slow) var(--ease-out) both;
+  }
+  @for $i from 1 through 7 {
+    .bento > :nth-child(#{$i}) {
+      animation-delay: #{($i - 1) * 45}ms;
+    }
+  }
+  // Data marks grow from zero when they first appear, then ease between values.
+  @starting-style {
+    .bar {
+      height: 0 !important;
+    }
+    .meter > span {
+      width: 0;
+    }
+    .ring .ring-value {
+      stroke-dashoffset: 100;
+    }
+  }
+  @for $i from 1 through 6 {
+    .bar-group:nth-child(#{$i}) .bar {
+      transition-delay: #{120 + ($i - 1) * 40}ms;
+    }
+  }
+  .skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--skeleton) 30%,
+        var(--skeleton-shine) 50%,
+        var(--skeleton) 70%
+      )
+      0 0 / 300% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+
+  /* ---------- Overlays ---------- */
+  .modal-layer.enter {
+    animation: fade-in var(--dur-base) var(--ease-out);
+  }
+  .modal-layer.enter .payment-modal {
+    animation: dialog-in var(--dur-base) var(--ease-emphasized);
+  }
+  .modal-layer.leave {
+    animation: fade-out var(--dur-fast) var(--ease-in) forwards;
+  }
+  .modal-layer.leave .payment-modal {
+    animation: dialog-out var(--dur-fast) var(--ease-in) forwards;
+  }
+  .step-body.enter {
+    animation: step-in var(--dur-base) var(--ease-out);
+  }
+  .success-state.enter .success-icon {
+    animation: pop 480ms var(--ease-emphasized) both;
+  }
+  .success-state.enter :is(h2, p, .success-actions) {
+    animation: rise var(--dur-base) var(--ease-out) both;
+    animation-delay: 120ms;
+  }
+  .scrim.enter {
+    animation: fade-in var(--dur-base) var(--ease-out);
+  }
+  .scrim.leave {
+    animation: fade-out var(--dur-base) var(--ease-in) forwards;
+  }
+  .toast.enter {
+    animation: toast-in var(--dur-base) var(--ease-emphasized);
+  }
+  .toast.leave {
+    animation: fade-out var(--dur-fast) var(--ease-in) forwards;
+  }
+  .navigation-results.enter {
+    animation: drop-in var(--dur-fast) var(--ease-out);
+  }
+  .app-banner.enter,
+  .inline-notice,
+  .auth-error {
+    animation: drop-in var(--dur-base) var(--ease-out);
+  }
+  .auth-form {
+    animation: rise var(--dur-slow) var(--ease-out);
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.98);
+    }
+  }
+  @keyframes dialog-out {
+    to {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+  }
+  @keyframes step-in {
+    from {
+      opacity: 0;
+      transform: translateX(14px);
+    }
+  }
+  @keyframes pop {
+    0% {
+      transform: scale(0.4);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.08);
+      opacity: 1;
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.96);
+    }
+  }
+  @keyframes drop-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+  @keyframes shimmer {
+    to {
+      background-position: -150% 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (max-width: 640px) {
+  // Phones: the payment form is a bottom sheet, so it slides up.
+  .modal-layer.enter .payment-modal {
+    animation: sheet-in var(--dur-slow) var(--ease-emphasized);
+  }
+  .modal-layer.leave .payment-modal {
+    animation: sheet-out var(--dur-base) var(--ease-in) forwards;
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

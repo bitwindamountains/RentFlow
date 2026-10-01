@@ -8,6 +8,7 @@ const base = {
   MAIL_PROVIDER: 'resend',
   RESEND_API_KEY: 're_test',
   MAIL_FROM: 'RentFlow <billing@example.com>',
+  STORAGE_DIR: '/data/uploads',
 };
 
 describe('validateEnvironment', () => {
@@ -40,5 +41,18 @@ describe('validateEnvironment', () => {
 
   it('rejects malformed origins', () => {
     expect(() => validateEnvironment({ ...base, WEB_ORIGIN: 'javascript:alert(1)' })).toThrow('Invalid WEB_ORIGIN');
+  });
+
+  it('requires uploads to live on a persistent absolute path or in S3 in production', () => {
+    expect(() => validateEnvironment({ ...base, STORAGE_DIR: undefined })).toThrow('STORAGE_DIR');
+    expect(() => validateEnvironment({ ...base, STORAGE_DIR: 'uploads' })).toThrow('STORAGE_DIR');
+    expect(() => validateEnvironment({ ...base, STORAGE_DRIVER: 's3', S3_BUCKET: 'docs' })).toThrow('S3_REGION');
+    expect(() =>
+      validateEnvironment({ ...base, STORAGE_DRIVER: 's3', S3_BUCKET: 'docs', S3_REGION: 'auto', S3_ACCESS_KEY_ID: 'k', S3_SECRET_ACCESS_KEY: 's', S3_ENDPOINT: 'http://minio:9000' }),
+    ).toThrow('https');
+    expect(
+      validateEnvironment({ ...base, STORAGE_DRIVER: 's3', S3_BUCKET: 'docs', S3_REGION: 'auto', S3_ACCESS_KEY_ID: 'k', S3_SECRET_ACCESS_KEY: 's' }),
+    ).toMatchObject({ STORAGE_DRIVER: 's3', UPLOAD_MAX_BYTES: 10 * 1_048_576 });
+    expect(() => validateEnvironment({ ...base, UPLOAD_MAX_MB: '500' })).toThrow('UPLOAD_MAX_MB');
   });
 });

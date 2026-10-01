@@ -698,7 +698,13 @@ model DocumentRecord {
   category       String
   entityType     String?
   entityId       String?
-  url            String
+  /// External HTTPS link (e.g. restricted Google Drive file). Exactly one of url / storageKey is set.
+  url            String?
+  /// Private object key for an uploaded file: "<organizationId>/<id>.<ext>".
+  storageKey     String?      @unique
+  contentType    String?
+  sizeBytes      Int?
+  sha256         String?      @db.Char(64)
   createdBy      String       @db.Uuid
   createdAt      DateTime     @default(now()) @db.Timestamptz(3)
   deletedAt      DateTime?    @db.Timestamptz(3)

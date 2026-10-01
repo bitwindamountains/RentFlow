@@ -15,6 +15,7 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
   - Rent is unique per lease and month, across manual and automatic billing.
 - **Uncertain payments.** An unconfirmed payment is saved in the browser tab's session storage before it is sent. Reopening Record payment in that tab offers a safe retry with the same key. It does not record a second payment.
 - **Personal data.** Audit logs record who changed what, but personal fields (names, emails, phones, document URLs) are redacted. Tokens in emailed links travel in the URL fragment and never reach server logs.
+- **Uploaded documents.** PDF, JPEG, PNG, and WebP only, identified by their content (a renamed HTML or SVG file is rejected), up to `UPLOAD_MAX_MB` each and `STORAGE_QUOTA_MB` per workspace. Files sit in private storage under server-generated names and are served only through the API after the same workspace and role checks as every other record, with `nosniff` and a sandboxing CSP; PDFs always download rather than render. Removing a document erases the file immediately; the record of who uploaded and removed it stays in the audit log.
 
 ## Background jobs
 
@@ -35,7 +36,7 @@ It also purges expired idempotency keys, used or expired tokens, and old session
 
 ## Known limitations
 
-- Documents are links to files in the landlord's own storage (e.g. Google Drive with restricted sharing). There is no file upload yet.
+- Uploaded files are not virus-scanned. They are never executed or rendered inside the app, but staff should still only open files from people they know.
 - No tenant portal or online payment gateway yet. Payments are recorded by staff.
 - Rate-limit counters are per API instance. Use one API instance, or add a shared store before scaling horizontally.
 - Receipts are acknowledgement receipts, not BIR official receipts.

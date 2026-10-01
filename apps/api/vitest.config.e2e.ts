@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -13,6 +15,9 @@ export default defineConfig({
       RATE_LIMIT_MULTIPLIER: '1000',
       LOG_LEVEL: 'error',
       TRUST_PROXY: '1',
+      STORAGE_DIR: join(tmpdir(), `rentflow-e2e-uploads-${process.pid}`),
+      UPLOAD_MAX_MB: '1',
+      STORAGE_QUOTA_MB: '10',
     },
     testTimeout: 60_000,
     hookTimeout: 180_000,

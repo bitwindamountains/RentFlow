@@ -36,6 +36,7 @@ export interface Result {
   status: number;
   body: any;
   text: string;
+  raw: Buffer;
   headers: Record<string, string | string[] | number | undefined>;
 }
 
@@ -68,7 +69,7 @@ export class Client {
     const json = String(response.headers['content-type'] ?? '').includes('application/json');
     const body = response.body && json ? response.json() : undefined;
     if (body?.csrfToken) this.csrf = body.csrfToken;
-    return { status: response.statusCode, body, text: response.body, headers: response.headers };
+    return { status: response.statusCode, body, text: response.body, raw: response.rawPayload, headers: response.headers };
   }
 
   get = (path: string, headers?: Record<string, string>) => this.request('GET', path, undefined, headers);

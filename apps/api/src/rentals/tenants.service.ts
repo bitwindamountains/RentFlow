@@ -130,6 +130,7 @@ export class TenantsService {
         id: doc.id,
         name: doc.name,
         category: doc.category,
+        kind: doc.storageKey ? ('file' as const) : ('link' as const),
         url: doc.url,
         createdAt: doc.createdAt.toISOString(),
       })),

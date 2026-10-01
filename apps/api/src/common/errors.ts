@@ -1,4 +1,4 @@
-export type DomainStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429;
+export type DomainStatus = 400 | 401 | 403 | 404 | 409 | 413 | 415 | 422 | 429 | 503;
 
 /**
  * An expected business-rule failure. `code` is a stable machine-readable
@@ -21,6 +21,11 @@ const messages: Record<string, string> = {
   CHARGE_EXISTS: 'A rent charge for this lease and billing period already exists.',
   CHARGE_HAS_PAYMENTS: 'Reverse the payments applied to this charge before voiding it.',
   CHARGE_NOT_OPEN: 'This charge is not open.',
+  FILE_EMPTY: 'Choose a file to upload.',
+  FILE_TOO_LARGE: 'The file is too large.',
+  FILE_TYPE_MISMATCH: 'The file content does not match its type. Upload a PDF, JPEG, PNG, or WebP file.',
+  STORAGE_QUOTA_EXCEEDED: 'Your workspace has used its document storage. Remove old files and try again.',
+  STORAGE_UNAVAILABLE: 'File storage is unavailable right now. Try again shortly.',
   EMAIL_EXISTS: 'This email already has an account. Sign in instead.',
   EMAIL_NOT_VERIFIED: 'Verify your email address first.',
   FUTURE_TERMINATION_NOT_ALLOWED:

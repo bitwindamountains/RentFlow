@@ -13,7 +13,7 @@ An installable rental-operations PWA for Philippine landlords and property teams
 - Partial and back-dated payments with oldest-first allocation, acknowledgement receipts (print/share), reversals
 - Charge discounts, waivers, credit notes, and voids — posted records are never edited or deleted
 - Security deposits kept separate from income; expenses with per-property profit and loss; CSV export
-- Maintenance work orders with a status workflow; document links; reminders
+- Maintenance work orders with a status workflow; private document uploads (or links); reminders
 - Staff roles (owner, manager, collector, maintenance, viewer): invite, change role, suspend, remove
 - Password reset, email verification, session management, workspace switching
 

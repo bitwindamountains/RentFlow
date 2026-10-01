@@ -1,4 +1,11 @@
-export type Role = 'OWNER' | 'MANAGER' | 'COLLECTOR' | 'VIEWER' | 'MAINTENANCE';
+export type Role = 'OWNER' | 'MANAGER' | 'COLLECTOR' | 'VIEWER' | 'MAINTENANCE' | 'TENANT';
+
+/** Where each role lands after signing in, and where it is sent from pages it cannot use. */
+export function homeFor(role: Role | null | undefined): string {
+  if (role === 'TENANT') return '/portal';
+  if (role === 'MAINTENANCE') return '/maintenance';
+  return '/dashboard';
+}
 
 export interface Profile {
   user: { id: string; email: string; name: string; emailVerified: boolean };
@@ -133,7 +140,7 @@ export interface Dashboard {
 }
 export interface Reminder {
   id: string;
-  type: 'OVERDUE_BALANCE' | 'LEASE_EXPIRY' | 'MAINTENANCE';
+  type: 'OVERDUE_BALANCE' | 'LEASE_EXPIRY' | 'MAINTENANCE' | 'PAYMENT_NOTICE';
   title: string;
   detail: string;
   route: string;
@@ -206,4 +213,89 @@ export interface DocumentRecord {
   contentType?: string | null;
   sizeBytes?: number | null;
   createdAt: string;
+}
+
+// ----- Tenant portal -----
+export type NoticeStatus = 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
+export interface PaymentNotice {
+  id: string;
+  leaseId: string;
+  amount: string;
+  method: string;
+  referenceNumber: string | null;
+  paidOn: string;
+  note: string | null;
+  status: NoticeStatus;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  paymentId: string | null;
+  receiptNumber: string | null;
+  createdAt: string;
+}
+export interface StaffPaymentNotice extends PaymentNotice {
+  tenantId: string;
+  tenantName: string;
+  unitNumber: string;
+  propertyName: string;
+  leaseOutstanding: string;
+  proofs: Array<{ id: string; contentType: string | null }>;
+}
+export interface PortalPayment {
+  id: string;
+  amount: string;
+  method: string;
+  referenceNumber: string | null;
+  paidAt: string;
+  status: string;
+  receiptNumber: string | null;
+}
+export interface PortalLease {
+  id: string;
+  status: string;
+  propertyName: string;
+  address: string;
+  unitNumber: string;
+  startDate: string;
+  endDate: string | null;
+  monthlyRent: string;
+  dueDay: number;
+  gracePeriodDays: number;
+  depositHeld: string | null;
+}
+export interface PortalHome {
+  organization: { name: string; currency: string };
+  tenant: { firstName: string; lastName: string };
+  today: string;
+  balance: { outstanding: string; overdue: string; credit: string; nextDue: { date: string; amount: string } | null };
+  openCharges: Array<{
+    id: string;
+    leaseId: string;
+    description: string;
+    billingPeriod: string | null;
+    dueDate: string;
+    amount: string;
+    outstanding: string;
+    overdue: boolean;
+  }>;
+  leases: PortalLease[];
+  recentPayments: PortalPayment[];
+  notices: PaymentNotice[];
+}
+export interface PortalRepair {
+  id: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  propertyName: string;
+  unitNumber: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+export interface PortalAccess {
+  status: 'NONE' | 'INVITED' | 'ACTIVE' | 'SUSPENDED';
+  email: string | null;
+  since: string | null;
+  expiresAt?: string;
+  link?: string;
 }

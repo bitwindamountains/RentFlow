@@ -5,7 +5,7 @@ import { forkJoin } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { DayPipe, MoneyPipe } from '../core/format';
 import type { Dashboard, Reminder } from '../core/models';
-import { toCents } from '../core/money';
+import { fromCents, toCents } from '../core/money';
 import { PaymentLauncher } from '../core/payment-launcher.service';
 
 @Component({
@@ -20,15 +20,21 @@ export class DashboardPage implements OnInit {
   protected readonly error = signal('');
   protected readonly data = signal<Dashboard | null>(null);
   protected readonly reminders = signal<Reminder[]>([]);
+  protected readonly showTable = signal(false);
+  protected readonly skeletonAreas = ['hero', 'overdue', 'billed', 'occupancy', 'arrears', 'trend', 'upcoming'];
   protected readonly otherReminders = computed(() =>
     this.reminders()
       .filter((item) => item.type !== 'OVERDUE_BALANCE')
       .slice(0, 4),
   );
   protected readonly organizationName = computed(() => this.api.profile()?.organization.name ?? 'Your rental business');
-  protected readonly chartMax = computed(() =>
-    Math.max(1, ...(this.data()?.trend ?? []).flatMap((m) => [toCents(m.billed), toCents(m.collected)])),
-  );
+  /** Top of the y-axis in centavos, rounded up to a clean tick (1, 2, 2.5 or 5 × 10ⁿ pesos). */
+  protected readonly chartMax = computed(() => {
+    const peak = Math.max(1, ...(this.data()?.trend ?? []).flatMap((m) => [toCents(m.billed), toCents(m.collected)])) / 100;
+    const magnitude = 10 ** Math.floor(Math.log10(peak));
+    const step = [1, 2, 2.5, 5, 10].find((f) => f * magnitude >= peak) ?? 10;
+    return step * magnitude * 100;
+  });
 
   constructor() {
     this.api.changes.pipe(takeUntilDestroyed()).subscribe(() => this.refresh());
@@ -61,8 +67,25 @@ export class DashboardPage implements OnInit {
     return Math.round((toCents(value) / this.chartMax()) * 100);
   }
 
-  protected monthLabel(month: string): string {
-    return new Intl.DateTimeFormat('en-PH', { month: 'short', timeZone: 'UTC' }).format(new Date(`${month}-01T00:00:00Z`));
+  protected monthLabel(month: string, style: 'short' | 'long' = 'short'): string {
+    const options: Intl.DateTimeFormatOptions =
+      style === 'long' ? { month: 'long', year: 'numeric', timeZone: 'UTC' } : { month: 'short', timeZone: 'UTC' };
+    return new Intl.DateTimeFormat('en-PH', options).format(new Date(`${month}-01T00:00:00Z`));
+  }
+
+  protected axisLabel(cents: number): string {
+    const currency = this.data()?.currency ?? 'PHP';
+    return new Intl.NumberFormat('en-PH', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100);
+  }
+
+  protected remainingThisMonth(d: Dashboard): string {
+    return fromCents(Math.max(0, toCents(d.billedThisMonth) - toCents(d.collectedThisMonth)));
+  }
+
+  protected collectionLabel(d: Dashboard): string {
+    return d.collectionRate === null
+      ? 'Nothing billed yet this month'
+      : `${d.collectionRate}% of the ${new Intl.NumberFormat('en-PH', { style: 'currency', currency: d.currency }).format(Number(d.billedThisMonth))} billed this month has been collected`;
   }
 
   protected collect(leaseId: string): void {

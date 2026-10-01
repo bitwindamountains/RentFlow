@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { LabelPipe, MomentPipe } from '../core/format';
+import { ThemeService, type ThemePreference } from '../core/theme.service';
 
 interface SessionRow {
   id: string;
@@ -32,6 +33,19 @@ interface SessionRow {
       <p><span class="status warning">Not verified</span> Verify your email so you can recover your account.</p>
       <button class="secondary" type="button" (click)="resend()" [disabled]="busy()">Send verification email</button>
     }
+  </section>
+
+  <section class="panel">
+    <h2>Appearance</h2>
+    <p>Applies to this device only.</p>
+    <div class="segmented" role="radiogroup" aria-label="Colour theme">
+      @for (option of themes; track option.value) {
+        <label>
+          <input type="radio" name="theme" [value]="option.value" [checked]="theme.preference() === option.value" (change)="theme.set(option.value)" />
+          <span>{{ option.label }}</span>
+        </label>
+      }
+    </div>
   </section>
 
   @if ((api.profile()?.workspaces?.length ?? 0) > 1) {
@@ -77,6 +91,12 @@ interface SessionRow {
 export class AccountPage implements OnInit {
   protected readonly api = inject(ApiClient);
   private readonly router = inject(Router);
+  protected readonly theme = inject(ThemeService);
+  protected readonly themes: Array<{ value: ThemePreference; label: string }> = [
+    { value: 'system', label: 'Match device' },
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+  ];
   protected readonly sessions = signal<SessionRow[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal('');

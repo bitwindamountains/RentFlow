@@ -10,10 +10,11 @@ import type { Receipt } from '../core/models';
   styles: `
     .receipt { max-width: 640px; margin: 0 auto; }
     .receipt dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
-    .receipt dt { color: #5d6661; }
+    .receipt dt { color: var(--text-muted); }
+    .receipt td:first-child { white-space: normal; }
     .receipt table { width: 100%; min-width: 0; table-layout: fixed; }
     .receipt .total { font-size: 1.25rem; }
-    .voided { border: 2px solid #b42318; color: #b42318; padding: 8px 12px; border-radius: 8px; font-weight: 700; }
+    .voided { border: 2px solid var(--danger-fg); color: var(--danger-fg); padding: 8px 12px; border-radius: var(--radius-sm); font-weight: 700; }
     @media print {
       .no-print { display: none !important; }
       .receipt { box-shadow: none; border: 0; }

@@ -4,17 +4,16 @@ import { ActivatedRoute } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { MomentPipe } from '../core/format';
-import type { Property, TenantSummary } from '../core/models';
+import type { DocumentRecord, Property, TenantSummary } from '../core/models';
 
-interface DocumentLink {
-  id: string;
-  name: string;
-  category: string;
-  entityType: string | null;
-  entityId: string | null;
-  url: string;
-  createdAt: string;
-}
+/** Mirrors the API's allow-list; the server also checks each file's content. */
+const ACCEPTED: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'image/jpeg': 'JPEG',
+  'image/png': 'PNG',
+  'image/webp': 'WebP',
+};
+const MAX_BYTES = 10 * 1_048_576;
 
 @Component({
   selector: 'app-documents-page',
@@ -23,15 +22,25 @@ interface DocumentLink {
 <div class="page operations-page">
   <section class="page-heading">
     <div><p class="eyebrow">OPERATIONS</p><h1>Documents</h1>
-      <p>Links to leases, IDs, and receipts kept in your own secure storage (e.g. Google Drive with restricted sharing).</p></div>
-    @if (canWrite()) { <button class="primary" type="button" (click)="formOpen.set(!formOpen())">{{ formOpen() ? 'Close' : 'Link document' }}</button> }
+      <p>Signed leases, IDs, and receipts. Uploaded files are stored privately and only people in this workspace can open them.</p></div>
+    @if (canWrite()) { <button class="primary" type="button" (click)="formOpen.set(!formOpen())">{{ formOpen() ? 'Close' : 'Add document' }}</button> }
   </section>
   @if (notice()) { <div class="inline-notice" role="status">{{ notice() }}</div> }
   @if (error()) { <div class="auth-error" role="alert">{{ error() }}</div> }
 
   @if (formOpen()) {
     <form #f="ngForm" class="panel operations-form" (ngSubmit)="f.valid && save()">
-      <fieldset [disabled]="saving()">
+      <div class="segmented" role="radiogroup" aria-label="How to add the document">
+        <label><input type="radio" name="mode" value="file" [checked]="mode() === 'file'" (change)="mode.set('file')" /><span>Upload a file</span></label>
+        <label><input type="radio" name="mode" value="link" [checked]="mode() === 'link'" (change)="mode.set('link')" /><span>Link to a file</span></label>
+      </div>
+      <fieldset [disabled]="saving()" class="document-fields">
+        @if (mode() === 'file') {
+          <label class="field"><span>File <em>PDF, JPEG, PNG, or WebP · up to 10 MB</em></span>
+            <input name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="pick($event)" required />
+            @if (file(); as chosen) { <small>{{ describeFile(chosen.type, chosen.size) }}</small> }
+          </label>
+        }
         <div class="field-row">
           <label class="field"><span>Document name</span><input name="name" [(ngModel)]="draft.name" required minlength="2" maxlength="160" /></label>
           <label class="field"><span>Category</span>
@@ -49,56 +58,74 @@ interface DocumentLink {
               </select></label>
           }
         </div>
-        <label class="field"><span>Secure HTTPS link</span>
-          <input name="url" type="url" [(ngModel)]="draft.url" required pattern="https://.+" placeholder="https://…" maxlength="2000" />
-          <small>Anyone with this link can open the file unless your storage restricts access. Do not use public links for IDs.</small></label>
+        @if (mode() === 'link') {
+          <label class="field"><span>Secure HTTPS link</span>
+            <input name="url" type="url" [(ngModel)]="draft.url" required pattern="https://.+" placeholder="https://…" maxlength="2000" />
+            <small>Anyone with this link can open the file unless your storage restricts access. Do not use public links for IDs.</small></label>
+        }
       </fieldset>
       <div class="modal-actions">
         <button class="secondary" type="button" (click)="formOpen.set(false)">Cancel</button>
-        <button class="primary" type="submit" [disabled]="saving() || !f.valid">Save link</button>
+        <button class="primary" type="submit" [disabled]="saving() || !f.valid || (mode() === 'file' && !file())">
+          {{ saving() ? (mode() === 'file' ? 'Uploading…' : 'Saving…') : mode() === 'file' ? 'Upload' : 'Save link' }}
+        </button>
       </div>
     </form>
   }
 
   <section class="data-panel table-wrap">
     <table>
-      <thead><tr><th scope="col">Document</th><th scope="col">Category</th><th scope="col">About</th><th scope="col">Added</th><th scope="col"></th></tr></thead>
+      <thead><tr><th scope="col">Document</th><th scope="col">Type</th><th scope="col">Category</th><th scope="col">About</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         @for (d of documents(); track d.id) {
           <tr>
-            <td><a [href]="d.url" target="_blank" rel="noopener noreferrer"><strong>{{ d.name }}</strong></a></td>
+            <td><a [href]="href(d)" target="_blank" rel="noopener noreferrer"><strong>{{ d.name }}</strong></a></td>
+            <td>{{ d.kind === 'file' ? describeFile(d.contentType, d.sizeBytes) : 'External link' }}</td>
             <td>{{ d.category }}</td>
             <td>{{ describe(d) }}</td>
             <td>{{ d.createdAt | moment: 'date' }}</td>
             <td>@if (canWrite()) { <button class="text-button" type="button" (click)="remove(d)">Remove</button> }</td>
           </tr>
-        } @empty { <tr><td colspan="5" class="empty-cell">{{ loading() ? 'Loading…' : 'No documents linked yet.' }}</td></tr> }
+        } @empty { <tr><td colspan="6" class="empty-cell">{{ loading() ? 'Loading…' : 'No documents yet.' }}</td></tr> }
       </tbody>
     </table>
   </section>
 </div>`,
+  styles: `
+    .segmented { margin-bottom: var(--space-5); }
+    input[type='file'] { padding: 9px 12px; cursor: pointer; }
+    input[type='file']::file-selector-button {
+      margin-right: var(--space-3);
+      padding: 6px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      color: var(--text);
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+  `,
 })
 export class DocumentsPage implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
-  protected readonly documents = signal<DocumentLink[]>([]);
+  protected readonly documents = signal<DocumentRecord[]>([]);
   protected readonly tenants = signal<TenantSummary[]>([]);
   protected readonly properties = signal<Property[]>([]);
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
   protected readonly formOpen = signal(false);
+  protected readonly mode = signal<'file' | 'link'>('file');
+  protected readonly file = signal<File | null>(null);
   protected readonly error = signal('');
   protected readonly notice = signal('');
   protected readonly canWrite = computed(() => this.api.hasRole('OWNER', 'MANAGER'));
-  protected draft = {
-    name: '',
-    category: 'Lease',
-    entityType: this.query.get('entityType') ?? '',
-    entityId: this.query.get('entityId') ?? '',
-    url: '',
-  };
+  protected draft = this.emptyDraft();
 
   ngOnInit(): void {
+    this.draft.entityType = this.query.get('entityType') ?? '';
+    this.draft.entityId = this.query.get('entityId') ?? '';
     if (this.draft.entityType && this.canWrite()) this.formOpen.set(true);
     this.load();
   }
@@ -109,7 +136,7 @@ export class DocumentsPage implements OnInit {
       : this.properties().map((p) => ({ id: p.id, label: p.name }));
   }
 
-  protected describe(d: DocumentLink): string {
+  protected describe(d: DocumentRecord): string {
     if (!d.entityType) return 'General';
     const label =
       d.entityType === 'Tenant'
@@ -119,10 +146,40 @@ export class DocumentsPage implements OnInit {
     return 'firstName' in label ? `${label.firstName} ${label.lastName}` : label.name;
   }
 
+  protected href(d: DocumentRecord): string {
+    return d.kind === 'file' ? this.api.downloadUrl(`/documents/${d.id}/file`) : (d.url ?? '');
+  }
+
+  protected describeFile(type: string | null | undefined, size: number | null | undefined): string {
+    const kind = ACCEPTED[type ?? ''] ?? 'File';
+    if (!size) return kind;
+    return size < 1_048_576 ? `${kind} · ${Math.max(1, Math.round(size / 1024))} KB` : `${kind} · ${(size / 1_048_576).toFixed(1)} MB`;
+  }
+
+  protected pick(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const chosen = input.files?.[0] ?? null;
+    this.error.set('');
+    if (chosen && !ACCEPTED[chosen.type]) {
+      this.error.set('Choose a PDF, JPEG, PNG, or WebP file. Photos from an iPhone can be shared as JPEG.');
+      input.value = '';
+      this.file.set(null);
+      return;
+    }
+    if (chosen && chosen.size > MAX_BYTES) {
+      this.error.set('That file is larger than 10 MB. Scan at a lower resolution or split the PDF.');
+      input.value = '';
+      this.file.set(null);
+      return;
+    }
+    this.file.set(chosen);
+    if (chosen && !this.draft.name.trim()) this.draft.name = chosen.name.replace(/\.[^.]+$/, '').slice(0, 160);
+  }
+
   private load(): void {
     this.loading.set(true);
     forkJoin({
-      documents: this.api.get<DocumentLink[]>('/documents'),
+      documents: this.api.get<DocumentRecord[]>('/documents'),
       tenants: this.api.get<TenantSummary[]>('/tenants'),
       properties: this.api.get<Property[]>('/properties'),
     }).subscribe({
@@ -140,39 +197,51 @@ export class DocumentsPage implements OnInit {
   }
 
   protected save(): void {
+    const details = {
+      name: this.draft.name,
+      category: this.draft.category,
+      entityType: this.draft.entityType || undefined,
+      entityId: this.draft.entityId || undefined,
+    };
+    const file = this.file();
+    const request =
+      this.mode() === 'file' && file
+        ? this.api.upload<DocumentRecord>('/documents/files', file, details)
+        : this.api.post<DocumentRecord>('/documents', { ...details, url: this.draft.url });
     this.saving.set(true);
     this.error.set('');
-    this.api
-      .post('/documents', {
-        name: this.draft.name,
-        category: this.draft.category,
-        url: this.draft.url,
-        entityType: this.draft.entityType || undefined,
-        entityId: this.draft.entityId || undefined,
-      })
-      .subscribe({
-        next: () => {
-          this.saving.set(false);
-          this.formOpen.set(false);
-          this.draft = { name: '', category: 'Lease', entityType: '', entityId: '', url: '' };
-          this.notice.set('Document linked.');
-          this.load();
-        },
-        error: (error: ApiError) => {
-          this.saving.set(false);
-          this.error.set(error.message);
-        },
-      });
+    request.subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.formOpen.set(false);
+        this.notice.set(this.mode() === 'file' ? 'Document uploaded.' : 'Document linked.');
+        this.draft = this.emptyDraft();
+        this.file.set(null);
+        this.load();
+      },
+      error: (error: ApiError) => {
+        this.saving.set(false);
+        this.error.set(error.message);
+      },
+    });
   }
 
-  protected remove(d: DocumentLink): void {
-    if (!confirm(`Remove the link to "${d.name}"? The file in your storage is not deleted.`)) return;
+  protected remove(d: DocumentRecord): void {
+    const message =
+      d.kind === 'file'
+        ? `Delete "${d.name}"? The file is permanently erased.`
+        : `Remove the link to "${d.name}"? The file in your storage is not deleted.`;
+    if (!confirm(message)) return;
     this.api.delete(`/documents/${d.id}`).subscribe({
       next: () => {
-        this.notice.set('Link removed.');
+        this.notice.set(d.kind === 'file' ? 'Document deleted.' : 'Link removed.');
         this.load();
       },
       error: (error: ApiError) => this.error.set(error.message),
     });
+  }
+
+  private emptyDraft() {
+    return { name: '', category: 'Lease', entityType: '', entityId: '', url: '' };
   }
 }

@@ -126,7 +126,7 @@ import type { TenantForm } from './tenants.page';
 
     <h2>Documents</h2>
     <ul>
-      @for (d of t.documents; track d.id) { <li><a [href]="d.url" target="_blank" rel="noopener noreferrer">{{ d.name }}</a> · {{ d.category }}</li> }
+      @for (d of t.documents; track d.id) { <li><a [href]="d.kind === 'file' ? api.downloadUrl('/documents/' + d.id + '/file') : d.url" target="_blank" rel="noopener noreferrer">{{ d.name }}</a> · {{ d.category }}</li> }
       @empty { <li>No documents. <a routerLink="/documents" [queryParams]="{ entityType: 'Tenant', entityId: t.id }">Link one</a>.</li> }
     </ul>
   } @else if (loading()) {

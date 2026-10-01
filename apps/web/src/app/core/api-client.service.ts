@@ -97,6 +97,20 @@ export class ApiClient {
       );
   }
 
+  /** Sends a file as the raw request body; the browser sets Content-Type from the file. */
+  upload<T>(path: string, file: Blob, query?: Query): Observable<T> {
+    return this.http
+      .post<T>(`${this.baseUrl}${path}`, file, {
+        withCredentials: true,
+        headers: this.headers().set('content-type', file.type),
+        params: params(query),
+      })
+      .pipe(
+        tap(() => this.changes.next()),
+        catchError((error) => this.fail(error)),
+      );
+  }
+
   downloadUrl(path: string, query?: Query): string {
     const search = params(query).toString();
     return `${this.baseUrl}${path}${search ? `?${search}` : ''}`;

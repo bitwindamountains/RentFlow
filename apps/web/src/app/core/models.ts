@@ -175,7 +175,7 @@ export interface TenantDetail {
   }>;
   openCharges: Charge[];
   payments: Array<Omit<Payment, 'tenantName' | 'unitNumber' | 'unallocated'>>;
-  documents: Array<{ id: string; name: string; category: string; url: string; createdAt: string }>;
+  documents: DocumentRecord[];
 }
 export interface Receipt {
   paymentId: string;
@@ -192,4 +192,18 @@ export interface Receipt {
   paidAt: string;
   lines: Array<{ description: string; billingPeriod: string | null; amount: string }>;
   credit: string;
+}
+
+export interface DocumentRecord {
+  id: string;
+  name: string;
+  category: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  /** `file` is stored privately and downloaded through the API; `link` points to external storage. */
+  kind: 'file' | 'link';
+  url: string | null;
+  contentType?: string | null;
+  sizeBytes?: number | null;
+  createdAt: string;
 }

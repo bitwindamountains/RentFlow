@@ -1,5 +1,6 @@
 export type Environment = 'development' | 'test' | 'production';
 export type MailProvider = 'log' | 'resend' | 'smtp';
+export type StorageDriver = 'local' | 's3';
 
 export interface AppEnvironment {
   NODE_ENV: Environment;
@@ -16,6 +17,16 @@ export interface AppEnvironment {
   SMTP_URL: string;
   SESSION_ABSOLUTE_HOURS: number;
   SESSION_IDLE_MINUTES: number;
+  STORAGE_DRIVER: StorageDriver;
+  STORAGE_DIR: string;
+  S3_BUCKET: string;
+  S3_REGION: string;
+  S3_ENDPOINT: string;
+  S3_ACCESS_KEY_ID: string;
+  S3_SECRET_ACCESS_KEY: string;
+  S3_FORCE_PATH_STYLE: boolean;
+  UPLOAD_MAX_BYTES: number;
+  STORAGE_QUOTA_BYTES: number;
 }
 
 const environments = new Set<Environment>(['development', 'test', 'production']);
@@ -81,6 +92,25 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   if (production && mailProvider !== 'log' && !input['MAIL_FROM'])
     throw new Error('MAIL_FROM is required in production');
 
+  const storageDriver = String(input['STORAGE_DRIVER'] ?? 'local') as StorageDriver;
+  if (storageDriver !== 'local' && storageDriver !== 's3') throw new Error('STORAGE_DRIVER must be local or s3');
+  // Uploaded tenant documents (IDs, leases) must live somewhere that is backed up, never in the container layer.
+  if (production && storageDriver === 'local' && !String(input['STORAGE_DIR'] ?? '').startsWith('/'))
+    throw new Error('STORAGE_DIR must be an absolute path on a persistent volume when STORAGE_DRIVER=local in production');
+  const storageDir = String(input['STORAGE_DIR'] ?? '.data/uploads');
+  const s3 = {
+    bucket: String(input['S3_BUCKET'] ?? ''),
+    region: String(input['S3_REGION'] ?? ''),
+    endpoint: String(input['S3_ENDPOINT'] ?? ''),
+    accessKeyId: String(input['S3_ACCESS_KEY_ID'] ?? ''),
+    secretAccessKey: String(input['S3_SECRET_ACCESS_KEY'] ?? ''),
+  };
+  if (storageDriver === 's3') {
+    if (!s3.bucket || !s3.region || !s3.accessKeyId || !s3.secretAccessKey)
+      throw new Error('S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required for STORAGE_DRIVER=s3');
+    if (production && s3.endpoint && !s3.endpoint.startsWith('https://')) throw new Error('S3_ENDPOINT must use https in production');
+  }
+
   return {
     NODE_ENV: nodeEnv,
     PORT: integer(input, 'PORT', 3000, 1, 65_535),
@@ -96,6 +126,16 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     SMTP_URL: smtpUrl,
     SESSION_ABSOLUTE_HOURS: integer(input, 'SESSION_ABSOLUTE_HOURS', 12, 1, 720),
     SESSION_IDLE_MINUTES: integer(input, 'SESSION_IDLE_MINUTES', 120, 5, 43_200),
+    STORAGE_DRIVER: storageDriver,
+    STORAGE_DIR: storageDir,
+    S3_BUCKET: s3.bucket,
+    S3_REGION: s3.region,
+    S3_ENDPOINT: s3.endpoint,
+    S3_ACCESS_KEY_ID: s3.accessKeyId,
+    S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+    S3_FORCE_PATH_STYLE: String(input['S3_FORCE_PATH_STYLE'] ?? 'false') === 'true',
+    UPLOAD_MAX_BYTES: integer(input, 'UPLOAD_MAX_MB', 10, 1, 50) * 1_048_576,
+    STORAGE_QUOTA_BYTES: integer(input, 'STORAGE_QUOTA_MB', 2048, 10, 1_048_576) * 1_048_576,
   };
 }
 

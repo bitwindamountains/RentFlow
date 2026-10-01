@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
 import type { ExpenseCategory, MaintenancePriority, MaintenanceStatus, Prisma } from '@prisma/client';
 import { audit } from '../common/audit.js';
 import { formatDateOnly, parseDateOnly } from '../common/dates.js';
 import { DomainError, notFound } from '../common/errors.js';
 import { formatMoney, parseMoney } from '../common/money.js';
 import { PrismaService } from '../common/prisma.service.js';
+import { environment } from '../config/environment.js';
+import { FileStore, sniffType, type UploadType } from '../storage/file-store.service.js';
 import { decodeCursor, encodeCursor, type Page } from '../common/validation.js';
 
 const transitions: Record<MaintenanceStatus, MaintenanceStatus[]> = {
@@ -17,9 +20,21 @@ const transitions: Record<MaintenanceStatus, MaintenanceStatus[]> = {
 export const DOCUMENT_ENTITIES = ['Tenant', 'Lease', 'Property', 'Unit', 'Expense', 'MaintenanceRequest'] as const;
 export type DocumentEntity = (typeof DOCUMENT_ENTITIES)[number];
 
+interface DocumentMeta {
+  name: string;
+  category: string;
+  entityType?: DocumentEntity;
+  entityId?: string;
+}
+
 @Injectable()
 export class WorkService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(WorkService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly files: FileStore,
+  ) {}
 
   // ---------------------------------------------------------------- expenses
   async listExpenses(
@@ -226,15 +241,7 @@ export class WorkService {
       orderBy: { createdAt: 'desc' },
       take: 500,
     });
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      category: row.category,
-      entityType: row.entityType,
-      entityId: row.entityId,
-      url: row.url,
-      createdAt: row.createdAt.toISOString(),
-    }));
+    return rows.map(documentView);
   }
 
   async createDocument(
@@ -242,11 +249,9 @@ export class WorkService {
     actorUserId: string,
     input: { name: string; category: string; entityType?: DocumentEntity; entityId?: string; url: string },
   ) {
-    if (Boolean(input.entityType) !== Boolean(input.entityId))
-      throw new DomainError('RESOURCE_NOT_FOUND', 422, 'Choose both the record type and the record.');
+    assertEntityPair(input);
     return this.prisma.$transaction(async (tx) => {
-      if (input.entityType && input.entityId && !(await this.entityExists(tx, organizationId, input.entityType, input.entityId)))
-        throw notFound();
+      await this.assertEntity(tx, organizationId, input);
       const row = await tx.documentRecord.create({
         data: {
           organizationId,
@@ -266,17 +271,106 @@ export class WorkService {
         entityId: row.id,
         after: { name: row.name, category: row.category, entityType: row.entityType },
       });
-      return { id: row.id, name: row.name, category: row.category, url: row.url, createdAt: row.createdAt.toISOString() };
+      return documentView(row);
     });
   }
 
+  /**
+   * Stores an uploaded file privately, then records it. The declared type must match the
+   * file's own signature, so a renamed HTML or script file is rejected.
+   */
+  async uploadDocument(
+    organizationId: string,
+    actorUserId: string,
+    input: DocumentMeta & { contentType: UploadType },
+    body: Buffer,
+  ) {
+    assertEntityPair(input);
+    if (!body.length) throw new DomainError('FILE_EMPTY', 400);
+    if (body.length > environment().UPLOAD_MAX_BYTES) throw new DomainError('FILE_TOO_LARGE', 413);
+    if (sniffType(body) !== input.contentType) throw new DomainError('FILE_TYPE_MISMATCH', 415);
+    await this.assertEntity(this.prisma, organizationId, input);
+    const used = await this.prisma.documentRecord.aggregate({
+      where: { organizationId, deletedAt: null, storageKey: { not: null } },
+      _sum: { sizeBytes: true },
+    });
+    if ((used._sum.sizeBytes ?? 0) + body.length > environment().STORAGE_QUOTA_BYTES)
+      throw new DomainError('STORAGE_QUOTA_EXCEEDED', 413);
+
+    const id = randomUUID();
+    const storageKey = FileStore.keyFor(organizationId, id, input.contentType);
+    try {
+      await this.files.put(storageKey, body, input.contentType);
+    } catch (error) {
+      this.logger.error(`STORAGE_PUT_FAILED ${(error as Error).name}`);
+      throw new DomainError('STORAGE_UNAVAILABLE', 503);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.assertEntity(tx, organizationId, input);
+        const row = await tx.documentRecord.create({
+          data: {
+            id,
+            organizationId,
+            name: input.name.trim(),
+            category: input.category.trim(),
+            entityType: input.entityType,
+            entityId: input.entityId,
+            storageKey,
+            contentType: input.contentType,
+            sizeBytes: body.length,
+            sha256: createHash('sha256').update(body).digest('hex'),
+            createdBy: actorUserId,
+          },
+        });
+        await audit(tx, {
+          organizationId,
+          actorUserId,
+          action: 'DOCUMENT_UPLOADED',
+          entityType: 'DocumentRecord',
+          entityId: row.id,
+          after: {
+            name: row.name,
+            category: row.category,
+            entityType: row.entityType,
+            contentType: row.contentType,
+            sizeBytes: row.sizeBytes,
+          },
+        });
+        return documentView(row);
+      });
+    } catch (error) {
+      await this.files.delete(storageKey); // never leave an unrecorded file behind
+      throw error;
+    }
+  }
+
+  /** Opens an uploaded file for download after the organization-scoped lookup. */
+  async openDocument(organizationId: string, id: string) {
+    const row = await this.prisma.documentRecord.findFirst({
+      where: { id, organizationId, deletedAt: null, storageKey: { not: null } },
+    });
+    if (!row?.storageKey || !row.contentType) throw notFound('DOCUMENT_NOT_FOUND');
+    const file = await this.files.get(row.storageKey);
+    if (!file) {
+      this.logger.error(`STORAGE_OBJECT_MISSING document=${row.id}`);
+      throw notFound('DOCUMENT_NOT_FOUND');
+    }
+    return { ...file, name: row.name, contentType: row.contentType as UploadType, sha256: row.sha256 };
+  }
+
+  /** The record stays for the audit trail; an uploaded file is erased from storage. */
   async deleteDocument(organizationId: string, actorUserId: string, id: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const storageKey = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.documentRecord.findFirst({
+        where: { id, organizationId, deletedAt: null },
+        select: { storageKey: true },
+      });
       const updated = await tx.documentRecord.updateMany({
         where: { id, organizationId, deletedAt: null },
         data: { deletedAt: new Date() },
       });
-      if (!updated.count) throw notFound('DOCUMENT_NOT_FOUND');
+      if (!updated.count || !row) throw notFound('DOCUMENT_NOT_FOUND');
       await audit(tx, {
         organizationId,
         actorUserId,
@@ -284,8 +378,15 @@ export class WorkService {
         entityType: 'DocumentRecord',
         entityId: id,
       });
-      return { deleted: true };
+      return row.storageKey;
     });
+    if (storageKey) await this.files.delete(storageKey);
+    return { deleted: true };
+  }
+
+  private async assertEntity(tx: Prisma.TransactionClient, organizationId: string, input: DocumentMeta) {
+    if (input.entityType && input.entityId && !(await this.entityExists(tx, organizationId, input.entityType, input.entityId)))
+      throw notFound();
   }
 
   private async entityExists(tx: Prisma.TransactionClient, organizationId: string, type: DocumentEntity, id: string) {
@@ -305,6 +406,26 @@ export class WorkService {
         return Boolean(await tx.maintenanceRequest.findFirst({ where, select: { id: true } }));
     }
   }
+}
+
+function assertEntityPair(input: DocumentMeta): void {
+  if (Boolean(input.entityType) !== Boolean(input.entityId))
+    throw new DomainError('RESOURCE_NOT_FOUND', 422, 'Choose both the record type and the record.');
+}
+
+function documentView(row: Prisma.DocumentRecordGetPayload<object>) {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    kind: row.storageKey ? ('file' as const) : ('link' as const),
+    url: row.url,
+    contentType: row.contentType,
+    sizeBytes: row.sizeBytes,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 function expenseView(row: Prisma.ExpenseGetPayload<{ include: { property: { select: { name: true } } } }>) {

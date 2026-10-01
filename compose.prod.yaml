@@ -38,6 +38,10 @@ services:
       NODE_ENV: production
       PORT: "3000"
       TRUST_PROXY: "1"
+      # Ignored when STORAGE_DRIVER=s3.
+      STORAGE_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       migrate: { condition: service_completed_successfully }
     expose: ["3000"]
@@ -60,5 +64,6 @@ services:
 
 volumes:
   postgres:
+  uploads:
   caddy_data:
   caddy_config:

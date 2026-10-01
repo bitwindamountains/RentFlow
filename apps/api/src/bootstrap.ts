@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { AppModule } from './app.module.js';
 import { sha256 } from './common/crypto.js';
 import { environment, sessionCookieName } from './config/environment.js';
+import { UPLOAD_TYPES } from './storage/file-store.service.js';
 
 const levels: LogLevel[] = ['fatal', 'error', 'warn', 'log', 'debug', 'verbose'];
 
@@ -57,6 +58,21 @@ export async function createApp(options: { logger?: false } = {}): Promise<NestF
       message: `Too many requests. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
     }),
   });
+  // Raw file bodies are accepted on the upload route only, up to UPLOAD_MAX_BYTES.
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addContentTypeParser(
+      Object.keys(UPLOAD_TYPES),
+      { parseAs: 'buffer', bodyLimit: env.UPLOAD_MAX_BYTES },
+      (request, body, done) => {
+        if (!request.url.split('?')[0]!.endsWith('/documents/files')) {
+          done(Object.assign(new Error('Unsupported Media Type'), { statusCode: 415 }), undefined);
+          return;
+        }
+        done(null, body);
+      },
+    );
   app
     .getHttpAdapter()
     .getInstance()

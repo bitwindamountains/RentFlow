@@ -40,6 +40,8 @@ COPY --from=api-build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=api-build /app/apps/api/dist ./apps/api/dist
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/api/prisma ./apps/api/prisma
+# Uploaded documents (STORAGE_DRIVER=local). Mount a volume here; a new named volume inherits this ownership.
+RUN mkdir -p /data/uploads && chown node:node /data/uploads && chmod 700 /data/uploads
 WORKDIR /app/apps/api
 USER node
 EXPOSE 3000

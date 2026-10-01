@@ -23,6 +23,7 @@ const httpCodes: Record<number, string> = {
   404: 'NOT_FOUND',
   409: 'CONFLICT',
   413: 'PAYLOAD_TOO_LARGE',
+  415: 'UNSUPPORTED_MEDIA_TYPE',
   422: 'UNPROCESSABLE',
   429: 'RATE_LIMITED',
 };
@@ -70,6 +71,8 @@ export class ErrorFilter implements ExceptionFilter {
       return { statusCode, code: 'RATE_LIMITED', message: 'Too many requests. Try again shortly.' };
     if (statusCode === 413)
       return { statusCode, code: 'PAYLOAD_TOO_LARGE', message: 'The request is too large.' };
+    if (statusCode === 415)
+      return { statusCode, code: 'UNSUPPORTED_MEDIA_TYPE', message: 'Upload a PDF, JPEG, PNG, or WebP file.' };
     if (statusCode === 400 && (error as { code?: string })?.code?.startsWith('FST_'))
       return { statusCode, code: 'BAD_REQUEST', message: 'The request body is not valid JSON.' };
 

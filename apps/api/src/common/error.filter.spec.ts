@@ -28,6 +28,14 @@ describe('ErrorFilter', () => {
     );
   });
 
+  it('maps body-parser rejections (wrong media type, too large) to client errors', () => {
+    for (const [statusCode, code] of [[415, 'UNSUPPORTED_MEDIA_TYPE'], [413, 'PAYLOAD_TOO_LARGE']] as const) {
+      const target = host();
+      new ErrorFilter().catch(Object.assign(new Error('internal detail'), { statusCode }), target.value);
+      expect(target.send).toHaveBeenCalledWith(expect.objectContaining({ statusCode, code }));
+    }
+  });
+
   it('never leaks unexpected error messages and logs only stack frames', () => {
     const target = host();
     const filter = new ErrorFilter();

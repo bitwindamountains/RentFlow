@@ -9,6 +9,7 @@ import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { PortalModule } from './portal/portal.module.js';
+import { RemindersModule } from './reminders/reminders.module.js';
 import { RentalsModule } from './rentals/rentals.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { StaffModule } from './staff/staff.module.js';
@@ -25,6 +26,7 @@ import { WorkModule } from './work/work.module.js';
     StaffModule,
     WorkModule,
     PortalModule,
+    RemindersModule,
     JobsModule,
     HealthModule,
   ],

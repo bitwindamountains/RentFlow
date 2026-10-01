@@ -7,11 +7,12 @@ import { DayPipe, LabelPipe, MomentPipe, MoneyPipe, statusTone } from '../core/f
 import type { LedgerEntry, TenantDetail } from '../core/models';
 import { toCents } from '../core/money';
 import { PaymentLauncher } from '../core/payment-launcher.service';
+import { PortalAccessComponent } from './portal-access.component';
 import type { TenantForm } from './tenants.page';
 
 @Component({
   selector: 'app-tenant-detail-page',
-  imports: [FormsModule, RouterLink, MoneyPipe, DayPipe, MomentPipe, LabelPipe],
+  imports: [FormsModule, RouterLink, MoneyPipe, DayPipe, MomentPipe, LabelPipe, PortalAccessComponent],
   template: `
 <div class="page resource-page">
   <p><a routerLink="/tenants" class="text-button">&larr; All tenants</a></p>
@@ -58,6 +59,8 @@ import type { TenantForm } from './tenants.page';
         </div>
       </form>
     }
+
+    @if (canManage()) { <app-portal-access [tenantId]="t.id" [email]="t.email" /> }
 
     <section class="summary-strip">
       <div><span>Balance</span><strong [class.danger-text]="owes()">{{ t.balance | money }}</strong></div>

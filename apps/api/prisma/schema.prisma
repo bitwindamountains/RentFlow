@@ -19,6 +19,15 @@ enum MembershipRole {
   COLLECTOR
   MAINTENANCE
   VIEWER
+  /// Tenant portal access; the membership is bound to exactly one Tenant record.
+  TENANT
+}
+
+enum PaymentNoticeStatus {
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+  WITHDRAWN
 }
 
 enum MembershipStatus {
@@ -191,6 +200,7 @@ model Organization {
   billingSchedules    BillingSchedule[]
   chargeAdjustments   ChargeAdjustment[]
   depositTransactions DepositTransaction[]
+  paymentNotices      PaymentNotice[]
 }
 
 model User {
@@ -265,9 +275,13 @@ model Membership {
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   propertyGrants PropertyGrant[]
+  /// Set only for role TENANT (enforced by a CHECK constraint).
+  tenantId       String?          @db.Uuid
+  tenant         Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, userId])
   @@index([userId, status])
+  @@index([tenantId])
 }
 
 model PropertyGrant {
@@ -357,6 +371,10 @@ model Tenant {
   primaryLeases    Lease[]         @relation("PrimaryTenant")
   occupancies      LeaseOccupant[]
   payments         Payment[]
+  memberships      Membership[]
+  invitations      StaffInvitation[]
+  paymentNotices      PaymentNotice[]
+  maintenance      MaintenanceRequest[]
 
   @@index([organizationId, status])
   @@index([organizationId, lastName, firstName])
@@ -387,6 +405,7 @@ model Lease {
   charges          Charge[]
   payments         Payment[]
   depositAccount   DepositAccount?
+  paymentNotices      PaymentNotice[]
 
   @@index([organizationId, status])
   @@index([rentableSpaceId, startDate, endDate])
@@ -490,6 +509,7 @@ model Payment {
   reversals       PaymentReversal[]
   ledgerEntries   LedgerEntry[]
   receipts        Receipt[]
+  notice          PaymentNotice?
 
   @@index([organizationId, paidAt, status])
   @@index([organizationId, referenceNumber])
@@ -686,8 +706,12 @@ model MaintenanceRequest {
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   property       Property            @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   unit           Unit?               @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  /// Set when the tenant reported it from the portal.
+  tenantId       String?             @db.Uuid
+  tenant         Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status, priority])
+  @@index([tenantId, createdAt])
   @@index([propertyId, unitId])
 }
 
@@ -726,7 +750,40 @@ model StaffInvitation {
   acceptedAt     DateTime?        @db.Timestamptz(3)
   createdAt      DateTime         @default(now()) @db.Timestamptz(3)
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// Set only for role TENANT (portal invitations).
+  tenantId       String?          @db.Uuid
+  tenant         Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, status])
   @@index([email, status])
+  @@index([tenantId, status])
+}
+
+/// A tenant's report that they paid (e.g. by GCash). Staff confirm it, which records a real Payment, or reject it.
+model PaymentNotice {
+  id              String              @id @default(uuid()) @db.Uuid
+  organizationId  String              @db.Uuid
+  tenantId        String              @db.Uuid
+  leaseId         String              @db.Uuid
+  amount          Decimal             @db.Decimal(19, 4)
+  method          PaymentMethod
+  referenceNumber String?
+  paidOn          DateTime            @db.Date
+  note            String?
+  status          PaymentNoticeStatus @default(SUBMITTED)
+  submittedBy     String              @db.Uuid
+  reviewedBy      String?             @db.Uuid
+  reviewedAt      DateTime?           @db.Timestamptz(3)
+  rejectionReason String?
+  paymentId       String?             @unique @db.Uuid
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(3)
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  lease           Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  payment         Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([leaseId])
 }

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
+import { homeFor } from '../core/models';
 
 type Mode = 'login' | 'register' | 'forgot';
 
@@ -68,7 +69,7 @@ export class AuthPage {
     request.pipe(finalize(() => this.busy.set(false))).subscribe({
       next: (profile) => {
         this.password = '';
-        void this.router.navigateByUrl(profile.role === 'MAINTENANCE' ? '/maintenance' : '/dashboard');
+        void this.router.navigateByUrl(homeFor(profile.role));
       },
       error: (error: ApiError) =>
         this.error.set(

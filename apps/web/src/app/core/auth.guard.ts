@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { type CanActivateFn, Router } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
 import { ApiClient } from './api-client.service';
-import type { Role } from './models';
+import { homeFor, type Role } from './models';
 
 /**
  * Requires a session and, when the route declares `data.roles`, one of those
@@ -16,7 +16,7 @@ export const authGuard: CanActivateFn = (route) => {
     const roles = route.data['roles'] as Role[] | undefined;
     if (!role) return router.createUrlTree(['/auth']);
     if (roles && !roles.includes(role))
-      return router.createUrlTree([role === 'MAINTENANCE' ? '/maintenance' : '/dashboard']);
+      return router.createUrlTree([homeFor(role)]);
     return true;
   };
   if (api.profile()) return allowed();

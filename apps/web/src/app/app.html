@@ -90,7 +90,7 @@
             </div>
           }
         </div>
-        @if (profile()?.role !== 'MAINTENANCE') {
+        @if (profile()?.role !== 'MAINTENANCE' && profile()?.role !== 'TENANT') {
           <a class="icon-button reminder-link" routerLink="/reminders" aria-label="View reminders"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v5l-2 4h16l-2-4z M10 21h4" /></svg></a>
         }
         @if (installReady()) {

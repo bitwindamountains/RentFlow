@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/dashboard.page';
 const FINANCE: Role[] = ['OWNER', 'MANAGER', 'COLLECTOR', 'VIEWER'];
 const MANAGERS: Role[] = ['OWNER', 'MANAGER'];
 const ALL: Role[] = [...FINANCE, 'MAINTENANCE'];
+const TENANT: Role[] = ['TENANT'];
 
 const page = (path: string, title: string, roles: Role[], load: () => Promise<unknown>) => ({
   path,
@@ -49,7 +50,14 @@ export const routes: Routes = [
   page('reminders', 'Reminders', FINANCE, () => import('./pages/reminders.page').then((m) => m.RemindersPage)),
   page('reports', 'Reports', FINANCE, () => import('./pages/reports.page').then((m) => m.ReportsPage)),
   page('staff', 'Staff & access', ['OWNER'], () => import('./pages/staff.page').then((m) => m.StaffPage)),
-  page('account', 'Account & security', ALL, () => import('./pages/account.page').then((m) => m.AccountPage)),
+  page('account', 'Account & security', [...ALL, 'TENANT'], () => import('./pages/account.page').then((m) => m.AccountPage)),
+  page('portal', 'My rental', TENANT, () => import('./pages/portal-home.page').then((m) => m.PortalHomePage)),
+  page('portal/payments', 'My payments', TENANT, () => import('./pages/portal-payments.page').then((m) => m.PortalPaymentsPage)),
+  {
+    ...page('portal/receipts/:id', 'Receipt', TENANT, () => import('./pages/receipt.page').then((m) => m.ReceiptPage)),
+    data: { roles: TENANT, source: 'portal' },
+  },
+  page('portal/repairs', 'Repairs', TENANT, () => import('./pages/portal-repairs.page').then((m) => m.PortalRepairsPage)),
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: '**', redirectTo: 'dashboard' },
 ];

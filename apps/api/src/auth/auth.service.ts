@@ -72,7 +72,7 @@ export class AuthService {
           entityType: 'Organization',
           entityId: organization.id,
         });
-        return this.createSession(tx, user.id, organization.id, 'OWNER', false, input.userAgent);
+        return this.createSession(tx, user.id, organization.id, { role: 'OWNER', tenantId: null }, false, input.userAgent);
       });
       await this.sendVerification(issued.context.userId, email);
       return issued;
@@ -100,6 +100,8 @@ export class AuthService {
         userId: user.id,
         status: 'ACTIVE',
         organization: { status: 'ACTIVE', ...(workspace ? { slug: workspace } : {}) },
+        // Archived tenants cannot sign in to the portal.
+        OR: [{ tenantId: null }, { tenant: { status: { not: 'ARCHIVED' } } }],
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -109,7 +111,7 @@ export class AuthService {
         tx,
         user.id,
         membership.organizationId,
-        membership.role,
+        membership,
         Boolean(user.emailVerifiedAt),
         input.userAgent,
       ),
@@ -142,9 +144,11 @@ export class AuthService {
         status: 'ACTIVE',
         organization: { status: 'ACTIVE' },
       },
-      select: { role: true },
+      select: { role: true, tenantId: true, tenant: { select: { status: true } } },
     });
     if (!membership) return undefined;
+    // An archived tenant loses portal access immediately.
+    if (membership.role === 'TENANT' && (!membership.tenantId || membership.tenant?.status === 'ARCHIVED')) return undefined;
     if (now - session.lastSeenAt.getTime() > touchInterval)
       await this.prisma.session.update({
         where: { id: session.id },
@@ -156,6 +160,7 @@ export class AuthService {
       userId: session.userId,
       organizationId: session.organizationId,
       role: membership.role,
+      tenantId: membership.role === 'TENANT' ? membership.tenantId : null,
       expiresAt: session.expiresAt,
       emailVerified: Boolean(session.user.emailVerifiedAt),
     };
@@ -209,6 +214,7 @@ export class AuthService {
         userId: context.userId,
         status: 'ACTIVE',
         organization: { slug: slug.trim().toLowerCase(), status: 'ACTIVE' },
+        OR: [{ tenantId: null }, { tenant: { status: { not: 'ARCHIVED' } } }],
       },
     });
     if (!membership) throw new DomainError('RESOURCE_NOT_FOUND', 404);
@@ -218,7 +224,7 @@ export class AuthService {
         tx,
         context.userId,
         membership.organizationId,
-        membership.role,
+        membership,
         context.emailVerified,
         userAgent,
       );
@@ -340,10 +346,11 @@ export class AuthService {
     tx: Tx,
     userId: string,
     organizationId: string,
-    role: MembershipRole,
+    membership: { role: MembershipRole; tenantId: string | null },
     emailVerified: boolean,
     userAgent?: string,
   ): Promise<IssuedSession> {
+    const { role } = membership;
     const token = randomToken(32);
     const csrfToken = randomToken(24);
     const expiresAt = new Date(Date.now() + environment().SESSION_ABSOLUTE_HOURS * 3_600_000);
@@ -366,6 +373,7 @@ export class AuthService {
         userId,
         organizationId,
         role,
+        tenantId: role === 'TENANT' ? membership.tenantId : null,
         expiresAt,
         emailVerified,
       },

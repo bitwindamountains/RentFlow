@@ -8,6 +8,8 @@ export interface SessionContext {
   userId: string;
   organizationId: string;
   role: MembershipRole;
+  /** The tenant record a TENANT session may see; null for staff. */
+  tenantId: string | null;
   expiresAt: Date;
   emailVerified: boolean;
 }

@@ -14,6 +14,7 @@ An installable rental-operations PWA for Philippine landlords and property teams
 - Charge discounts, waivers, credit notes, and voids — posted records are never edited or deleted
 - Security deposits kept separate from income; expenses with per-property profit and loss; CSV export
 - Maintenance work orders with a status workflow; private document uploads (or links); reminders
+- Automatic emails: rent reminders to tenants (before, on, and after the due date) and lease-expiry alerts to owners and managers, on rules each workspace sets
 - Staff roles (owner, manager, collector, maintenance, viewer): invite, change role, suspend, remove
 - Tenant portal: tenants see what they owe and their receipts, report GCash/Maya/bank payments (with a screenshot) for staff to confirm, and request repairs
 - Password reset, email verification, session management, workspace switching

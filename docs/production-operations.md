@@ -30,8 +30,19 @@ When `ENABLE_JOBS=true` (the default outside tests), the job runs every 15 minut
 
 1. Marks leases whose end date has passed as expired and frees the unit.
 2. Posts every due, not-yet-posted scheduled charge (catching up missed months).
+3. From 8:00 local time, sends the automatic reminders that are due (see below).
 
 It also purges expired idempotency keys, used or expired tokens, and old sessions, and marks expired invitations. One organization's failure is logged and does not block the others.
+
+## Automatic reminders
+
+Owners and managers set the rules on the Reminders page. They apply to the whole workspace.
+
+- **Rent emails to tenants** are off until someone turns them on. The defaults are 3 days before the due date, on the due date, and 3 and 7 days after the grace period ends. They go to the lease's primary tenant, if they have an email address. A balance that is paid, and a tenant with a payment report waiting for review, are skipped. Tenants with portal access get a link to it.
+- **Lease-expiry alerts to staff** are on by default, at 60, 30, and 7 days before the end date. They go to every active owner and manager with a verified email.
+- **Each step is sent at most once.** It is recorded in `ReminderDelivery` before the email goes out. A failed send is retried on later runs, up to three attempts.
+- **Missed steps are not sent in bulk.** Only the latest step that has arrived is sent, and only within 2 days of its date. So turning reminders on, or a server outage, never sends a burst of old reminders. Balances long past every step stay on the Reminders list for staff to follow up.
+- The Reminders page shows the last 50 automatic emails and whether each was delivered.
 
 ## Rent rules
 

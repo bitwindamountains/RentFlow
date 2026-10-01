@@ -39,7 +39,7 @@ After changing `prisma/schema.prisma`, run `npm run db:migrate --workspace api` 
 
 ## API architecture (`apps/api/src`)
 
-Each feature module (`auth`, `rentals`, `billing`, `payments`, `reports`, `staff`, `work`, `portal`, `jobs`, `storage`, `mail`, `health`) has its own controller and service. Shared infrastructure lives in `common/`. All routes are served under `/api/v1`.
+Each feature module (`auth`, `rentals`, `billing`, `payments`, `reports`, `staff`, `work`, `portal`, `reminders`, `jobs`, `storage`, `mail`, `health`) has its own controller and service. Shared infrastructure lives in `common/`. All routes are served under `/api/v1`.
 
 **Authorization is closed by default.**
 - `auth/session.guard.ts` is a global guard. It resolves the session cookie, requires an `x-csrf-token` header on every non-GET request, and enforces `@Roles(...)`.
@@ -74,9 +74,10 @@ Each feature module (`auth`, `rentals`, `billing`, `payments`, `reports`, `staff
 - The rent rules are documented in `docs/production-operations.md`.
 
 **Other modules.**
-- `jobs/`: a background job runs every 15 minutes under a database lease. It expires leases, posts due scheduled charges with catch-up, and purges expired keys, tokens and sessions. It's disabled with `ENABLE_JOBS=false`, which the e2e config sets.
+- `jobs/`: a background job runs every 15 minutes under a database lease. It expires leases, posts due scheduled charges with catch-up, sends automatic reminders (from 08:00 local time), and purges expired keys, tokens and sessions. `runAll(now)` takes the clock so tests can control it. It's disabled with `ENABLE_JOBS=false`, which the e2e config sets.
 - `config/environment.ts`: configuration fails closed. The app won't start without `NODE_ENV`, a Postgres `DATABASE_URL`, HTTPS origins, and, in production, a real mail provider. Tests call `resetEnvironmentCache()`.
 - `storage/`: private uploads in local or S3-compatible storage. File types are checked by content, and per-workspace quotas apply. The request body is the raw file, and Fastify accepts raw bodies only on routes matching `uploadRoute` in `bootstrap.ts`, so a new upload endpoint must be added there.
+- `reminders/`: per-workspace reminder rules, plus at-most-once emails. Each send is claimed by a unique `ReminderDelivery` row before it goes out. The pure step logic is in `schedule.ts`. Tests call `RemindersService.run(orgId, today)` with chosen dates.
 - `common/audit.ts`: redacts personal fields from audit logs.
 
 ## Web architecture (`apps/web/src/app`)

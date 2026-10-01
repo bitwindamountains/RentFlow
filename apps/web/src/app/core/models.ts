@@ -149,6 +149,28 @@ export interface Reminder {
   tenantId?: string;
   amount?: string;
 }
+/** Automatic reminder rules for the workspace (owners and managers). */
+export interface ReminderRules {
+  tenantReminders: boolean;
+  daysBeforeDue: number;
+  onDueDate: boolean;
+  overdueDays: number[];
+  staffLeaseAlerts: boolean;
+  leaseExpiryDays: number[];
+}
+export interface ReminderDelivery {
+  id: string;
+  kind: 'RENT_DUE_SOON' | 'RENT_DUE_TODAY' | 'RENT_OVERDUE' | 'LEASE_EXPIRING';
+  status: 'SENT' | 'FAILED' | 'SKIPPED';
+  subjectDate: string;
+  step: number;
+  recipients: number;
+  amount: string | null;
+  tenantId: string;
+  tenantName: string;
+  unitNumber: string;
+  sentAt: string;
+}
 export interface LedgerEntry {
   id: string;
   type: string;

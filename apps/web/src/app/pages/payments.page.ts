@@ -6,10 +6,11 @@ import { ApiClient, type ApiError } from '../core/api-client.service';
 import { LabelPipe, MomentPipe, MoneyPipe, statusTone } from '../core/format';
 import type { Page, Payment } from '../core/models';
 import { PaymentLauncher } from '../core/payment-launcher.service';
+import { PaymentNoticesComponent } from './payment-notices.component';
 
 @Component({
   selector: 'app-payments-page',
-  imports: [FormsModule, RouterLink, MoneyPipe, MomentPipe, LabelPipe],
+  imports: [FormsModule, RouterLink, MoneyPipe, MomentPipe, LabelPipe, PaymentNoticesComponent],
   template: `
 <div class="page resource-page">
   <section class="page-heading">
@@ -22,6 +23,7 @@ import { PaymentLauncher } from '../core/payment-launcher.service';
   </section>
   @if (error()) { <p class="inline-notice" role="alert">{{ error() }}</p> }
   @if (notice()) { <p class="inline-notice" role="status">{{ notice() }}</p> }
+  <app-payment-notices (changed)="notice.set($event); load()" />
 
   @if (reversing(); as p) {
     <form #editor="ngForm" class="panel operations-form" (ngSubmit)="editor.valid && reverse(p)">

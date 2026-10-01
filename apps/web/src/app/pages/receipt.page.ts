@@ -22,7 +22,7 @@ import type { Receipt } from '../core/models';
   `,
   template: `
 <div class="page">
-  <p class="no-print"><a routerLink="/payments" class="text-button">&larr; Payments</a></p>
+  <p class="no-print"><a [routerLink]="portal ? '/portal/payments' : '/payments'" class="text-button">&larr; {{ portal ? 'My payments' : 'Payments' }}</a></p>
   @if (error()) { <p class="inline-notice" role="alert">{{ error() }}</p> }
   @if (receipt(); as r) {
     <article class="panel receipt" aria-labelledby="receipt-title">
@@ -58,12 +58,15 @@ import type { Receipt } from '../core/models';
 })
 export class ReceiptPage implements OnInit {
   private readonly api = inject(ApiClient);
-  private readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
+  private readonly route = inject(ActivatedRoute).snapshot;
+  private readonly id = this.route.paramMap.get('id')!;
+  /** Tenants read their own receipts through the portal API. */
+  protected readonly portal = this.route.data['source'] === 'portal';
   protected readonly receipt = signal<Receipt | null>(null);
   protected readonly error = signal('');
 
   ngOnInit(): void {
-    this.api.get<Receipt>(`/payments/${this.id}/receipt`).subscribe({
+    this.api.get<Receipt>(`${this.portal ? '/portal' : ''}/payments/${this.id}/receipt`).subscribe({
       next: (receipt) => this.receipt.set(receipt),
       error: (error: ApiError) => this.error.set(error.message),
     });

@@ -1,0 +1,190 @@
+// Design tokens. Components use only these custom properties, never raw colours,
+// so light, dark, and print themes are a token swap.
+
+@mixin light {
+  color-scheme: light;
+
+  --canvas: #f4f6f4;
+  --surface: #ffffff;
+  --surface-2: #f8faf8;
+  --surface-3: #edf3ef;
+  --border: #e1e7e3;
+  --border-strong: #cbd6cf;
+  --text: #17211b;
+  --text-muted: #56645b;
+  --text-subtle: #66736b;
+  --link: #176b4d;
+  --focus: #227e61;
+  --selection: #d8f36b99;
+
+  --primary: #176b4d;
+  --primary-hover: #115a40;
+  --on-primary: #ffffff;
+  --primary-soft: #e4f2ea;
+  --primary-soft-fg: #145c42;
+
+  --success-bg: #e5f4ec;
+  --success-fg: #1c6a4c;
+  --success-border: #c3e2d2;
+  --warning-bg: #fff2df;
+  --warning-fg: #8a4a12;
+  --warning-border: #f0d7b2;
+  --danger-bg: #fdede9;
+  --danger-fg: #a83a25;
+  --danger-border: #f0cbc1;
+  --info-bg: #e9effd;
+  --info-fg: #35569f;
+  --violet-bg: #f0eafa;
+  --violet-fg: #6b4a9e;
+
+  // Chart: "collected" is the story; "billed" is the de-emphasised reference.
+  // Validated with the dataviz palette checker (CVD ΔE ≥ 11, both ≥ 3:1 on surface).
+  --chart-billed: #87948c;
+  --chart-collected: #1f7a58;
+  --chart-grid: #e8ede9;
+  --meter-track: #e1ece5;
+
+  --nav-bg: #102c22;
+  --nav-border: transparent;
+  --nav-fg: #b4c9bf;
+  --nav-fg-strong: #ffffff;
+  --nav-hover: rgb(255 255 255 / 0.07);
+  --nav-active: #1b4636;
+  --accent: #d8f36b;
+  --accent-ink: #173329;
+
+  --scrim: rgb(10 24 18 / 0.48);
+  --topbar-bg: rgb(255 255 255 / 0.86);
+  --skeleton: #e7ece8;
+  --skeleton-shine: #f4f7f5;
+
+  --shadow-xs: 0 1px 2px rgb(16 44 34 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(16 44 34 / 0.04), 0 2px 8px rgb(16 44 34 / 0.04);
+  --shadow-md: 0 2px 4px rgb(16 44 34 / 0.05), 0 10px 24px rgb(16 44 34 / 0.08);
+  --shadow-lg: 0 24px 64px rgb(8 31 20 / 0.24);
+}
+
+@mixin dark {
+  color-scheme: dark;
+
+  --canvas: #0c1411;
+  --surface: #131d19;
+  --surface-2: #17231e;
+  --surface-3: #1d2c26;
+  --border: #23332c;
+  --border-strong: #34483f;
+  --text: #e5eee9;
+  --text-muted: #a5b5ac;
+  --text-subtle: #8fa098;
+  --link: #7fd6b0;
+  --focus: #7fd6b0;
+  --selection: #d8f36b55;
+
+  // Lime on dark green keeps the brand and clears 10:1 contrast.
+  --primary: #d8f36b;
+  --primary-hover: #c9e65a;
+  --on-primary: #132a20;
+  --primary-soft: #1d3a2f;
+  --primary-soft-fg: #a8e6c8;
+
+  --success-bg: rgb(76 196 149 / 0.14);
+  --success-fg: #86dbb6;
+  --success-border: rgb(76 196 149 / 0.3);
+  --warning-bg: rgb(242 170 80 / 0.14);
+  --warning-fg: #f3bd7a;
+  --warning-border: rgb(242 170 80 / 0.3);
+  --danger-bg: rgb(240 110 90 / 0.14);
+  --danger-fg: #f6a593;
+  --danger-border: rgb(240 110 90 / 0.32);
+  --info-bg: rgb(110 150 240 / 0.16);
+  --info-fg: #a9c0f6;
+  --violet-bg: rgb(170 130 230 / 0.16);
+  --violet-fg: #c9b0ef;
+
+  --chart-billed: #6f7d75;
+  --chart-collected: #5fd1a3;
+  --chart-grid: #22312a;
+  --meter-track: #22352c;
+
+  --nav-bg: #0a1712;
+  --nav-border: #1c2a24;
+  --nav-fg: #9fb5ab;
+  --nav-fg-strong: #ffffff;
+  --nav-hover: rgb(255 255 255 / 0.06);
+  --nav-active: #183a2d;
+  --accent: #d8f36b;
+  --accent-ink: #173329;
+
+  --scrim: rgb(0 0 0 / 0.6);
+  --topbar-bg: rgb(19 29 25 / 0.86);
+  --skeleton: #1c2924;
+  --skeleton-shine: #24352e;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.2);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 0.3), 0 10px 24px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 24px 64px rgb(0 0 0 / 0.55);
+}
+
+:root {
+  @include light;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.3125rem;
+  --text-2xl: clamp(1.625rem, 1.25rem + 1.1vw, 2rem);
+  --text-hero: clamp(2.25rem, 1.6rem + 2.2vw, 3.25rem);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --dur-instant: 90ms;
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
+
+  --sidebar-width: 248px;
+  --content-max: 1440px;
+  --gutter: clamp(16px, 3vw, 40px);
+  --mobile-nav-height: 64px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark;
+  }
+}
+:root[data-theme='dark'] {
+  @include dark;
+}
+
+// Paper is always light.
+@media print {
+  :root,
+  :root:not([data-theme='light']),
+  :root[data-theme='dark'] {
+    @include light;
+  }
+}

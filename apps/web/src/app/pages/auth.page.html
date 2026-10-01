@@ -21,16 +21,22 @@
       [attr.aria-busy]="busy()"
     >
       <div class="auth-mobile-brand"><span>R</span>RentFlow</div>
-      <p class="eyebrow">{{ mode() === 'register' ? 'START YOUR WORKSPACE' : 'WELCOME BACK' }}</p>
-      <h2>{{ mode() === 'register' ? 'Create your account' : 'Sign in to RentFlow' }}</h2>
-      @if (invitationAccepted && mode() === 'login') {
-        <p role="status">Invitation accepted. Sign in below to open your new workspace.</p>
+      <p class="eyebrow">
+        {{ mode() === 'register' ? 'START YOUR WORKSPACE' : mode() === 'forgot' ? 'ACCOUNT RECOVERY' : 'WELCOME BACK' }}
+      </p>
+      <h2>
+        {{ mode() === 'register' ? 'Create your account' : mode() === 'forgot' ? 'Reset your password' : 'Sign in to RentFlow' }}
+      </h2>
+      @if (notice()) {
+        <p class="inline-notice" role="status">{{ notice() }}</p>
       }
       <p>
         {{
           mode() === 'register'
             ? 'Set up your rental business in a few minutes.'
-            : 'Welcome back. Sign in to your rental workspace.'
+            : mode() === 'forgot'
+              ? 'Enter your account email and we will send you a reset link.'
+              : 'Welcome back. Sign in to your rental workspace.'
         }}
       </p>
       @if (mode() === 'register') {
@@ -61,7 +67,7 @@
           type="email"
           email
           autocomplete="email" /></label
-      ><label class="field"
+      >@if (mode() !== 'forgot') {<label class="field"
         ><span>Password</span
         ><input
           name="password"
@@ -72,9 +78,9 @@
           [autocomplete]="mode() === 'register' ? 'new-password' : 'current-password'"
         />
         @if (mode() === 'register') {
-          <small>Use at least 12 characters.</small>
+          <small>Use at least 12 characters. A short sentence works well.</small>
         }
-      </label>
+      </label>}
       @if (error()) {
         <div class="auth-error" role="alert">{{ error() }}</div>
       }
@@ -96,15 +102,25 @@
         </details>
       }
       <button class="primary auth-submit" type="submit" [disabled]="busy() || !authForm.valid">
-        {{ busy() ? 'Please wait…' : mode() === 'register' ? 'Create workspace' : 'Sign in' }}
+        {{
+          busy()
+            ? 'Please wait…'
+            : mode() === 'register'
+              ? 'Create workspace'
+              : mode() === 'forgot'
+                ? 'Send reset link'
+                : 'Sign in'
+        }}
       </button>
+      @if (mode() === 'login') {
+        <div class="auth-switch">
+          <button type="button" (click)="switchMode('forgot')">Forgot your password?</button>
+        </div>
+      }
       <div class="auth-switch">
-        {{ mode() === 'register' ? 'Already have an account?' : 'New to RentFlow?' }}
-        <button
-          type="button"
-          (click)="mode.set(mode() === 'register' ? 'login' : 'register'); error.set('')"
-        >
-          {{ mode() === 'register' ? 'Sign in' : 'Create account' }}
+        {{ mode() === 'register' ? 'Already have an account?' : mode() === 'forgot' ? 'Remembered it?' : 'New to RentFlow?' }}
+        <button type="button" (click)="switchMode(mode() === 'login' ? 'register' : 'login')">
+          {{ mode() === 'login' ? 'Create account' : 'Sign in' }}
         </button>
       </div>
     </form>

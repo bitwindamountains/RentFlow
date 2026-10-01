@@ -9,8 +9,9 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
-apps/api/prisma/migrations/*/migration_lock.toml
 apps/api/.data/
 apps/api/backups/
 apps/web/.ui-review/
 *.tsbuildinfo
+.playwright-mcp/
+!.env.*.example

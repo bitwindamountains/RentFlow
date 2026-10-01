@@ -1,14 +1,26 @@
 {
+  "id": "/",
   "name": "RentFlow Rental Manager",
   "short_name": "RentFlow",
-  "description": "Rental operations, billing, payments, and maintenance in one simple workspace.",
-  "start_url": "/dashboard",
+  "description": "Rent collection, tenants, leases, and maintenance for Philippine landlords.",
+  "lang": "en-PH",
+  "start_url": "/dashboard?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#3157d5",
   "orientation": "any",
+  "background_color": "#f4f6f4",
+  "theme_color": "#102c22",
+  "categories": ["business", "finance", "productivity"],
   "icons": [
-    { "src": "icons/rentflow.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/rentflow.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Who owes rent", "short_name": "Arrears", "url": "/billing?status=overdue", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Payments", "short_name": "Payments", "url": "/payments", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Maintenance", "short_name": "Repairs", "url": "/maintenance", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

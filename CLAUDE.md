@@ -2,101 +2,125 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-RentFlow is a rental-operations PWA for Philippine landlords. It's an npm workspaces monorepo (Node 24+, npm 11+):
-- `apps/api`: NestJS 12 on Fastify, Prisma 6, PostgreSQL 17. ESM, so relative imports end in `.js`.
-- `apps/web`: Angular 22, using standalone components, signals and lazy routes.
+RentFlow is a rental-operations PWA for Philippine landlords. It is an npm-workspaces monorepo:
+- `apps/api` is NestJS 12 on Fastify, with Prisma 6 and PostgreSQL 17. It is ESM, so relative imports use `.js` suffixes.
+- `apps/web` is Angular 22, using standalone components, signals, the new control flow, and lazy routes.
+- Node 24+ and npm 11+ are required.
 
 ## Commands
 
-Run these from the repo root:
+Run from the repo root unless noted.
 
 ```sh
-npm install
-cp apps/api/.env.example apps/api/.env
-docker compose up -d                      # dev Postgres; without Docker: npm run db:local --workspace api
-npm run db:deploy --workspace api         # apply migrations
-npm run dev:api                           # http://localhost:3000, Swagger at /api/docs
-npm run dev:web                           # http://localhost:4200 (talks to :3000/api/v1)
-npm run db:seed:test                      # demo@rentflow.local / RentFlowDemo!2026 (refuses in production)
+cp apps/api/.env.example apps/api/.env && npm install
+docker compose up -d                       # Postgres; on Windows without Docker: npm run db:local --workspace api
+npm run db:deploy --workspace api          # apply migrations
+npm run dev:api                            # :3000, Swagger at /api/docs
+npm run dev:web                            # :4200 (the web client targets :3000 when served on :4200)
+npm run db:seed:test                       # demo@rentflow.local / RentFlowDemo!2026
+```
 
-npm run lint --workspace api              # oxlint (web has no linter)
+To check your work, run the same steps as CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)):
+
+```sh
+npm run lint --workspace api               # oxlint (API only; web has no linter)
 npm run typecheck --workspace api
-npm test                                  # API unit tests + web tests
-npm run test:e2e --workspace api          # API e2e against real PostgreSQL
+npm run test --workspace api               # unit tests: src/**/*.spec.ts
+npm run test:e2e --workspace api           # e2e tests: test/**/*.e2e-spec.ts against real Postgres
+npm run test --workspace web -- --watch=false
 npm run build
 ```
 
-Run a single test:
-- **API unit test:** from `apps/api`, run `npx vitest run src/common/money.spec.ts`. Unit specs sit next to the code as `src/**/*.spec.ts`.
-- **API e2e test:** from `apps/api`, run `npx vitest run --config ./vitest.config.e2e.ts test/billing.e2e-spec.ts`. Narrow it further with `-t "<name>"`.
-- **Web test:** run `npm test --workspace web -- --watch=false --include src/app/core/money.spec.ts`. This uses Angular's Vitest-based unit-test builder.
+**Running tests**
+- Run a single API test file with `npx vitest run src/common/money.spec.ts` from `apps/api`. Add `-t "<name>"` to run one test.
+- For a single e2e file, use `npx vitest run --config ./vitest.config.e2e.ts test/portal.e2e-spec.ts`.
+- **e2e database:** the suite starts an embedded PostgreSQL and applies the real migrations ([apps/api/test/global-setup.ts](apps/api/test/global-setup.ts)). It uses `TEST_DATABASE_URL` instead when that is set. Files run serially.
+- **e2e helpers:** `test/helpers.ts` provides a `Client` that keeps the session cookie and sends the CSRF header, plus `registerOwner`, `createRental` and `lastEmail` (reads the in-memory mail outbox).
+- **Windows:** a temp-folder `EBUSY` message during cleanup is noise, not a failure.
 
-The e2e global setup (`apps/api/test/global-setup.ts`) starts an embedded PostgreSQL and applies the production migrations, unless `TEST_DATABASE_URL` is set (CI sets it). Suites run serially. `test/helpers.ts` has a `Client` that acts like a browser: it keeps the session cookie, sends the CSRF header, and adds an `Idempotency-Key` header to idempotent POSTs.
+**Schema changes**
+- Edit [apps/api/prisma/schema.prisma](apps/api/prisma/schema.prisma), then create a migration with `npm run db:migrate --workspace api`.
+- Many invariants live only in hand-written SQL in the migrations. Examples are CHECK constraints, partial unique indexes and same-organization triggers, so add these by hand to the migration.
+- Postgres needs `ALTER TYPE ... ADD VALUE` in its own migration before the new value is used.
 
-CI (`.github/workflows/ci.yml`) runs, in order: `npm audit --omit=dev`, Prisma validate and generate, lint, typecheck, API unit tests, e2e, web tests, build.
+## API architecture
 
-After changing `prisma/schema.prisma`, run `npm run db:migrate --workspace api` and then `npm run db:generate`.
+**Bootstrap.** [bootstrap.ts](apps/api/src/bootstrap.ts) configures Fastify for both `main.ts` and the e2e tests:
+- helmet, cookies, and rate limits;
+- the `/api` prefix plus URI versioning, so routes live under `/api/v1`.
 
-## API architecture (`apps/api/src`)
+The global guard and error filter are registered in `app.module.ts`. Raw-body uploads are accepted only on routes matched by the `uploadRoute` regex in `bootstrap.ts`. Add any new upload route to that regex.
 
-Each feature module (`auth`, `rentals`, `billing`, `payments`, `reports`, `staff`, `work`, `portal`, `jobs`, `storage`, `mail`, `health`) has its own controller and service. Shared infrastructure lives in `common/`. All routes are served under `/api/v1`.
-
-**Authorization is closed by default.**
-- `auth/session.guard.ts` is a global guard. It resolves the session cookie, requires an `x-csrf-token` header on every non-GET request, and enforces `@Roles(...)`.
-- A route with no role list is forbidden. Only `@Public()` skips the guard.
-- The role sets are in `auth/decorators.ts`: `ALL_ROLES`, `FINANCE_READERS`, `MANAGERS`, `COLLECTORS`, `ANY_MEMBER`.
-- `TENANT` is deliberately excluded from the staff role sets. Tenants reach only `/portal` and their own account endpoints.
-- Inject the session with `@Auth()`.
+**Auth: deny by default.**
+- Sessions are an opaque cookie, stored hashed. Mutating requests also need the `x-csrf-token` header.
+- `SessionGuard` is global. Every route must either be `@Public()` or carry `@Roles(...)`; see [auth/decorators.ts](apps/api/src/auth/decorators.ts).
+- `ALL_ROLES` means staff only (OWNER, MANAGER, COLLECTOR, VIEWER, MAINTENANCE).
+- `TENANT` is the portal role. A tenant membership is bound to one `tenantId`, and the database enforces this with a CHECK constraint and a partial unique index.
+- `ANY_MEMBER` adds TENANT and is used only on shared auth routes. Never put TENANT on a staff route, and validate staff role inputs with `IsIn(ALL_ROLES)`.
 
 **Multi-tenancy.**
-- Every query must be scoped to `auth.organizationId`.
-- Database triggers (`rentflow_same_organization`, defined in the `deployment_readiness` migration) also reject any row that references another organization's records.
-- When you add a table with foreign keys to organization-owned records, add a matching trigger in its migration.
-- Portal queries are scoped further, to the single tenant record bound to the portal account.
-- `test/security.e2e-spec.ts` runs an IDOR sweep across every record endpoint. Extend it when you add endpoints.
+- Every query is scoped by `organizationId` from the session. Load records with `findFirst({ where: { id, organizationId } })`; a cross-org ID must return 404.
+- `rentflow_same_organization` triggers in the migrations reject cross-org foreign keys as a backstop. Add one for each new foreign key to an organization-owned table.
+- Portal queries are additionally scoped to the session's `tenantId`. `test/security.e2e-spec.ts` and `test/portal.e2e-spec.ts` hold the IDOR and role sweeps; extend them when you add endpoints.
 
-**Financial rules.** These are invariants; keep them.
-- Posted charges and payments are never edited or deleted. Corrections are adjustments (discount, waiver, credit note), voids or reversals, and each one writes a `LedgerEntry` and an audit entry.
-- `billing/ledger.ts` `postCharge` is the single place a charge is posted. It writes the charge, the ledger debit and the audit entry in the caller's transaction. Rent is unique per lease and billing period.
-- Money is a Prisma `Decimal`, stored as `numeric(19,4)` and validated to 2 decimals. Use the helpers in `common/money.ts` (`parseMoney`, `formatMoney`, `roundMoney`, which rounds half-up). Never use JS floats.
-- On the web side, `core/money.ts` works in integer centavos, and money travels as decimal strings.
-- Financial writes go through `PrismaService.serializable()`, which retries on P2034, so the callback must have no side effects outside the transaction.
-- Payments, charges, deposits and guided setup are wrapped in `IdempotencyService.execute()`, keyed by the `Idempotency-Key` header. The stored response is replayed on a retry.
+**Money and ledger.**
+- Amounts cross the API as decimal strings and are parsed with `parseMoney` and formatted with `formatMoney` from [common/money.ts](apps/api/src/common/money.ts). Never use JS numbers.
+- Posted records are never edited or deleted. Corrections are reversals, voids, waivers, or credit notes.
+- [billing/ledger.ts](apps/api/src/billing/ledger.ts) (`postCharge`) is the single place charges are posted.
+- Payments allocate oldest-first in `PaymentsService.create`.
 
-**Errors.**
-- Throw `DomainError(code, status)` from `common/errors.ts` for expected business failures.
-- Add a user-safe message to its `messages` map.
-- The web app branches on `code`. `ErrorFilter` normalizes responses to `{ code, message }`.
+**Transactions and idempotency.**
+- Money-moving writes take an idempotency key and run through `IdempotencyService.execute({organizationId, key, operation}, input, work)` in a SERIALIZABLE transaction.
+- `PaymentsService.create` accepts a `withinTransaction` hook so other modules can make extra writes atomically with the payment. Portal notice confirmation is the example.
 
-**Dates.**
-- Billing, overdue and lease expiry are computed in the organization's time zone, using the helpers in `common/dates.ts`.
-- Billing and due days are 1–28.
-- The rent rules are documented in `docs/production-operations.md`.
+**Errors and audit.**
+- Throw `DomainError('CODE', status)` from [common/errors.ts](apps/api/src/common/errors.ts) and add the user-facing message to its `messages` map. The web client branches on `code`.
+- Write audit rows with `audit(tx, {...})` inside the same transaction. Personal fields are redacted at write time.
 
-**Other modules.**
-- `jobs/`: a background job runs every 15 minutes under a database lease. It expires leases, posts due scheduled charges with catch-up, and purges expired keys, tokens and sessions. It's disabled with `ENABLE_JOBS=false`, which the e2e config sets.
-- `config/environment.ts`: configuration fails closed. The app won't start without `NODE_ENV`, a Postgres `DATABASE_URL`, HTTPS origins, and, in production, a real mail provider. Tests call `resetEnvironmentCache()`.
-- `storage/`: private uploads in local or S3-compatible storage. File types are checked by content, and per-workspace quotas apply. The request body is the raw file, and Fastify accepts raw bodies only on routes matching `uploadRoute` in `bootstrap.ts`, so a new upload endpoint must be added there.
-- `common/audit.ts`: redacts personal fields from audit logs.
+**Modules.** Feature modules live under `src/`:
+- `rentals`: properties, units, tenants, leases, guided setup
+- `billing`: scheduled rent, balances, periods
+- `payments`
+- `work`: maintenance, documents, expenses, deposits
+- `reports`: dashboard, arrears, reminders, CSV
+- `staff`
+- `portal`: `PortalController` for tenants under `/portal/*`; `PortalAdminController` for staff review of payment notices and portal access
+- `jobs`: background billing, expiry, cleanup every 15 minutes under a DB lock; gated by `ENABLE_JOBS`
+- `storage`: `FileStore` with a local or S3 driver
+- `mail`: `MAIL_PROVIDER=log` prints mail to the console in development
 
-## Web architecture (`apps/web/src/app`)
+**Config.** Environment variables are validated in [config/environment.ts](apps/api/src/config/environment.ts). Production refuses unsafe values.
 
-- `core/api-client.service.ts` (`ApiClient`) is the only HTTP entry point.
-  - It adds credentials and the CSRF header, and normalizes errors to `{ status, code, message }`.
-  - It holds the `profile` signal.
-  - Its `changes` subject lets open pages refresh after writes.
-- `app.routes.ts` uses a `page(path, title, roles, loader)` helper. `authGuard` checks `data.roles`. These role lists mirror the server's but are for UX only; the server enforces roles.
-- Pages are in `pages/*.page.ts`. Staff pages and tenant pages (`portal-*`) are separate route trees.
-- `core/payment-launcher.service.ts` stores an unconfirmed payment, with its idempotency key, in sessionStorage before sending it. Reopening the form offers a safe retry instead of a second payment.
-- Styling is a global, token-based design system in `src/styles/` (`_tokens`, `_base`, `_shell`, `_components`, `_pages`, `_motion`), with light and dark themes via `ThemeService` and `data-theme`. Keep motion behind `prefers-reduced-motion: no-preference`.
-- `apps/web/scripts/check-ui.mjs` is a local-only visual review that uses fixture data. It depends on a machine-specific Edge path and Playwright cache, and is not part of CI.
+**Uploads.**
+- The raw request body is the file.
+- The type is verified by its file signature (`sniffType`): PDF, JPEG, PNG or WebP only.
+- Storage keys are generated by the server.
+- Files are served only through the API, with `nosniff` and a sandbox CSP.
 
-## Conventions
+## Web architecture
 
-- Prettier is configured with single quotes and trailing commas. `.editorconfig` sets 2-space indentation and LF line endings.
-- Never commit `.env` files. `.env.example` (root and `apps/api`) and `deploy/.env.production.example` document the variables.
-- Deployment (Docker Compose with a Caddy HTTPS proxy, plus backups) is documented in `docs/deployment.md`. Runtime behavior is in `docs/production-operations.md`. The original product plan is `rental_manager_full_scale_plan.md`.
-- `apps/api/README.md` is the unmodified Nest starter README. Ignore it.
+**API calls.**
+- [core/api-client.service.ts](apps/web/src/app/core/api-client.service.ts) is the only HTTP entry point. It adds credentials and CSRF and normalizes errors to `{status, code, message}`.
+- It emits `changes` so open screens can refresh.
+- Uploads go through `ApiClient.upload`, which sends the raw body.
+
+**Routing and roles.**
+- Routes are in [app.routes.ts](apps/web/src/app/app.routes.ts), guarded by role.
+- `homeFor(role)` in `core/models.ts` sends TENANT to `/portal` and MAINTENANCE to `/maintenance`; everyone else goes to `/dashboard`.
+- The nav per role is defined in `app.ts`.
+- `core/models.ts` holds the shared API types.
+
+**Pages.** Pages live in `pages/` as one standalone component each, often with inline templates. They use signals for state and the `money`, `moment` and `label` pipes.
+
+**Styles.**
+- There are no per-component stylesheets for shared UI. The global design system is SCSS partials in `src/styles/`: `_tokens`, `_base`, `_shell`, `_components`, `_pages`, `_motion`.
+- Colours are tokens with light and dark themes. `ThemeService` sets `data-theme`.
+- All motion must sit behind `prefers-reduced-motion: no-preference`, including view transitions and `animate.enter`/`animate.leave`.
+
+## Docs
+
+- [docs/deployment.md](docs/deployment.md): Docker Compose with Caddy, and the environment variables.
+- [docs/production-operations.md](docs/production-operations.md): safeguards, tenant portal, background jobs, rent rules, known limitations. Update it when behaviour changes.
 
 ## Session workflow
 - At the start of each session, read PROGRESS.md to see current status and next steps.

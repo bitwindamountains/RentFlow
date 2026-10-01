@@ -19,12 +19,12 @@ export class StaffService {
   async list(organizationId: string) {
     const [members, invitations] = await Promise.all([
       this.prisma.membership.findMany({
-        where: { organizationId, status: { not: 'REVOKED' } },
+        where: { organizationId, status: { not: 'REVOKED' }, role: { not: 'TENANT' } },
         include: { user: { select: { id: true, displayName: true, email: true } } },
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.staffInvitation.findMany({
-        where: { organizationId, status: 'PENDING', expiresAt: { gt: new Date() } },
+        where: { organizationId, status: 'PENDING', expiresAt: { gt: new Date() }, role: { not: 'TENANT' } },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
@@ -49,7 +49,7 @@ export class StaffService {
   }
 
   async invite(organizationId: string, actorUserId: string, input: { email: string; role: MembershipRole }) {
-    if (input.role === 'OWNER') throw new DomainError('INVALID_ROLE', 422);
+    if (input.role === 'OWNER' || input.role === 'TENANT') throw new DomainError('INVALID_ROLE', 422);
     const email = normalizeEmail(input.email);
     const token = randomToken(32);
     const invitation = await this.prisma.$transaction(async (tx) => {
@@ -111,7 +111,7 @@ export class StaffService {
   async revokeInvitation(organizationId: string, actorUserId: string, id: string) {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.staffInvitation.updateMany({
-        where: { id, organizationId, status: 'PENDING' },
+        where: { id, organizationId, status: 'PENDING', role: { not: 'TENANT' } },
         data: { status: 'REVOKED' },
       });
       if (!updated.count) throw notFound();
@@ -136,10 +136,11 @@ export class StaffService {
     membershipId: string,
     input: { role?: MembershipRole; status?: 'ACTIVE' | 'SUSPENDED' | 'REVOKED' },
   ) {
-    if (input.role === 'OWNER') throw new DomainError('INVALID_ROLE', 422);
+    if (input.role === 'OWNER' || input.role === 'TENANT') throw new DomainError('INVALID_ROLE', 422);
     return this.prisma.$transaction(async (tx) => {
       const member = await tx.membership.findFirst({ where: { id: membershipId, organizationId } });
-      if (!member || member.status === 'REVOKED') throw notFound('MEMBER_NOT_FOUND');
+      // Tenant portal accounts are managed from the tenant record, never promoted to staff.
+      if (!member || member.status === 'REVOKED' || member.role === 'TENANT') throw notFound('MEMBER_NOT_FOUND');
       if (member.userId === actorUserId) throw new DomainError('SELF_CHANGE_NOT_ALLOWED', 422);
       if (member.role === 'OWNER') throw new DomainError('OWNER_PROTECTED', 422);
       const updated = await tx.membership.update({
@@ -167,13 +168,14 @@ export class StaffService {
   async acceptInvitation(input: { token: string; name?: string; password: string }) {
     const invitation = await this.prisma.staffInvitation.findUnique({
       where: { tokenHash: sha256(input.token) },
-      include: { organization: { select: { slug: true, status: true } } },
+      include: { organization: { select: { slug: true, status: true } }, tenant: { select: { status: true } } },
     });
     if (
       !invitation ||
       invitation.status !== 'PENDING' ||
       invitation.expiresAt <= new Date() ||
-      invitation.organization.status !== 'ACTIVE'
+      invitation.organization.status !== 'ACTIVE' ||
+      invitation.tenant?.status === 'ARCHIVED'
     )
       throw new DomainError('INVITATION_INVALID', 400);
     const existing = await this.prisma.user.findUnique({ where: { email: invitation.email } });
@@ -209,7 +211,7 @@ export class StaffService {
       if (member)
         await tx.membership.update({
           where: { id: member.id },
-          data: { role: invitation.role, status: 'ACTIVE', joinedAt: new Date() },
+          data: { role: invitation.role, tenantId: invitation.tenantId, status: 'ACTIVE', joinedAt: new Date() },
         });
       else
         await tx.membership.create({
@@ -217,6 +219,7 @@ export class StaffService {
             organizationId: invitation.organizationId,
             userId: account.id,
             role: invitation.role,
+            tenantId: invitation.tenantId,
             status: 'ACTIVE',
             joinedAt: new Date(),
           },
@@ -224,12 +227,12 @@ export class StaffService {
       await audit(tx, {
         organizationId: invitation.organizationId,
         actorUserId: account.id,
-        action: 'STAFF_INVITATION_ACCEPTED',
+        action: invitation.role === 'TENANT' ? 'PORTAL_INVITATION_ACCEPTED' : 'STAFF_INVITATION_ACCEPTED',
         entityType: 'StaffInvitation',
         entityId: invitation.id,
       });
       return account;
     });
-    return { accepted: true, email: user.email, workspace: invitation.organization.slug };
+    return { accepted: true, email: user.email, workspace: invitation.organization.slug, role: invitation.role };
   }
 }

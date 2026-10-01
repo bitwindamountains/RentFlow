@@ -58,7 +58,8 @@ export async function createApp(options: { logger?: false } = {}): Promise<NestF
       message: `Too many requests. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
     }),
   });
-  // Raw file bodies are accepted on the upload route only, up to UPLOAD_MAX_BYTES.
+  // Raw file bodies are accepted on the two upload routes only, up to UPLOAD_MAX_BYTES.
+  const uploadRoute = /\/(documents\/files|portal\/payment-notices\/[0-9a-f-]{36}\/proof)$/;
   app
     .getHttpAdapter()
     .getInstance()
@@ -66,7 +67,7 @@ export async function createApp(options: { logger?: false } = {}): Promise<NestF
       Object.keys(UPLOAD_TYPES),
       { parseAs: 'buffer', bodyLimit: env.UPLOAD_MAX_BYTES },
       (request, body, done) => {
-        if (!request.url.split('?')[0]!.endsWith('/documents/files')) {
+        if (!uploadRoute.test(request.url.split('?')[0]!)) {
           done(Object.assign(new Error('Unsupported Media Type'), { statusCode: 415 }), undefined);
           return;
         }

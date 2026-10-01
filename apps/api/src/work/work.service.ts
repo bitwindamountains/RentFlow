@@ -17,7 +17,7 @@ const transitions: Record<MaintenanceStatus, MaintenanceStatus[]> = {
   CANCELLED: ['OPEN'],
 };
 
-export const DOCUMENT_ENTITIES = ['Tenant', 'Lease', 'Property', 'Unit', 'Expense', 'MaintenanceRequest'] as const;
+export const DOCUMENT_ENTITIES = ['Tenant', 'Lease', 'Property', 'Unit', 'Expense', 'MaintenanceRequest', 'PaymentNotice'] as const;
 export type DocumentEntity = (typeof DOCUMENT_ENTITIES)[number];
 
 interface DocumentMeta {
@@ -404,6 +404,8 @@ export class WorkService {
         return Boolean(await tx.expense.findFirst({ where, select: { id: true } }));
       case 'MaintenanceRequest':
         return Boolean(await tx.maintenanceRequest.findFirst({ where, select: { id: true } }));
+      case 'PaymentNotice':
+        return Boolean(await tx.paymentNotice.findFirst({ where, select: { id: true } }));
     }
   }
 }
@@ -461,6 +463,7 @@ function maintenanceView(
     priority: row.priority,
     status: row.status,
     assignedTo: row.assignedTo,
+    reportedByTenant: row.tenantId !== null,
     dueOn: row.dueOn ? formatDateOnly(row.dueOn) : null,
     completedAt: row.completedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),

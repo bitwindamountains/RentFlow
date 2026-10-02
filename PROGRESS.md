@@ -48,7 +48,7 @@ The optional-features list is finished and merged into `main` locally as `ae40ec
    1. Run `npm run db:local --workspace api`.
    2. In a second terminal, run `npm run db:deploy --workspace api`.
 
-   Eight migrations are pending:
+   Seven migrations are pending:
    - `deployment_readiness`
    - `document_uploads`
    - `tenant_role`

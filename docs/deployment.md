@@ -39,6 +39,7 @@ The API validates its configuration at startup and exits with a clear message if
 | `SESSION_ABSOLUTE_HOURS` / `SESSION_IDLE_MINUTES` | Default 12 h absolute, 120 min idle |
 | `STORAGE_DRIVER` | `local` (default: the `uploads` volume at `STORAGE_DIR=/data/uploads`) or `s3` (any S3-compatible bucket; see the example env file). The bucket must be **private**; files are only served through the API. |
 | `UPLOAD_MAX_MB` / `STORAGE_QUOTA_MB` | Per-file limit (default 10 MB) and per-workspace total (default 2 GB) |
+| `MFA_ENCRYPTION_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`). It encrypts authenticator-app secrets for two-step sign-in. Without it, people cannot turn on two-step sign-in. Keep a copy with your backups: if it is lost, accounts with two-step sign-in can only sign in with recovery codes until an admin clears `mfaSecret`. |
 
 ## 3. Launch
 
@@ -103,4 +104,5 @@ Then point a staging API at it and confirm the dashboard totals match.
 - [ ] Password reset email arrives, and the link works once.
 - [ ] Backups run (database **and** uploaded documents) and a restore drill has succeeded.
 - [ ] If using S3 storage, the bucket blocks all public access.
+- [ ] `MFA_ENCRYPTION_KEY` is set and backed up, and owners have turned on two-step sign-in (Account page).
 - [ ] A privacy notice for tenants is published (Data Privacy Act of 2012, RA 10173), and a Data Protection Officer is designated if required.

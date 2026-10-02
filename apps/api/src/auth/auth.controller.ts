@@ -32,6 +32,20 @@ class ChangePasswordDto {
   @IsString() @MinLength(1) @MaxLength(PASSWORD_MAX_LENGTH) currentPassword!: string;
   @IsString() @MinLength(12) @MaxLength(PASSWORD_MAX_LENGTH) newPassword!: string;
 }
+class MfaLoginDto {
+  @IsString() @MinLength(20) @MaxLength(100) challenge!: string;
+  @IsString() @MinLength(6) @MaxLength(20) code!: string;
+  @IsOptional() @IsString() @MaxLength(160) workspace?: string;
+}
+class PasswordDto {
+  @IsString() @MinLength(1) @MaxLength(PASSWORD_MAX_LENGTH) password!: string;
+}
+class MfaCodeDto {
+  @IsString() @MinLength(6) @MaxLength(20) code!: string;
+}
+class MfaChangeDto extends PasswordDto {
+  @IsString() @MinLength(6) @MaxLength(20) code!: string;
+}
 class SwitchWorkspaceDto {
   @IsString() @MinLength(1) @MaxLength(160) workspace!: string;
 }
@@ -66,7 +80,54 @@ export class AuthController {
     @Headers('user-agent') userAgent: string | undefined,
     @Res({ passthrough: true }) reply: CookieReply,
   ) {
-    return this.startSession(reply, await this.auth.login({ ...input, userAgent }));
+    const result = await this.auth.login({ ...input, userAgent });
+    // With two-step sign-in on, no session exists until the code is checked.
+    if ('mfaRequired' in result) return result;
+    return this.startSession(reply, result);
+  }
+
+  @Public()
+  @RateLimit(10, '15 minutes')
+  @HttpCode(200)
+  @Post('login/mfa')
+  async loginMfa(
+    @Body() input: MfaLoginDto,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Res({ passthrough: true }) reply: CookieReply,
+  ) {
+    return this.startSession(reply, await this.auth.completeMfaLogin({ ...input, userAgent }));
+  }
+
+  @Roles(...ANY_MEMBER)
+  @RateLimit(10, '15 minutes')
+  @HttpCode(200)
+  @Post('mfa/setup')
+  mfaSetup(@Auth() session: SessionContext, @Body() input: PasswordDto) {
+    return this.auth.startMfaSetup(session, input.password);
+  }
+
+  @Roles(...ANY_MEMBER)
+  @RateLimit(10, '15 minutes')
+  @HttpCode(200)
+  @Post('mfa/enable')
+  mfaEnable(@Auth() session: SessionContext, @Body() input: MfaCodeDto) {
+    return this.auth.enableMfa(session, input.code);
+  }
+
+  @Roles(...ANY_MEMBER)
+  @RateLimit(10, '15 minutes')
+  @HttpCode(204)
+  @Post('mfa/disable')
+  async mfaDisable(@Auth() session: SessionContext, @Body() input: MfaChangeDto) {
+    await this.auth.disableMfa(session, input.password, input.code);
+  }
+
+  @Roles(...ANY_MEMBER)
+  @RateLimit(10, '15 minutes')
+  @HttpCode(200)
+  @Post('mfa/recovery-codes')
+  mfaRecoveryCodes(@Auth() session: SessionContext, @Body() input: MfaChangeDto) {
+    return this.auth.regenerateRecoveryCodes(session, input.password, input.code);
   }
 
   @Roles(...ANY_MEMBER)

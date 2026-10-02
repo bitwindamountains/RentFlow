@@ -204,23 +204,32 @@ model Organization {
 }
 
 model User {
-  id              String       @id @default(uuid()) @db.Uuid
-  email           String       @unique
-  displayName     String
-  passwordHash    String
-  emailVerifiedAt DateTime?    @db.Timestamptz(3)
-  disabledAt      DateTime?    @db.Timestamptz(3)
-  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
-  memberships     Membership[]
-  auditEvents     AuditLog[]
-  sessions        Session[]
-  tokens          UserToken[]
+  id               String            @id @default(uuid()) @db.Uuid
+  email            String            @unique
+  displayName      String
+  passwordHash     String
+  emailVerifiedAt  DateTime?         @db.Timestamptz(3)
+  disabledAt       DateTime?         @db.Timestamptz(3)
+  /// Authenticator-app (TOTP) secret, AES-256-GCM encrypted with MFA_ENCRYPTION_KEY. Set only while MFA is on.
+  mfaSecret        String?
+  /// Secret generated at setup, awaiting the first code.
+  mfaPendingSecret String?
+  mfaEnabledAt     DateTime?         @db.Timestamptz(3)
+  /// Last accepted TOTP time step; older or equal steps are refused (no code reuse).
+  mfaLastStep      Int?
+  recoveryCodes    MfaRecoveryCode[]
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  memberships      Membership[]
+  auditEvents      AuditLog[]
+  sessions         Session[]
+  tokens           UserToken[]
 }
 
 enum UserTokenType {
   PASSWORD_RESET
   EMAIL_VERIFICATION
+  MFA_CHALLENGE
 }
 
 model UserToken {
@@ -230,6 +239,8 @@ model UserToken {
   tokenHash String        @unique @db.Char(64)
   expiresAt DateTime      @db.Timestamptz(3)
   usedAt    DateTime?     @db.Timestamptz(3)
+  /// Wrong codes entered against an MFA challenge.
+  attempts  Int           @default(0)
   createdAt DateTime      @default(now()) @db.Timestamptz(3)
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -788,4 +799,16 @@ model PaymentNotice {
   @@index([organizationId, status, createdAt])
   @@index([tenantId, createdAt])
   @@index([leaseId])
+}
+
+/// One-time MFA recovery codes, stored as SHA-256 hashes.
+model MfaRecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  codeHash  String    @unique @db.Char(64)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

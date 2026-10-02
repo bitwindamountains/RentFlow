@@ -2,56 +2,71 @@
 
 ## Current task
 
-The tenant portal is merged into `main` locally (`4a98125`) and has not been pushed. Next is applying the pending database migrations, which the user needs to run (see Next steps).
+The optional-features list is finished and merged into `main` locally as `ae40ec3`. Nothing has been pushed. Two things are waiting on the user:
+- applying the database migrations;
+- deciding whether to push.
 
 ## Done (newest first)
 
-- **2026-10-01: Cleanup.** Removed what another Claude session had changed, which the user said was a mistake:
-  - It had replaced CLAUDE.md and PROGRESS.md with its own versions. Both are restored to this session's versions.
-  - The automated-reminders work started from its plan is parked on branch `auto-reminders` (`e7b969c`, `a2e9f0e`). It is not merged into `main`.
-- **2026-10-01: Dev database backup.** Made a backup copy of the local dev database, called `rentflow_backup_20261001`, in the same local server (`apps/api/.data/postgres`). It was taken before the migrations are applied.
-- **2026-10-01: Merged `tenant-portal` into `main`** (`4a98125`) after a full local CI run: audit, lint, typecheck, 41 unit tests, 63 e2e tests, 14 web tests, and the build.
-- **2026-10-01: Session workflow.** Added CLAUDE.md and this file.
-- **Tenant portal** (`3c1e578` API, `1dfeeac` web):
-  - New `TENANT` membership role, bound to one tenant record by a CHECK constraint and a partial unique index. Archived tenants are signed out and can't sign in.
-  - Staff on the tenant's page can invite the tenant (by email, plus a copyable link), resend the invite, or revoke access.
-  - Tenants can see:
-    - what they owe and what is overdue;
-    - their open charges and lease;
-    - their receipts.
-  - Tenants can report payments with up to 3 proof screenshots. Each report is a `PaymentNotice`; nothing is posted until staff confirm it.
-  - Staff review the reports on the Payments page:
-    - **Confirm** posts the payment and receipt atomically, idempotent with key `notice-<id>`.
-    - **Not received** needs a reason, which the tenant sees.
-  - Tenants can request repairs, which are tagged `reportedByTenant`.
-  - Added 11 portal e2e tests. A browser walkthrough of the whole flow passed.
-- **Merged `deploy-readiness` into `main`** (`75cf305`).
-- **Document uploads:** private PDF, JPEG, PNG and WebP files, checked by content, stored locally or on S3, with a per-workspace quota.
-- **Phase 2 redesign:** token-based SCSS design system, dark mode, bento dashboard, and motion that respects reduced-motion.
-- **Deployment readiness and security hardening:**
-  - Session and CSRF auth, roles denied by default.
-  - Same-organization DB triggers and idempotency.
-  - Fail-closed config, Docker plus Caddy deployment, CI, and e2e tests on real Postgres.
+- **2026-10-02: Merged `mfa` into `main`** (`ae40ec3`). The `mfa` branch also contains `portal-followups`. A full local CI run passed before the merge:
+  - `npm audit` found 0 vulnerabilities.
+  - Lint and typecheck were clean.
+  - API: 48 unit tests and 73 e2e tests passed. Web: 14 tests passed. The build passed.
+  - The migrations show no drift from the schema.
+- **Visual review rebuilt** (`f3b394b`).
+  - `apps/web/scripts/check-ui.mjs` now runs against the real API on a throwaway database instead of the old fixtures, which no longer matched the API.
+  - It checks 22 staff, portal and public pages at four widths, in light and dark.
+  - It fails on page errors, console errors, horizontal overflow, and dashboard amounts that wrap.
+  - On its first run it found two real bugs, both fixed in `cdf9dd1`:
+    - Wide tables pushed phone pages sideways. The cause was the screen-reader-only header escaping the table's scroll box.
+    - Amounts in the small dashboard tiles broke mid-number at 320 px.
+- **Two-step sign-in (MFA)** (`7cb3288` API, `77470b1` web).
+  - Optional, per person, using an authenticator app (TOTP), with replay protection.
+  - The secret is AES-256-GCM encrypted with the new `MFA_ENCRYPTION_KEY`.
+  - Sign-in issues a 5-minute single-use challenge that allows 5 wrong codes.
+  - Each account gets 10 hashed one-time recovery codes.
+  - Security notices are emailed.
+  - Covered by 5 e2e tests and 6 unit tests, including the RFC 6238 test vectors. A browser check passed.
+- **Documents shared with tenants** (`f754c69` API, `597e40e` web).
+  - New `DocumentRecord.sharedWithTenant` flag. A CHECK constraint limits sharing to documents attached to a tenant or a lease.
+  - The portal has a Documents page.
+  - The tenant page now also lists lease documents.
+  - A test that deliberately removed the portal scope failed, as it should.
+- **Staff email alerts** for tenant payment reports and repair requests (`297908e`).
+  - Sent through the `OutboxEvent` table: written in the same transaction as the report, and retried with backoff.
+- **Fixed a date-dependent billing test** (`da21d13`). The rent-change test only passed on the 1st of the month.
+- **2026-10-01: Cleanup.** Removed what another Claude session had changed, which the user said was a mistake. The automated-reminders work started from its plan is parked on branch `auto-reminders` and is not merged.
+- **2026-10-01: Dev database backup.** Made a backup copy of the local dev database, called `rentflow_backup_20261001`, in `apps/api/.data/postgres`.
+- **2026-10-01:** Merged `tenant-portal` into `main` (`4a98125`). Added CLAUDE.md and this file.
+- **Earlier:**
+  - The tenant portal.
+  - Merged `deploy-readiness`: document uploads, the Phase 2 redesign, and deployment readiness and security hardening.
 
 ## Next steps
 
 1. **User action:** apply the migrations to the local dev database. The automatic attempt was blocked by permissions.
-   1. Start the database with `npm run db:local --workspace api`.
+   1. Run `npm run db:local --workspace api`.
    2. In a second terminal, run `npm run db:deploy --workspace api`.
 
-   Four migrations are pending: `deployment_readiness`, `document_uploads`, `tenant_role` and `tenant_portal`.
+   Eight migrations are pending:
+   - `deployment_readiness`
+   - `document_uploads`
+   - `tenant_role`
+   - `tenant_portal`
+   - `tenant_shared_documents`
+   - `mfa_token_type`
+   - `mfa`
 
-   If a migration fails on old dev data, the backup `rentflow_backup_20261001` is available. Once everything works, it can be dropped.
-2. Build the Docker images once Docker is installed. They have never been built here.
+   If a migration fails on old dev data, the backup `rentflow_backup_20261001` is available.
+2. **Production:** set `MFA_ENCRYPTION_KEY` (`openssl rand -base64 32`) and back it up. Without it, two-step sign-in stays unavailable.
 3. Push `main` only when the user asks.
-4. Decide what to do with the parked `auto-reminders` branch: keep it, merge it later, or delete it with `git branch -D auto-reminders`.
-5. Optional future work. Each item needs the user's go-ahead:
-   - an online payment gateway;
-   - MFA;
-   - sharing documents with tenants;
-   - staff notifications for new tenant reports;
-   - updating the outdated `apps/web/scripts/check-ui.mjs`;
-   - a shared rate-limit store before running more than one API instance.
+4. **Parked `auto-reminders` branch:** keep it, merge it later, or delete it with `git branch -D auto-reminders`. If it is merged:
+   - It has the same date-dependent billing test bug; take `da21d13`.
+   - Its migration timestamp is `20261004090000`, which sorts before the shared-documents migration. That is fine.
+5. Build the Docker images once Docker is installed. They have never been built here.
+6. Not done, on purpose:
+   - **Online payment gateway:** needs a provider account and keys.
+   - **Shared rate-limit store:** only needed before running more than one API instance. The deployment runs one.
 
 ## Notes / decisions
 
@@ -61,11 +76,15 @@ The tenant portal is merged into `main` locally (`4a98125`) and has not been pus
 - **Payment reports** are notices, not payments, so a tenant can never post anything to the ledger.
   - Notices older than 90 days are rejected.
   - A tenant can have at most 10 pending notices.
-- **Idempotency** is scoped per organization, key and operation, not per user.
+- **Idempotency** is scoped per organization, key and operation, not per user. Side effects such as emails go through the outbox inside the same transaction, so replays never repeat them.
+- **MFA design choices:**
+  - It is optional per person. Owners cannot require it for staff yet; that would be a possible next step.
+  - If `MFA_ENCRYPTION_KEY` is missing in production, setup is refused rather than the server failing to start, so existing deployments keep starting.
+- **Validated DTOs** carry absent fields as `undefined`. Filter them out before spreading over existing values.
 - **Windows tooling:**
   - Bash heredocs and `node -e` mangle backticks and backslashes, so write multi-line edit scripts to `.cjs` files instead.
   - The e2e `EBUSY` message during cleanup is harmless.
-  - Stopping `db:local` from a background task can leave `postgres.exe` helper processes behind. Port 5432 is then closed, so they are harmless.
-- **Visual checks:** use playwright-core with the cached Chromium 1243 against a throwaway embedded Postgres on port 54999. Never point them at the dev database.
-- **Pending authorization:** the Supabase MCP server needs authorization through `/mcp`.
+  - Stopping a background `ng serve` or embedded Postgres with TaskStop can leave child processes behind. They hold ports or shared memory ("pre-existing shared memory block"). Check with `Get-NetTCPConnection` and `Get-CimInstance Win32_Process`, then stop only your own leftovers.
+- **Visual checks:** prefer `node apps/web/scripts/check-ui.mjs`. It kills its own process tree. Never point browser checks at the dev database.
+- **Pending authorization:** the Supabase and Creative Claw MCP servers need authorization through `/mcp`.
 - **Known product limitations** are listed in `docs/production-operations.md`: no virus scanning of uploads, acknowledgement receipts only (not BIR official receipts), per-instance rate limits, and no payment gateway.

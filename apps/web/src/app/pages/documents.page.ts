@@ -4,15 +4,8 @@ import { ActivatedRoute } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { MomentPipe } from '../core/format';
+import { ACCEPTED_FILE_TYPES as ACCEPTED, describeFile } from '../core/files';
 import type { DocumentRecord, Property, TenantSummary } from '../core/models';
-
-/** Mirrors the API's allow-list; the server also checks each file's content. */
-const ACCEPTED: Record<string, string> = {
-  'application/pdf': 'PDF',
-  'image/jpeg': 'JPEG',
-  'image/png': 'PNG',
-  'image/webp': 'WebP',
-};
 const MAX_BYTES = 10 * 1_048_576;
 
 @Component({
@@ -82,9 +75,12 @@ const MAX_BYTES = 10 * 1_048_576;
             <td><a [href]="href(d)" target="_blank" rel="noopener noreferrer"><strong>{{ d.name }}</strong></a></td>
             <td>{{ d.kind === 'file' ? describeFile(d.contentType, d.sizeBytes) : 'External link' }}</td>
             <td>{{ d.category }}</td>
-            <td>{{ describe(d) }}</td>
+            <td>{{ describe(d) }}@if (d.sharedWithTenant) { <small class="status success">Tenant can see</small> }</td>
             <td>{{ d.createdAt | moment: 'date' }}</td>
-            <td>@if (canWrite()) { <button class="text-button" type="button" (click)="remove(d)">Remove</button> }</td>
+            <td class="row-actions">@if (canWrite()) {
+              @if (shareable(d)) { <button class="text-button" type="button" (click)="toggleShare(d)">{{ d.sharedWithTenant ? 'Stop sharing' : 'Share with tenant' }}</button> }
+              <button class="text-button" type="button" (click)="remove(d)">Remove</button>
+            }</td>
           </tr>
         } @empty { <tr><td colspan="6" class="empty-cell">{{ loading() ? 'Loading…' : 'No documents yet.' }}</td></tr> }
       </tbody>
@@ -93,6 +89,9 @@ const MAX_BYTES = 10 * 1_048_576;
 </div>`,
   styles: `
     .segmented { margin-bottom: var(--space-5); }
+    .row-actions { white-space: nowrap; }
+    .row-actions .text-button + .text-button { margin-left: var(--space-3); }
+    td small.status { display: inline-flex; margin-left: var(--space-2); }
     input[type='file'] { padding: 9px 12px; cursor: pointer; }
     input[type='file']::file-selector-button {
       margin-right: var(--space-3);
@@ -151,9 +150,22 @@ export class DocumentsPage implements OnInit {
   }
 
   protected describeFile(type: string | null | undefined, size: number | null | undefined): string {
-    const kind = ACCEPTED[type ?? ''] ?? 'File';
-    if (!size) return kind;
-    return size < 1_048_576 ? `${kind} · ${Math.max(1, Math.round(size / 1024))} KB` : `${kind} · ${(size / 1_048_576).toFixed(1)} MB`;
+    return describeFile(type, size);
+  }
+
+  protected shareable(d: DocumentRecord): boolean {
+    return d.entityType === 'Tenant' || d.entityType === 'Lease';
+  }
+
+  protected toggleShare(d: DocumentRecord): void {
+    const shared = !d.sharedWithTenant;
+    this.api.patch<DocumentRecord>(`/documents/${d.id}/sharing`, { shared }).subscribe({
+      next: () => {
+        this.notice.set(shared ? `"${d.name}" is now in the tenant's portal.` : `"${d.name}" is no longer shared.`);
+        this.load();
+      },
+      error: (error: ApiError) => this.error.set(error.message),
+    });
   }
 
   protected pick(event: Event): void {

@@ -67,6 +67,7 @@ export class App {
     { label: 'Home', route: '/portal', roles: ['TENANT'], section: 'My rental' },
     { label: 'Payments', route: '/portal/payments', roles: ['TENANT'] },
     { label: 'Repairs', route: '/portal/repairs', roles: ['TENANT'] },
+    { label: 'Documents', route: '/portal/documents', roles: ['TENANT'] },
     { label: 'Dashboard', route: '/dashboard', roles: FINANCE, section: 'Workspace' },
     { label: 'Properties', route: '/properties', roles: FINANCE },
     { label: 'Tenants', route: '/tenants', roles: FINANCE },
@@ -100,6 +101,7 @@ export class App {
     '/portal': 'M3 11l9-8 9 8 M5 9.5V21h5v-6h4v6h5V9.5',
     '/portal/payments': 'M3 6h18v14H3z M3 10h18 M7 15h4',
     '/portal/repairs': 'M14 6a5 5 0 0 0-6 6L2 18l4 4 6-6a5 5 0 0 0 6-6l-4 2-3-3z',
+    '/portal/documents': 'M6 3h9l4 4v14H6z M15 3v4h4 M9 12h7 M9 16h7',
   };
   protected readonly visibleNav = computed(() => {
     const role = this.profile()?.role;

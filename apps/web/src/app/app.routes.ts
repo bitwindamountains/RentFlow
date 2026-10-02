@@ -58,6 +58,7 @@ export const routes: Routes = [
     data: { roles: TENANT, source: 'portal' },
   },
   page('portal/repairs', 'Repairs', TENANT, () => import('./pages/portal-repairs.page').then((m) => m.PortalRepairsPage)),
+  page('portal/documents', 'Documents', TENANT, () => import('./pages/portal-documents.page').then((m) => m.PortalDocumentsPage)),
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: '**', redirectTo: 'dashboard' },
 ];

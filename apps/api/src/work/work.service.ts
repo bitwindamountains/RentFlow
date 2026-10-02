@@ -345,10 +345,33 @@ export class WorkService {
     }
   }
 
-  /** Opens an uploaded file for download after the organization-scoped lookup. */
-  async openDocument(organizationId: string, id: string) {
+  /** Shares a tenant's or lease's document with the tenant in the portal, or stops sharing it. */
+  async setDocumentSharing(organizationId: string, actorUserId: string, id: string, shared: boolean) {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.documentRecord.findFirst({ where: { id, organizationId, deletedAt: null } });
+      if (!row) throw notFound('DOCUMENT_NOT_FOUND');
+      if (shared && !(row.entityId && (row.entityType === 'Tenant' || row.entityType === 'Lease')))
+        throw new DomainError('DOCUMENT_NOT_SHAREABLE', 422);
+      const updated = await tx.documentRecord.update({ where: { id: row.id }, data: { sharedWithTenant: shared } });
+      if (row.sharedWithTenant !== shared)
+        await audit(tx, {
+          organizationId,
+          actorUserId,
+          action: shared ? 'DOCUMENT_SHARED_WITH_TENANT' : 'DOCUMENT_UNSHARED',
+          entityType: 'DocumentRecord',
+          entityId: row.id,
+        });
+      return documentView(updated);
+    });
+  }
+
+  /**
+   * Opens an uploaded file for download after the organization-scoped lookup.
+   * `extra` narrows it further (the portal passes its tenant scope).
+   */
+  async openDocument(organizationId: string, id: string, extra: Prisma.DocumentRecordWhereInput = {}) {
     const row = await this.prisma.documentRecord.findFirst({
-      where: { id, organizationId, deletedAt: null, storageKey: { not: null } },
+      where: { ...extra, id, organizationId, deletedAt: null, storageKey: { not: null } },
     });
     if (!row?.storageKey || !row.contentType) throw notFound('DOCUMENT_NOT_FOUND');
     const file = await this.files.get(row.storageKey);
@@ -415,7 +438,7 @@ function assertEntityPair(input: DocumentMeta): void {
     throw new DomainError('RESOURCE_NOT_FOUND', 422, 'Choose both the record type and the record.');
 }
 
-function documentView(row: Prisma.DocumentRecordGetPayload<object>) {
+export function documentView(row: Prisma.DocumentRecordGetPayload<object>) {
   return {
     id: row.id,
     name: row.name,
@@ -424,6 +447,7 @@ function documentView(row: Prisma.DocumentRecordGetPayload<object>) {
     entityId: row.entityId,
     kind: row.storageKey ? ('file' as const) : ('link' as const),
     url: row.url,
+    sharedWithTenant: row.sharedWithTenant,
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,
     createdAt: row.createdAt.toISOString(),

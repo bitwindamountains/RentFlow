@@ -357,6 +357,8 @@ summary {
 
 /* ---------- Tables ---------- */
 .table-wrap {
+  // Contains absolutely positioned children (e.g. .sr-only headers) so they scroll with the table instead of widening the page.
+  position: relative;
   width: 100%;
   max-width: 100%;
   overflow-x: auto;

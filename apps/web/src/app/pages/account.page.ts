@@ -3,7 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { LabelPipe, MomentPipe } from '../core/format';
+import { homeFor } from '../core/models';
 import { ThemeService, type ThemePreference } from '../core/theme.service';
+import { MfaSettingsComponent } from './mfa-settings.component';
 
 interface SessionRow {
   id: string;
@@ -16,7 +18,7 @@ interface SessionRow {
 
 @Component({
   selector: 'app-account-page',
-  imports: [FormsModule, MomentPipe, LabelPipe],
+  imports: [FormsModule, MomentPipe, LabelPipe, MfaSettingsComponent],
   template: `
 <div class="page operations-page">
   <section class="page-heading">
@@ -34,6 +36,8 @@ interface SessionRow {
       <button class="secondary" type="button" (click)="resend()" [disabled]="busy()">Send verification email</button>
     }
   </section>
+
+  <app-mfa-settings />
 
   <section class="panel">
     <h2>Appearance</h2>
@@ -172,7 +176,7 @@ export class AccountPage implements OnInit {
   protected switchTo(slug: string): void {
     if (!slug || slug === this.api.profile()?.organization.slug) return;
     this.api.session('/auth/switch-workspace', { workspace: slug }).subscribe({
-      next: (profile) => void this.router.navigateByUrl(profile.role === 'MAINTENANCE' ? '/maintenance' : '/dashboard'),
+      next: (profile) => void this.router.navigateByUrl(homeFor(profile.role)),
       error: (error: ApiError) => this.error.set(error.message),
     });
   }

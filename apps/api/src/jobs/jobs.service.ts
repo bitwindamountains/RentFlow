@@ -4,6 +4,7 @@ import { todayInZone } from '../common/dates.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { environment } from '../config/environment.js';
 import { BillingService } from '../billing/billing.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { LeasesService } from '../rentals/leases.service.js';
 
 const interval = 15 * 60 * 1000;
@@ -25,6 +26,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
     private readonly leases: LeasesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -75,6 +77,8 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
         });
       }
     }
+    // Staff alerts that could not be sent right away (provider down, crash) are retried here.
+    await this.notifications.processPending();
     const now = new Date();
     await this.prisma.idempotencyKey.deleteMany({ where: { expiresAt: { lt: now } } });
     await this.prisma.userToken.deleteMany({ where: { expiresAt: { lt: new Date(now.getTime() - 86_400_000) } } });

@@ -17,15 +17,36 @@ Production web build and all six web tests pass. Initial bundle: 459.94 kB raw /
 
 Screenshots are generated in `apps/web/.ui-review/` (ignored by Git). Useful previews: `auth-1440.png`, `dashboard-1440.png`, `properties-768.png`, `billing-390.png`, `payment-review-mobile.png`.
 
-To repeat on Windows with Microsoft Edge installed:
+## Repeating the review
+
+`apps/web/scripts/check-ui.mjs` runs against the real API on a throwaway database. Since 2026-10-02 it no longer uses fixtures.
+
+What it does:
+1. Starts an embedded PostgreSQL in a temp folder and applies the migrations.
+2. Runs the built API on :3000 and the web dev server on :4200.
+3. Seeds a workspace through the API: properties, leases, a payment, an expense, a repair, a shared lease document, and a tenant portal account.
+4. Opens every staff page and every portal page:
+   - in light mode at 1440, 768, 390 and 320 pixels;
+   - in dark mode at 1440 and 390 pixels.
+
+It fails on any of these:
+- a browser error or console error;
+- horizontal page overflow;
+- a dashboard amount that wraps or overflows its card.
+
+Everything it started is stopped afterwards, and your own database is never touched.
+
+One-time setup (Playwright in a local cache, not a project dependency):
 
 ```powershell
 npm.cmd install --prefix node_modules/.cache/rentflow-ui-tools --no-save --package-lock=false playwright
-npm.cmd run dev:web
 ```
 
-In another terminal at the project root:
+Each run, with ports 3000 and 4200 free, from the project root:
 
 ```powershell
+npm.cmd run build --workspace api
 node apps/web/scripts/check-ui.mjs
 ```
+
+It uses Playwright's Chromium if it is installed, otherwise Microsoft Edge. Set `UI_BROWSER` to use another Chromium-based browser. Screenshots go to `apps/web/.ui-review/`, which Git ignores. A run takes about 3 minutes.

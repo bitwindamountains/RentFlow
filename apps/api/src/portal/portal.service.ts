@@ -7,6 +7,7 @@ import { addDays, formatDateOnly, parseDateOnly, todayInZone } from '../common/d
 import { DomainError, notFound } from '../common/errors.js';
 import { IdempotencyService } from '../common/idempotency.service.js';
 import { formatMoney, parseMoney, sumMoney, ZERO } from '../common/money.js';
+import { enqueueStaffAlert, NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import type { UploadType } from '../storage/file-store.service.js';
@@ -52,6 +53,7 @@ export class PortalService {
     private readonly payments: PaymentsService,
     private readonly idempotency: IdempotencyService,
     private readonly work: WorkService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private scope(auth: SessionContext): { organizationId: string; tenantId: string } {
@@ -201,7 +203,7 @@ export class PortalService {
       throw leases.length
         ? new DomainError('CHOOSE_LEASE', 422)
         : new DomainError('NO_ACTIVE_LEASE', 422);
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const row = await tx.maintenanceRequest.create({
         data: {
           organizationId,
@@ -222,8 +224,11 @@ export class PortalService {
         entityId: row.id,
         after: { priority: row.priority },
       });
+      await enqueueStaffAlert(tx, { organizationId, topic: 'tenant.repair_reported', aggregateType: 'MaintenanceRequest', aggregateId: row.id });
       return { id: row.id, status: row.status, createdAt: row.createdAt.toISOString() };
     });
+    this.notifications.kick();
+    return created;
   }
 
   /** "I paid": the tenant tells the landlord about a payment. Nothing is posted until staff confirm it. */
@@ -238,7 +243,7 @@ export class PortalService {
     const today = todayInZone(organization.timezone);
     if (input.paidOn > today) throw new DomainError('FUTURE_PAYMENT_DATE', 422);
     if (input.paidOn < addDays(today, -NOTICE_MAX_AGE_DAYS)) throw new DomainError('PAYMENT_DATE_TOO_OLD', 422);
-    return this.idempotency.execute({ organizationId, key, operation: 'PAYMENT_NOTICE' }, { ...input, tenantId }, async (tx) => {
+    const notice = await this.idempotency.execute({ organizationId, key, operation: 'PAYMENT_NOTICE' }, { ...input, tenantId }, async (tx) => {
       const lease = await tx.lease.findFirst({ where: { id: input.leaseId, organizationId, primaryTenantId: tenantId }, select: { id: true } });
       if (!lease) throw notFound('LEASE_NOT_FOUND');
       const pending = await tx.paymentNotice.count({ where: { organizationId, tenantId, status: 'SUBMITTED' } });
@@ -265,8 +270,12 @@ export class PortalService {
         entityId: notice.id,
         after: { amount, method: input.method, paidOn: input.paidOn },
       });
+      // Written with the notice, so a replayed request never alerts staff twice.
+      await enqueueStaffAlert(tx, { organizationId, topic: 'tenant.payment_reported', aggregateType: 'PaymentNotice', aggregateId: notice.id });
       return noticeView(notice);
     });
+    this.notifications.kick();
+    return notice;
   }
 
   async withdrawNotice(auth: SessionContext, id: string) {

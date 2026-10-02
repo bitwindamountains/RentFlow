@@ -23,6 +23,11 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
 - **Isolation.** A portal account is bound to one tenant record by the database, and every portal query is scoped to that tenant. Tenants cannot call any staff endpoint, and staff screens cannot list, promote, or suspend portal accounts. Removing access or archiving the tenant signs them out immediately.
 - **Payment reports.** A tenant's "I paid" report posts nothing. Collectors, managers, and owners see the reports and any screenshot on the Payments page. **Confirm** records the payment against the oldest charges and issues the receipt in one transaction, so a double click or retry cannot post twice. **Not received** needs a reason, which the tenant sees. Tenants are emailed either way. Reports older than 90 days are refused, and a tenant can have at most 10 pending.
 - **Repairs.** Requests go to the maintenance list against the tenant's own unit, marked as reported by the tenant.
+- **Staff alerts.** Staff are emailed about new tenant reports. Only active staff with a verified email receive them.
+  - A payment report goes to owners, managers, and collectors.
+  - A repair request goes to owners, managers, and maintenance staff.
+  - The alert is written to `OutboxEvent` in the same transaction as the report, so a retried request never alerts twice.
+  - It is sent right after the request. If sending fails, the background job retries with backoff, up to 5 attempts.
 
 ## Background jobs
 

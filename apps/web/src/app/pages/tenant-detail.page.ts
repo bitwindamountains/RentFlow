@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { DayPipe, LabelPipe, MomentPipe, MoneyPipe, statusTone } from '../core/format';
-import type { LedgerEntry, TenantDetail } from '../core/models';
+import type { DocumentRecord, LedgerEntry, TenantDetail } from '../core/models';
 import { toCents } from '../core/money';
 import { PaymentLauncher } from '../core/payment-launcher.service';
 import { PortalAccessComponent } from './portal-access.component';
@@ -129,7 +129,14 @@ import type { TenantForm } from './tenants.page';
 
     <h2>Documents</h2>
     <ul>
-      @for (d of t.documents; track d.id) { <li><a [href]="d.kind === 'file' ? api.downloadUrl('/documents/' + d.id + '/file') : d.url" target="_blank" rel="noopener noreferrer">{{ d.name }}</a> · {{ d.category }}</li> }
+      @for (d of t.documents; track d.id) {
+        <li>
+          <a [href]="d.kind === 'file' ? api.downloadUrl('/documents/' + d.id + '/file') : d.url" target="_blank" rel="noopener noreferrer">{{ d.name }}</a>
+          · {{ d.category }}{{ d.entityType === 'Lease' ? ' · on the lease' : '' }}
+          @if (d.sharedWithTenant) { <span class="status success">Tenant can see</span> }
+          @if (canManage()) { <button class="text-button" type="button" (click)="toggleShare(d)">{{ d.sharedWithTenant ? 'Stop sharing' : 'Share with tenant' }}</button> }
+        </li>
+      }
       @empty { <li>No documents. <a routerLink="/documents" [queryParams]="{ entityType: 'Tenant', entityId: t.id }">Link one</a>.</li> }
     </ul>
   } @else if (loading()) {
@@ -162,6 +169,13 @@ export class TenantDetailPage implements OnInit {
 
   ngOnInit(): void {
     this.load();
+  }
+
+  protected toggleShare(d: DocumentRecord): void {
+    // The data-change signal reloads this page after the update.
+    this.api.patch<DocumentRecord>(`/documents/${d.id}/sharing`, { shared: !d.sharedWithTenant }).subscribe({
+      error: (error: ApiError) => this.error.set(error.message),
+    });
   }
 
   protected load(): void {

@@ -212,10 +212,22 @@ export interface DocumentRecord {
   url: string | null;
   contentType?: string | null;
   sizeBytes?: number | null;
+  /** Visible to the tenant in the portal (tenant and lease documents only). */
+  sharedWithTenant?: boolean;
   createdAt: string;
 }
 
 // ----- Tenant portal -----
+export interface PortalDocument {
+  id: string;
+  name: string;
+  category: string;
+  kind: 'file' | 'link';
+  url: string | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+  createdAt: string;
+}
 export type NoticeStatus = 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
 export interface PaymentNotice {
   id: string;

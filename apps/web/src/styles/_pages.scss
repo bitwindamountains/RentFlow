@@ -312,6 +312,17 @@ a.metric-card {
 .tile-billed {
   grid-area: billed;
 }
+// Half-width money tiles: the amount scales with the tile and never breaks mid-number.
+.tile-overdue,
+.tile-billed {
+  container-type: inline-size;
+
+  .tile-value {
+    font-size: clamp(1rem, 13cqi, 1.875rem);
+    overflow-wrap: normal;
+    font-variant-numeric: tabular-nums;
+  }
+}
 .tile-overdue.has-overdue {
   border-color: var(--danger-border);
   background: linear-gradient(180deg, var(--danger-bg), var(--surface) 70%);
@@ -621,6 +632,20 @@ a.metric-card {
   .tile-hero {
     padding: var(--space-5);
   }
+}
+@media (max-width: 360px) {
+  .bento {
+    grid-template-areas:
+      'hero      hero'
+      'overdue   overdue'
+      'billed    billed'
+      'arrears   arrears'
+      'occupancy occupancy'
+      'trend     trend'
+      'upcoming  upcoming';
+  }
+}
+@media (max-width: 640px) {
   .tile-occupancy {
     display: grid;
     grid-template-columns: 112px minmax(0, 1fr);

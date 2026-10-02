@@ -7,6 +7,11 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
 - **Fail-closed configuration.** The API will not start without an explicit `NODE_ENV`, a PostgreSQL `DATABASE_URL`, HTTPS origins, and (in production) a real email provider.
 - **Authorization on the server.** Every route requires a session and an explicit role list, unless it is marked public. Every record lookup is scoped to the caller's organization. Database triggers additionally reject any row that references another organization's records.
 - **Sessions.** httpOnly, `SameSite=Strict`, `__Host-` prefixed cookie; CSRF token on every write. Sessions end after 12 hours, or after 2 hours of inactivity. Password changes and resets revoke other sessions. Suspending or removing a staff member revokes their sessions immediately.
+- **Two-step sign-in (optional, per person).** Anyone can turn on an authenticator-app code from the Account page.
+  - **Sign-in:** after the password, a single-use challenge lasts 5 minutes and allows 5 wrong codes. No session exists until a code is accepted. Each code works once.
+  - **Recovery:** 10 one-time recovery codes cover a lost phone. Using one emails the account owner.
+  - **Storage:** secrets are encrypted with `MFA_ENCRYPTION_KEY`.
+  - **Changes:** turning it off, or replacing recovery codes, needs the password and a code. Turning it on signs out the person's other devices.
 - **Rate limits.** 300 requests/minute per session or IP overall. Stricter per-IP limits apply to sign-in, registration, password reset, email verification, and invitation acceptance.
 - **Financial integrity.**
   - Posted charges and payments are never edited or deleted. Corrections use adjustments (discount, waiver, credit note), voids, and reversals, and every one of these writes a ledger entry.

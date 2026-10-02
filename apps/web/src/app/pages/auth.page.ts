@@ -3,9 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
-import { homeFor } from '../core/models';
+import { homeFor, type Profile } from '../core/models';
 
-type Mode = 'login' | 'register' | 'forgot';
+type Mode = 'login' | 'register' | 'forgot' | 'mfa';
 
 @Component({ selector: 'app-auth-page', imports: [FormsModule], templateUrl: './auth.page.html' })
 export class AuthPage {
@@ -20,6 +20,10 @@ export class AuthPage {
   protected email = '';
   protected password = '';
   protected workspace = '';
+  protected code = '';
+  /** Typing a recovery code instead of an app code. */
+  protected readonly useRecovery = signal(false);
+  private challenge = '';
 
   constructor() {
     const query = inject(ActivatedRoute).snapshot.queryParamMap;
@@ -34,6 +38,8 @@ export class AuthPage {
     this.mode.set(mode);
     this.error.set('');
     this.notice.set('');
+    this.code = '';
+    this.useRecovery.set(false);
   }
 
   protected submit(): void {
@@ -53,6 +59,7 @@ export class AuthPage {
         });
       return;
     }
+    const workspace = this.workspace.trim() || undefined;
     const request =
       this.mode() === 'register'
         ? this.api.session('/auth/register', {
@@ -61,22 +68,28 @@ export class AuthPage {
             name: this.name,
             organizationName: this.organizationName,
           })
-        : this.api.session('/auth/login', {
-            email: this.email,
-            password: this.password,
-            workspace: this.workspace.trim() || undefined,
-          });
+        : this.mode() === 'mfa'
+          ? this.api.session('/auth/login/mfa', { challenge: this.challenge, code: this.code.trim(), workspace })
+          : this.api.login({ email: this.email, password: this.password, workspace });
     request.pipe(finalize(() => this.busy.set(false))).subscribe({
-      next: (profile) => {
+      next: (result) => {
         this.password = '';
-        void this.router.navigateByUrl(homeFor(profile.role));
+        if ('mfaRequired' in result) {
+          this.challenge = result.challenge;
+          this.switchMode('mfa');
+          return;
+        }
+        this.code = '';
+        void this.router.navigateByUrl(homeFor((result as Profile).role));
       },
-      error: (error: ApiError) =>
-        this.error.set(
-          error.code === 'RATE_LIMITED'
-            ? 'Too many attempts. Wait a few minutes, then try again.'
-            : error.message,
-        ),
+      error: (error: ApiError) => {
+        if (error.code === 'MFA_CHALLENGE_INVALID') {
+          this.switchMode('login');
+          this.notice.set('That sign-in attempt expired. Enter your password again.');
+          return;
+        }
+        this.error.set(error.code === 'RATE_LIMITED' ? 'Too many attempts. Wait a few minutes, then try again.' : error.message);
+      },
     });
   }
 }

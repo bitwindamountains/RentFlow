@@ -8,12 +8,18 @@ export function homeFor(role: Role | null | undefined): string {
 }
 
 export interface Profile {
-  user: { id: string; email: string; name: string; emailVerified: boolean };
+  user: { id: string; email: string; name: string; emailVerified: boolean; mfaEnabled?: boolean };
   organization: { id: string; name: string; slug: string; currency: string; timezone: string };
   role: Role;
   csrfToken: string;
   sessionExpiresAt: string;
   workspaces: Array<{ name: string; slug: string; role: Role }>;
+}
+
+/** Sign-in answer when the password was right but two-step sign-in needs a code. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  challenge: string;
 }
 
 export interface Page<T> {

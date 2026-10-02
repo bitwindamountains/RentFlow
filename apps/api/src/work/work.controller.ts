@@ -33,7 +33,8 @@ import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '..
 import type { SessionContext } from '../auth/session.types.js';
 import { DomainError } from '../common/errors.js';
 import { IsDateOnly, IsMoney, PageQuery } from '../common/validation.js';
-import { isUploadType, UPLOAD_TYPES } from '../storage/file-store.service.js';
+import { isUploadType } from '../storage/file-store.service.js';
+import { sendDocument } from './document-response.js';
 import { DOCUMENT_ENTITIES, type DocumentEntity, WorkService } from './work.service.js';
 
 const emptyToUndefined = () => Transform(({ value }) => (value === '' ? undefined : value));
@@ -83,6 +84,9 @@ class DocumentDto extends DocumentMetaDto {
 class DocumentQuery {
   @IsOptional() @IsIn(DOCUMENT_ENTITIES) entityType?: DocumentEntity;
   @IsOptional() @IsUUID() entityId?: string;
+}
+class SharingDto {
+  @IsBoolean() shared!: boolean;
 }
 class ReasonDto {
   @IsString() @MinLength(3) @MaxLength(300) reason!: string;
@@ -171,20 +175,13 @@ export class WorkController {
     @Param('id', ParseUUIDPipe) id: string,
     @Res() reply: FastifyReply,
   ) {
-    const file = await this.work.openDocument(auth.organizationId, id);
-    // Images open in the browser; PDFs download so they never render inside the app's origin.
-    const disposition = file.contentType.startsWith('image/') ? 'inline' : 'attachment';
-    const filename = `${file.name.replace(/\.(pdf|jpe?g|png|webp)$/i, '')}.${UPLOAD_TYPES[file.contentType]}`;
-    const ascii = filename.replace(/[^\w. -]/g, '_');
-    reply
-      .header('content-type', file.contentType)
-      .header('content-disposition', `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`)
-      .header('cache-control', 'private, no-store')
-      .header('x-content-type-options', 'nosniff')
-      .header('content-security-policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
-    if (file.size !== undefined) reply.header('content-length', file.size);
-    if (file.sha256) reply.header('etag', `"${file.sha256}"`);
-    return reply.send(file.body);
+    return sendDocument(reply, await this.work.openDocument(auth.organizationId, id));
+  }
+
+  @Roles(...MANAGERS)
+  @Patch('documents/:id/sharing')
+  shareDocument(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string, @Body() input: SharingDto) {
+    return this.work.setDocumentSharing(auth.organizationId, auth.userId, id, input.shared);
   }
 
   @Roles(...MANAGERS)

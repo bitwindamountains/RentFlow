@@ -356,24 +356,24 @@ model RentableSpace {
 }
 
 model Tenant {
-  id               String          @id @default(uuid()) @db.Uuid
-  organizationId   String          @db.Uuid
+  id               String               @id @default(uuid()) @db.Uuid
+  organizationId   String               @db.Uuid
   firstName        String
   lastName         String
   email            String?
   phone            String?
   permanentAddress String?
-  status           TenantStatus    @default(PENDING)
-  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
-  archivedAt       DateTime?       @db.Timestamptz(3)
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  primaryLeases    Lease[]         @relation("PrimaryTenant")
+  status           TenantStatus         @default(PENDING)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
+  archivedAt       DateTime?            @db.Timestamptz(3)
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  primaryLeases    Lease[]              @relation("PrimaryTenant")
   occupancies      LeaseOccupant[]
   payments         Payment[]
   memberships      Membership[]
   invitations      StaffInvitation[]
-  paymentNotices      PaymentNotice[]
+  paymentNotices   PaymentNotice[]
   maintenance      MaintenanceRequest[]
 
   @@index([organizationId, status])
@@ -405,7 +405,7 @@ model Lease {
   charges          Charge[]
   payments         Payment[]
   depositAccount   DepositAccount?
-  paymentNotices      PaymentNotice[]
+  paymentNotices   PaymentNotice[]
 
   @@index([organizationId, status])
   @@index([rentableSpaceId, startDate, endDate])
@@ -716,23 +716,25 @@ model MaintenanceRequest {
 }
 
 model DocumentRecord {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @db.Uuid
-  name           String
-  category       String
-  entityType     String?
-  entityId       String?
+  id               String       @id @default(uuid()) @db.Uuid
+  organizationId   String       @db.Uuid
+  name             String
+  category         String
+  entityType       String?
+  entityId         String?
   /// External HTTPS link (e.g. restricted Google Drive file). Exactly one of url / storageKey is set.
-  url            String?
+  url              String?
   /// Private object key for an uploaded file: "<organizationId>/<id>.<ext>".
-  storageKey     String?      @unique
-  contentType    String?
-  sizeBytes      Int?
-  sha256         String?      @db.Char(64)
-  createdBy      String       @db.Uuid
-  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
-  deletedAt      DateTime?    @db.Timestamptz(3)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storageKey       String?      @unique
+  contentType      String?
+  sizeBytes        Int?
+  sha256           String?      @db.Char(64)
+  /// Visible in the tenant portal. Only for documents attached to a tenant or lease (CHECK constraint).
+  sharedWithTenant Boolean      @default(false)
+  createdBy        String       @db.Uuid
+  createdAt        DateTime     @default(now()) @db.Timestamptz(3)
+  deletedAt        DateTime?    @db.Timestamptz(3)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, category, createdAt])
   @@index([organizationId, entityType, entityId])

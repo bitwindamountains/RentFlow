@@ -22,6 +22,7 @@ const messages: Record<string, string> = {
   CHARGE_HAS_PAYMENTS: 'Reverse the payments applied to this charge before voiding it.',
   CHARGE_NOT_OPEN: 'This charge is not open.',
   CHOOSE_LEASE: 'Choose which rental this is about.',
+  DOCUMENT_NOT_SHAREABLE: 'Only documents attached to a tenant or a lease can be shared with the tenant.',
   FILE_EMPTY: 'Choose a file to upload.',
   FILE_TOO_LARGE: 'The file is too large.',
   FILE_TYPE_MISMATCH: 'The file content does not match its type. Upload a PDF, JPEG, PNG, or WebP file.',

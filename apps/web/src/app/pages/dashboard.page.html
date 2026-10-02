@@ -169,7 +169,10 @@
         <div class="panel-title">
           <div>
             <h2>Coming up</h2>
-            <p>{{ d.leasesEndingSoon }} leases end within 30 days · {{ d.openMaintenance }} open work orders</p>
+            <p>
+              {{ d.leasesEndingSoon }} {{ d.leasesEndingSoon === 1 ? 'lease ends' : 'leases end' }} within 30 days ·
+              {{ d.openMaintenance }} open {{ d.openMaintenance === 1 ? 'work order' : 'work orders' }}
+            </p>
           </div>
           <a routerLink="/reminders" class="text-button">All reminders &rarr;</a>
         </div>

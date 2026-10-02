@@ -11,7 +11,7 @@ import { enqueueStaffAlert, NotificationsService } from '../notifications/notifi
 import { PrismaService } from '../common/prisma.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import type { UploadType } from '../storage/file-store.service.js';
-import { WorkService } from '../work/work.service.js';
+import { documentView, WorkService } from '../work/work.service.js';
 
 /** How far back a tenant may report a payment. Older payments go through the landlord directly. */
 const NOTICE_MAX_AGE_DAYS = 90;
@@ -159,6 +159,36 @@ export class PortalService {
       }),
     ]);
     return { payments, notices: notices.map(noticeView) };
+  }
+
+  /** Documents staff shared with this tenant: attached to the tenant record or to one of their leases. */
+  private async sharedDocumentScope(organizationId: string, tenantId: string): Promise<Prisma.DocumentRecordWhereInput> {
+    const leases = await this.prisma.lease.findMany({ where: { organizationId, primaryTenantId: tenantId }, select: { id: true } });
+    return {
+      sharedWithTenant: true,
+      OR: [
+        { entityType: 'Tenant', entityId: tenantId },
+        { entityType: 'Lease', entityId: { in: leases.map((lease) => lease.id) } },
+      ],
+    };
+  }
+
+  async documents(auth: SessionContext) {
+    const { organizationId, tenantId } = this.scope(auth);
+    const rows = await this.prisma.documentRecord.findMany({
+      where: { organizationId, deletedAt: null, ...(await this.sharedDocumentScope(organizationId, tenantId)) },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return rows.map((row) => {
+      const view = documentView(row);
+      return { id: view.id, name: view.name, category: view.category, kind: view.kind, url: view.url, contentType: view.contentType, sizeBytes: view.sizeBytes, createdAt: view.createdAt };
+    });
+  }
+
+  async openDocument(auth: SessionContext, id: string) {
+    const { organizationId, tenantId } = this.scope(auth);
+    return this.work.openDocument(organizationId, id, await this.sharedDocumentScope(organizationId, tenantId));
   }
 
   async receipt(auth: SessionContext, paymentId: string) {

@@ -27,6 +27,8 @@ export interface AppEnvironment {
   S3_FORCE_PATH_STYLE: boolean;
   UPLOAD_MAX_BYTES: number;
   STORAGE_QUOTA_BYTES: number;
+  /** 32-byte key for encrypting authenticator secrets; null turns MFA setup off in production. */
+  MFA_ENCRYPTION_KEY: Buffer | null;
 }
 
 const environments = new Set<Environment>(['development', 'test', 'production']);
@@ -111,6 +113,10 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     if (production && s3.endpoint && !s3.endpoint.startsWith('https://')) throw new Error('S3_ENDPOINT must use https in production');
   }
 
+  const mfaKeyText = String(input['MFA_ENCRYPTION_KEY'] ?? '').trim();
+  const mfaKey = mfaKeyText ? Buffer.from(mfaKeyText, 'base64') : null;
+  if (mfaKey && mfaKey.length !== 32) throw new Error('MFA_ENCRYPTION_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)');
+
   return {
     NODE_ENV: nodeEnv,
     PORT: integer(input, 'PORT', 3000, 1, 65_535),
@@ -136,6 +142,7 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     S3_FORCE_PATH_STYLE: String(input['S3_FORCE_PATH_STYLE'] ?? 'false') === 'true',
     UPLOAD_MAX_BYTES: integer(input, 'UPLOAD_MAX_MB', 10, 1, 50) * 1_048_576,
     STORAGE_QUOTA_BYTES: integer(input, 'STORAGE_QUOTA_MB', 2048, 10, 1_048_576) * 1_048_576,
+    MFA_ENCRYPTION_KEY: mfaKey,
   };
 }
 

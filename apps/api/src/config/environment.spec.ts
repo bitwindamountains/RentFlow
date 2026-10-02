@@ -21,6 +21,12 @@ describe('validateEnvironment', () => {
     });
   });
 
+  it('accepts only a 32-byte MFA key', () => {
+    expect(validateEnvironment(base).MFA_ENCRYPTION_KEY).toBeNull();
+    expect(validateEnvironment({ ...base, MFA_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64') }).MFA_ENCRYPTION_KEY).toHaveLength(32);
+    expect(() => validateEnvironment({ ...base, MFA_ENCRYPTION_KEY: 'c2hvcnQ=' })).toThrow('MFA_ENCRYPTION_KEY');
+  });
+
   it('fails closed when NODE_ENV is missing instead of assuming development', () => {
     expect(() => validateEnvironment({ ...base, NODE_ENV: undefined })).toThrow('NODE_ENV must be set');
   });

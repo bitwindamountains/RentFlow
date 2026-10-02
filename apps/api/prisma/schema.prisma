@@ -204,23 +204,32 @@ model Organization {
 }
 
 model User {
-  id              String       @id @default(uuid()) @db.Uuid
-  email           String       @unique
-  displayName     String
-  passwordHash    String
-  emailVerifiedAt DateTime?    @db.Timestamptz(3)
-  disabledAt      DateTime?    @db.Timestamptz(3)
-  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
-  memberships     Membership[]
-  auditEvents     AuditLog[]
-  sessions        Session[]
-  tokens          UserToken[]
+  id               String            @id @default(uuid()) @db.Uuid
+  email            String            @unique
+  displayName      String
+  passwordHash     String
+  emailVerifiedAt  DateTime?         @db.Timestamptz(3)
+  disabledAt       DateTime?         @db.Timestamptz(3)
+  /// Authenticator-app (TOTP) secret, AES-256-GCM encrypted with MFA_ENCRYPTION_KEY. Set only while MFA is on.
+  mfaSecret        String?
+  /// Secret generated at setup, awaiting the first code.
+  mfaPendingSecret String?
+  mfaEnabledAt     DateTime?         @db.Timestamptz(3)
+  /// Last accepted TOTP time step; older or equal steps are refused (no code reuse).
+  mfaLastStep      Int?
+  recoveryCodes    MfaRecoveryCode[]
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  memberships      Membership[]
+  auditEvents      AuditLog[]
+  sessions         Session[]
+  tokens           UserToken[]
 }
 
 enum UserTokenType {
   PASSWORD_RESET
   EMAIL_VERIFICATION
+  MFA_CHALLENGE
 }
 
 model UserToken {
@@ -230,6 +239,8 @@ model UserToken {
   tokenHash String        @unique @db.Char(64)
   expiresAt DateTime      @db.Timestamptz(3)
   usedAt    DateTime?     @db.Timestamptz(3)
+  /// Wrong codes entered against an MFA challenge.
+  attempts  Int           @default(0)
   createdAt DateTime      @default(now()) @db.Timestamptz(3)
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -356,24 +367,24 @@ model RentableSpace {
 }
 
 model Tenant {
-  id               String          @id @default(uuid()) @db.Uuid
-  organizationId   String          @db.Uuid
+  id               String               @id @default(uuid()) @db.Uuid
+  organizationId   String               @db.Uuid
   firstName        String
   lastName         String
   email            String?
   phone            String?
   permanentAddress String?
-  status           TenantStatus    @default(PENDING)
-  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
-  archivedAt       DateTime?       @db.Timestamptz(3)
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  primaryLeases    Lease[]         @relation("PrimaryTenant")
+  status           TenantStatus         @default(PENDING)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
+  archivedAt       DateTime?            @db.Timestamptz(3)
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  primaryLeases    Lease[]              @relation("PrimaryTenant")
   occupancies      LeaseOccupant[]
   payments         Payment[]
   memberships      Membership[]
   invitations      StaffInvitation[]
-  paymentNotices      PaymentNotice[]
+  paymentNotices   PaymentNotice[]
   maintenance      MaintenanceRequest[]
 
   @@index([organizationId, status])
@@ -405,7 +416,7 @@ model Lease {
   charges          Charge[]
   payments         Payment[]
   depositAccount   DepositAccount?
-  paymentNotices      PaymentNotice[]
+  paymentNotices   PaymentNotice[]
 
   @@index([organizationId, status])
   @@index([rentableSpaceId, startDate, endDate])
@@ -716,23 +727,25 @@ model MaintenanceRequest {
 }
 
 model DocumentRecord {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @db.Uuid
-  name           String
-  category       String
-  entityType     String?
-  entityId       String?
+  id               String       @id @default(uuid()) @db.Uuid
+  organizationId   String       @db.Uuid
+  name             String
+  category         String
+  entityType       String?
+  entityId         String?
   /// External HTTPS link (e.g. restricted Google Drive file). Exactly one of url / storageKey is set.
-  url            String?
+  url              String?
   /// Private object key for an uploaded file: "<organizationId>/<id>.<ext>".
-  storageKey     String?      @unique
-  contentType    String?
-  sizeBytes      Int?
-  sha256         String?      @db.Char(64)
-  createdBy      String       @db.Uuid
-  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
-  deletedAt      DateTime?    @db.Timestamptz(3)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storageKey       String?      @unique
+  contentType      String?
+  sizeBytes        Int?
+  sha256           String?      @db.Char(64)
+  /// Visible in the tenant portal. Only for documents attached to a tenant or lease (CHECK constraint).
+  sharedWithTenant Boolean      @default(false)
+  createdBy        String       @db.Uuid
+  createdAt        DateTime     @default(now()) @db.Timestamptz(3)
+  deletedAt        DateTime?    @db.Timestamptz(3)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, category, createdAt])
   @@index([organizationId, entityType, entityId])
@@ -786,4 +799,16 @@ model PaymentNotice {
   @@index([organizationId, status, createdAt])
   @@index([tenantId, createdAt])
   @@index([leaseId])
+}
+
+/// One-time MFA recovery codes, stored as SHA-256 hashes.
+model MfaRecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  codeHash  String    @unique @db.Char(64)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

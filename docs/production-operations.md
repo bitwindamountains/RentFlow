@@ -7,6 +7,11 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
 - **Fail-closed configuration.** The API will not start without an explicit `NODE_ENV`, a PostgreSQL `DATABASE_URL`, HTTPS origins, and (in production) a real email provider.
 - **Authorization on the server.** Every route requires a session and an explicit role list, unless it is marked public. Every record lookup is scoped to the caller's organization. Database triggers additionally reject any row that references another organization's records.
 - **Sessions.** httpOnly, `SameSite=Strict`, `__Host-` prefixed cookie; CSRF token on every write. Sessions end after 12 hours, or after 2 hours of inactivity. Password changes and resets revoke other sessions. Suspending or removing a staff member revokes their sessions immediately.
+- **Two-step sign-in (optional, per person).** Anyone can turn on an authenticator-app code from the Account page.
+  - **Sign-in:** after the password, a single-use challenge lasts 5 minutes and allows 5 wrong codes. No session exists until a code is accepted. Each code works once.
+  - **Recovery:** 10 one-time recovery codes cover a lost phone. Using one emails the account owner.
+  - **Storage:** secrets are encrypted with `MFA_ENCRYPTION_KEY`.
+  - **Changes:** turning it off, or replacing recovery codes, needs the password and a code. Turning it on signs out the person's other devices.
 - **Rate limits.** 300 requests/minute per session or IP overall. Stricter per-IP limits apply to sign-in, registration, password reset, email verification, and invitation acceptance.
 - **Financial integrity.**
   - Posted charges and payments are never edited or deleted. Corrections use adjustments (discount, waiver, credit note), voids, and reversals, and every one of these writes a ledger entry.
@@ -23,6 +28,12 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
 - **Isolation.** A portal account is bound to one tenant record by the database, and every portal query is scoped to that tenant. Tenants cannot call any staff endpoint, and staff screens cannot list, promote, or suspend portal accounts. Removing access or archiving the tenant signs them out immediately.
 - **Payment reports.** A tenant's "I paid" report posts nothing. Collectors, managers, and owners see the reports and any screenshot on the Payments page. **Confirm** records the payment against the oldest charges and issues the receipt in one transaction, so a double click or retry cannot post twice. **Not received** needs a reason, which the tenant sees. Tenants are emailed either way. Reports older than 90 days are refused, and a tenant can have at most 10 pending.
 - **Repairs.** Requests go to the maintenance list against the tenant's own unit, marked as reported by the tenant.
+- **Shared documents.** Owners and managers can share a document attached to a tenant or one of their leases, such as a signed lease or house rules. The tenant sees it under Documents in the portal. Other documents cannot be shared, and the database enforces this. Downloads use the same private, sandboxed responses as staff downloads. Stopping sharing takes effect immediately.
+- **Staff alerts.** Staff are emailed about new tenant reports. Only active staff with a verified email receive them.
+  - A payment report goes to owners, managers, and collectors.
+  - A repair request goes to owners, managers, and maintenance staff.
+  - The alert is written to `OutboxEvent` in the same transaction as the report, so a retried request never alerts twice.
+  - It is sent right after the request. If sending fails, the background job retries with backoff, up to 5 attempts.
 
 ## Background jobs
 

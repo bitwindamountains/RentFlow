@@ -22,10 +22,10 @@
     >
       <div class="auth-mobile-brand"><span>R</span>RentFlow</div>
       <p class="eyebrow">
-        {{ mode() === 'register' ? 'START YOUR WORKSPACE' : mode() === 'forgot' ? 'ACCOUNT RECOVERY' : 'WELCOME BACK' }}
+        {{ mode() === 'register' ? 'START YOUR WORKSPACE' : mode() === 'forgot' ? 'ACCOUNT RECOVERY' : mode() === 'mfa' ? 'TWO-STEP SIGN-IN' : 'WELCOME BACK' }}
       </p>
       <h2>
-        {{ mode() === 'register' ? 'Create your account' : mode() === 'forgot' ? 'Reset your password' : 'Sign in to RentFlow' }}
+        {{ mode() === 'register' ? 'Create your account' : mode() === 'forgot' ? 'Reset your password' : mode() === 'mfa' ? 'Enter your code' : 'Sign in to RentFlow' }}
       </h2>
       @if (notice()) {
         <p class="inline-notice" role="status">{{ notice() }}</p>
@@ -36,7 +36,9 @@
             ? 'Set up your rental business in a few minutes.'
             : mode() === 'forgot'
               ? 'Enter your account email and we will send you a reset link.'
-              : 'Welcome back. Sign in to your rental workspace.'
+              : mode() === 'mfa'
+                ? (useRecovery() ? 'Enter one of the recovery codes you saved. Each code works once.' : 'Open your authenticator app and enter the 6-digit code for RentFlow.')
+                : 'Welcome back. Sign in to your rental workspace.'
         }}
       </p>
       @if (mode() === 'register') {
@@ -58,6 +60,21 @@
             autocomplete="organization"
         /></label>
       }
+      @if (mode() === 'mfa') {
+        <label class="field"
+          ><span>{{ useRecovery() ? 'Recovery code' : 'Code' }}</span
+          ><input
+            name="code"
+            [(ngModel)]="code"
+            required
+            [attr.inputmode]="useRecovery() ? 'text' : 'numeric'"
+            [attr.pattern]="useRecovery() ? null : '[0-9 ]{6,7}'"
+            [attr.placeholder]="useRecovery() ? 'abcd-efgh' : '123 456'"
+            autocomplete="one-time-code"
+            maxlength="20"
+            autofocus
+        /></label>
+      } @else {
       <label class="field"
         ><span>Email address</span
         ><input
@@ -81,6 +98,7 @@
           <small>Use at least 12 characters. A short sentence works well.</small>
         }
       </label>}
+      }
       @if (error()) {
         <div class="auth-error" role="alert">{{ error() }}</div>
       }
@@ -109,18 +127,27 @@
               ? 'Create workspace'
               : mode() === 'forgot'
                 ? 'Send reset link'
-                : 'Sign in'
+                : mode() === 'mfa'
+                  ? 'Verify'
+                  : 'Sign in'
         }}
       </button>
+      @if (mode() === 'mfa') {
+        <div class="auth-switch">
+          <button type="button" (click)="useRecovery.set(!useRecovery()); code = ''">
+            {{ useRecovery() ? 'Use your authenticator app' : 'Can’t use your phone? Use a recovery code' }}
+          </button>
+        </div>
+      }
       @if (mode() === 'login') {
         <div class="auth-switch">
           <button type="button" (click)="switchMode('forgot')">Forgot your password?</button>
         </div>
       }
       <div class="auth-switch">
-        {{ mode() === 'register' ? 'Already have an account?' : mode() === 'forgot' ? 'Remembered it?' : 'New to RentFlow?' }}
+        {{ mode() === 'register' ? 'Already have an account?' : mode() === 'forgot' ? 'Remembered it?' : mode() === 'mfa' ? 'Wrong account?' : 'New to RentFlow?' }}
         <button type="button" (click)="switchMode(mode() === 'login' ? 'register' : 'login')">
-          {{ mode() === 'login' ? 'Create account' : 'Sign in' }}
+          {{ mode() === 'login' ? 'Create account' : mode() === 'mfa' ? 'Start over' : 'Sign in' }}
         </button>
       </div>
     </form>

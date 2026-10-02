@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams } from '@angular
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable, Subject, catchError, tap, throwError } from 'rxjs';
-import type { Profile } from './models';
+import type { MfaChallenge, Profile } from './models';
 import { todayIn } from './dates';
 
 export type { Profile } from './models';
@@ -44,6 +44,18 @@ export class ApiClient {
       .post<Profile>(`${this.baseUrl}${path}`, body, { withCredentials: true, headers: this.headers() })
       .pipe(
         tap((profile) => this.profile.set(profile)),
+        catchError((error) => throwError(() => toApiError(error))),
+      );
+  }
+
+  /** Password sign-in: either the new profile, or a challenge when two-step sign-in is on. */
+  login(body: unknown): Observable<Profile | MfaChallenge> {
+    return this.http
+      .post<Profile | MfaChallenge>(`${this.baseUrl}/auth/login`, body, { withCredentials: true, headers: this.headers() })
+      .pipe(
+        tap((result) => {
+          if (!('mfaRequired' in result)) this.profile.set(result);
+        }),
         catchError((error) => throwError(() => toApiError(error))),
       );
   }

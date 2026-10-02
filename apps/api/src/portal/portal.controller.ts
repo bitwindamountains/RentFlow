@@ -1,15 +1,16 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { MaintenancePriority, PaymentMethod } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsEmail, IsEnum, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Auth, COLLECTORS, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { DomainError } from '../common/errors.js';
 import { requireIdempotencyKey } from '../common/idempotency.service.js';
 import { IsDateOnly, IsMoney } from '../common/validation.js';
 import { isUploadType } from '../storage/file-store.service.js';
+import { sendDocument } from '../work/document-response.js';
 import { PortalAdminService } from './portal-admin.service.js';
 import { PortalService } from './portal.service.js';
 
@@ -72,6 +73,16 @@ export class PortalController {
   @Get('maintenance')
   maintenance(@Auth() auth: SessionContext) {
     return this.portal.maintenance(auth);
+  }
+
+  @Get('documents')
+  documents(@Auth() auth: SessionContext) {
+    return this.portal.documents(auth);
+  }
+
+  @Get('documents/:id/file')
+  async downloadDocument(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string, @Res() reply: FastifyReply) {
+    return sendDocument(reply, await this.portal.openDocument(auth, id));
   }
 
   @RateLimit(20, '1 hour')

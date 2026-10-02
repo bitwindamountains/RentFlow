@@ -8,12 +8,18 @@ export function homeFor(role: Role | null | undefined): string {
 }
 
 export interface Profile {
-  user: { id: string; email: string; name: string; emailVerified: boolean };
+  user: { id: string; email: string; name: string; emailVerified: boolean; mfaEnabled?: boolean };
   organization: { id: string; name: string; slug: string; currency: string; timezone: string };
   role: Role;
   csrfToken: string;
   sessionExpiresAt: string;
   workspaces: Array<{ name: string; slug: string; role: Role }>;
+}
+
+/** Sign-in answer when the password was right but two-step sign-in needs a code. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  challenge: string;
 }
 
 export interface Page<T> {
@@ -212,10 +218,22 @@ export interface DocumentRecord {
   url: string | null;
   contentType?: string | null;
   sizeBytes?: number | null;
+  /** Visible to the tenant in the portal (tenant and lease documents only). */
+  sharedWithTenant?: boolean;
   createdAt: string;
 }
 
 // ----- Tenant portal -----
+export interface PortalDocument {
+  id: string;
+  name: string;
+  category: string;
+  kind: 'file' | 'link';
+  url: string | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+  createdAt: string;
+}
 export type NoticeStatus = 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
 export interface PaymentNotice {
   id: string;

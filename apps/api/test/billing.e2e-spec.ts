@@ -258,11 +258,14 @@ describe('billing, payments, and balances', () => {
   it('changes rent from a future date without rewriting billed months', async () => {
     const rental = await createRental(owner, { startDate: monthStart(-1), rent: '10000.00' });
     await owner.post('/billing/run', {});
+    // Bill next month early too, so a change from today lands on a billed month whatever today's date is.
+    const early = await owner.post('/charges', { leaseId: rental.lease.id, type: 'RENT', description: 'Rent', amount: '10000.00', dueDate: monthStart(1) });
+    expect(early.status).toBe(201);
     const tooEarly = await owner.post(`/leases/${rental.lease.id}/rent-change`, { effectiveFrom: today(), monthlyRent: '11000.00' });
     expect(tooEarly.body.code).toBe('RENT_CHANGE_AFTER_BILLED');
-    const change = await owner.post(`/leases/${rental.lease.id}/rent-change`, { effectiveFrom: monthStart(1), monthlyRent: '11000.00' });
+    const change = await owner.post(`/leases/${rental.lease.id}/rent-change`, { effectiveFrom: monthStart(2), monthlyRent: '11000.00' });
     expect(change.status).toBe(201);
-    expect(change.body.firstBill).toBe(monthStart(1));
+    expect(change.body.firstBill).toBe(monthStart(2));
     const schedules = (await owner.get('/billing-schedules')).body.filter((s: { leaseId: string }) => s.leaseId === rental.lease.id);
     expect(schedules.map((s: { amount: string }) => s.amount).sort()).toEqual(['10000.00', '11000.00']);
     expect((await openCharges(rental.lease.id)).every((c: { amount: string }) => c.amount === '10000.00')).toBe(true);

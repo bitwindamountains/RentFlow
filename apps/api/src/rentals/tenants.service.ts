@@ -78,7 +78,15 @@ export class TenantsService {
       this.balances.tenantBalances(organizationId, [id]),
       this.balances.charges(organizationId, { tenantId: id, status: 'open' }),
       this.prisma.documentRecord.findMany({
-        where: { organizationId, entityType: 'Tenant', entityId: id, deletedAt: null },
+        // The tenant's own documents and those of their leases: the same set the portal can share from.
+        where: {
+          organizationId,
+          deletedAt: null,
+          OR: [
+            { entityType: 'Tenant', entityId: id },
+            { entityType: 'Lease', entityId: { in: tenant.primaryLeases.map((lease) => lease.id) } },
+          ],
+        },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
@@ -132,6 +140,8 @@ export class TenantsService {
         category: doc.category,
         kind: doc.storageKey ? ('file' as const) : ('link' as const),
         url: doc.url,
+        entityType: doc.entityType,
+        sharedWithTenant: doc.sharedWithTenant,
         createdAt: doc.createdAt.toISOString(),
       })),
     };

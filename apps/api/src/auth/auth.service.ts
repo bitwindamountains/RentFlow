@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { MembershipRole, UserTokenType } from '@prisma/client';
+import type { MembershipRole, User, UserTokenType } from '@prisma/client';
+import QRCode from 'qrcode';
 import { audit } from '../common/audit.js';
 import {
   assertPasswordPolicy,
@@ -12,15 +13,34 @@ import { DomainError } from '../common/errors.js';
 import { isUniqueViolation, PrismaService, type Tx } from '../common/prisma.service.js';
 import { environment } from '../config/environment.js';
 import { MailerService } from '../mail/mailer.service.js';
+import {
+  assertMfaAvailable,
+  decryptSecret,
+  encryptSecret,
+  looksLikeRecoveryCode,
+  newRecoveryCodes,
+  newTotpSecret,
+  otpauthUri,
+  recoveryCodeHash,
+  verifyTotp,
+} from './mfa.js';
 import type { SessionContext } from './session.types.js';
 
 const touchInterval = 5 * 60 * 1000;
 const resetLifetime = 30 * 60 * 1000;
 const verificationLifetime = 48 * 60 * 60 * 1000;
+const mfaChallengeLifetime = 5 * 60 * 1000;
+const mfaChallengeAttempts = 5;
 
 export interface IssuedSession {
   token: string;
   context: SessionContext;
+}
+
+/** The password was right; a second factor is needed before a session exists. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  challenge: string;
 }
 
 @Injectable()
@@ -87,25 +107,17 @@ export class AuthService {
     password: string;
     workspace?: string;
     userAgent?: string;
-  }): Promise<IssuedSession> {
+  }): Promise<IssuedSession | MfaChallenge> {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizeEmail(input.email) },
     });
     // Always run scrypt so the response time does not reveal registered emails.
     const valid = await verifyPassword(input.password, user?.passwordHash);
     if (!user || !valid || user.disabledAt) throw new DomainError('INVALID_CREDENTIALS', 401);
-    const workspace = input.workspace?.trim().toLowerCase();
-    const membership = await this.prisma.membership.findFirst({
-      where: {
-        userId: user.id,
-        status: 'ACTIVE',
-        organization: { status: 'ACTIVE', ...(workspace ? { slug: workspace } : {}) },
-        // Archived tenants cannot sign in to the portal.
-        OR: [{ tenantId: null }, { tenant: { status: { not: 'ARCHIVED' } } }],
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    const membership = await this.loginMembership(user.id, input.workspace);
     if (!membership) throw new DomainError('INVALID_CREDENTIALS', 401);
+    if (user.mfaEnabledAt)
+      return { mfaRequired: true, challenge: await this.issueToken(user.id, 'MFA_CHALLENGE', mfaChallengeLifetime) };
     return this.prisma.$transaction((tx) =>
       this.createSession(
         tx,
@@ -116,6 +128,155 @@ export class AuthService {
         input.userAgent,
       ),
     );
+  }
+
+  /**
+   * Second sign-in step: a code from the authenticator app (or a one-time
+   * recovery code) against the challenge issued after the password. A
+   * challenge allows a few wrong codes, then the person must sign in again.
+   */
+  async completeMfaLogin(input: { challenge: string; code: string; workspace?: string; userAgent?: string }): Promise<IssuedSession> {
+    const record = await this.prisma.userToken.findUnique({ where: { tokenHash: sha256(input.challenge) } });
+    if (!record || record.type !== 'MFA_CHALLENGE' || record.usedAt || record.expiresAt <= new Date() || record.attempts >= mfaChallengeAttempts)
+      throw new DomainError('MFA_CHALLENGE_INVALID', 401);
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
+    if (user.disabledAt || !user.mfaEnabledAt) throw new DomainError('MFA_CHALLENGE_INVALID', 401);
+    const factor = await this.checkSecondFactor(user, input.code);
+    if (!factor) {
+      await this.prisma.userToken.updateMany({ where: { id: record.id, attempts: { lt: mfaChallengeAttempts } }, data: { attempts: { increment: 1 } } });
+      throw new DomainError('INVALID_MFA_CODE', 401);
+    }
+    const claimed = await this.prisma.userToken.updateMany({ where: { id: record.id, usedAt: null }, data: { usedAt: new Date() } });
+    if (claimed.count !== 1) throw new DomainError('MFA_CHALLENGE_INVALID', 401);
+    const membership = await this.loginMembership(user.id, input.workspace);
+    if (!membership) throw new DomainError('INVALID_CREDENTIALS', 401);
+    if (factor === 'recovery') await this.noticeRecoveryCodeUsed(user, membership.organizationId);
+    return this.prisma.$transaction((tx) =>
+      this.createSession(tx, user.id, membership.organizationId, membership, Boolean(user.emailVerifiedAt), input.userAgent),
+    );
+  }
+
+  // ------------------------------------------------------------ two-step setup
+  /** Step 1: a new secret (pending until confirmed), shown as a QR code and as text. */
+  async startMfaSetup(context: SessionContext, password: string) {
+    assertMfaAvailable();
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: context.userId } });
+    if (!(await verifyPassword(password, user.passwordHash))) throw new DomainError('PASSWORD_INCORRECT', 422);
+    if (user.mfaEnabledAt) throw new DomainError('MFA_ALREADY_ENABLED', 409);
+    const secret = newTotpSecret();
+    await this.prisma.user.update({ where: { id: user.id }, data: { mfaPendingSecret: encryptSecret(secret) } });
+    const uri = otpauthUri(secret, user.email);
+    const svg = await QRCode.toString(uri, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+    return { secret, uri, qr: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` };
+  }
+
+  /** Step 2: the first code proves the app is set up; MFA turns on and recovery codes are shown once. */
+  async enableMfa(context: SessionContext, code: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: context.userId } });
+    if (user.mfaEnabledAt) throw new DomainError('MFA_ALREADY_ENABLED', 409);
+    if (!user.mfaPendingSecret) throw new DomainError('MFA_SETUP_REQUIRED', 409);
+    const step = verifyTotp(decryptSecret(user.mfaPendingSecret), code, null);
+    if (step === null) throw new DomainError('MFA_CODE_INVALID', 422);
+    const recoveryCodes = newRecoveryCodes();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { mfaSecret: user.mfaPendingSecret, mfaPendingSecret: null, mfaEnabledAt: new Date(), mfaLastStep: step },
+      });
+      await this.replaceRecoveryCodes(tx, user.id, recoveryCodes);
+      // Other devices signed in with the password alone are signed out.
+      await tx.session.updateMany({ where: { userId: user.id, revokedAt: null, id: { not: context.sessionId } }, data: { revokedAt: new Date() } });
+      await audit(tx, { organizationId: context.organizationId, actorUserId: user.id, action: 'MFA_ENABLED', entityType: 'User', entityId: user.id });
+    });
+    this.securityNotice(user.email, 'Two-step sign-in is on', 'Two-step sign-in was turned on for your RentFlow account. You will be asked for a code from your authenticator app when you sign in.');
+    return { recoveryCodes };
+  }
+
+  async disableMfa(context: SessionContext, password: string, code: string): Promise<void> {
+    const user = await this.verifiedForMfaChange(context, password, code);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { mfaSecret: null, mfaPendingSecret: null, mfaEnabledAt: null, mfaLastStep: null } });
+      await tx.mfaRecoveryCode.deleteMany({ where: { userId: user.id } });
+      await audit(tx, { organizationId: context.organizationId, actorUserId: user.id, action: 'MFA_DISABLED', entityType: 'User', entityId: user.id });
+    });
+    this.securityNotice(user.email, 'Two-step sign-in is off', 'Two-step sign-in was turned off for your RentFlow account. If this was not you, reset your password now and turn it back on.');
+  }
+
+  async regenerateRecoveryCodes(context: SessionContext, password: string, code: string) {
+    const user = await this.verifiedForMfaChange(context, password, code);
+    const recoveryCodes = newRecoveryCodes();
+    await this.prisma.$transaction(async (tx) => {
+      await this.replaceRecoveryCodes(tx, user.id, recoveryCodes);
+      await audit(tx, { organizationId: context.organizationId, actorUserId: user.id, action: 'MFA_RECOVERY_CODES_REPLACED', entityType: 'User', entityId: user.id });
+    });
+    return { recoveryCodes };
+  }
+
+  private async verifiedForMfaChange(context: SessionContext, password: string, code: string): Promise<User> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: context.userId } });
+    if (!(await verifyPassword(password, user.passwordHash))) throw new DomainError('PASSWORD_INCORRECT', 422);
+    if (!user.mfaEnabledAt) throw new DomainError('MFA_NOT_ENABLED', 409);
+    if (!(await this.checkSecondFactor(user, code))) throw new DomainError('MFA_CODE_INVALID', 422);
+    return user;
+  }
+
+  /**
+   * Accepts a current authenticator code (each time step at most once) or an
+   * unused recovery code (consumed). Returns which kind matched.
+   */
+  private async checkSecondFactor(user: User, code: string): Promise<'totp' | 'recovery' | null> {
+    if (!user.mfaSecret) return null;
+    if (looksLikeRecoveryCode(code)) {
+      const used = await this.prisma.mfaRecoveryCode.updateMany({
+        where: { userId: user.id, codeHash: recoveryCodeHash(code), usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      return used.count === 1 ? 'recovery' : null;
+    }
+    const step = verifyTotp(decryptSecret(user.mfaSecret), code, user.mfaLastStep);
+    if (step === null) return null;
+    // Conditional update: two requests with the same code cannot both pass.
+    const claimed = await this.prisma.user.updateMany({
+      where: { id: user.id, OR: [{ mfaLastStep: null }, { mfaLastStep: { lt: step } }] },
+      data: { mfaLastStep: step },
+    });
+    return claimed.count === 1 ? 'totp' : null;
+  }
+
+  private async replaceRecoveryCodes(tx: Tx, userId: string, codes: string[]): Promise<void> {
+    await tx.mfaRecoveryCode.deleteMany({ where: { userId } });
+    await tx.mfaRecoveryCode.createMany({ data: codes.map((code) => ({ userId, codeHash: recoveryCodeHash(code) })) });
+  }
+
+  private async noticeRecoveryCodeUsed(user: User, organizationId: string): Promise<void> {
+    const left = await this.prisma.mfaRecoveryCode.count({ where: { userId: user.id, usedAt: null } });
+    await this.prisma.$transaction((tx) =>
+      audit(tx, { organizationId, actorUserId: user.id, action: 'MFA_RECOVERY_CODE_USED', entityType: 'User', entityId: user.id }),
+    );
+    this.securityNotice(
+      user.email,
+      'A recovery code was used to sign in',
+      `Someone signed in to your RentFlow account with a recovery code. You have ${left} left. If this was not you, reset your password and create new recovery codes on the Account page.`,
+    );
+  }
+
+  private securityNotice(to: string, subject: string, text: string): void {
+    this.mailer.sendInBackground({ to, subject, text }, 'SECURITY_NOTICE');
+  }
+
+  /** The workspace a sign-in lands in: the named one, or the oldest active membership. */
+  private loginMembership(userId: string, workspaceInput?: string) {
+    const workspace = workspaceInput?.trim().toLowerCase();
+    return this.prisma.membership.findFirst({
+      where: {
+        userId,
+        status: 'ACTIVE',
+        organization: { status: 'ACTIVE', ...(workspace ? { slug: workspace } : {}) },
+        // Archived tenants cannot sign in to the portal.
+        OR: [{ tenantId: null }, { tenant: { status: { not: 'ARCHIVED' } } }],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   /**
@@ -193,6 +354,7 @@ export class AuthService {
         email: membership.user.email,
         name: membership.user.displayName,
         emailVerified: Boolean(membership.user.emailVerifiedAt),
+        mfaEnabled: Boolean(membership.user.mfaEnabledAt),
       },
       organization: {
         id: membership.organization.id,

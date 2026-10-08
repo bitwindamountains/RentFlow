@@ -15,3 +15,12 @@ apps/web/.ui-review/
 *.tsbuildinfo
 .playwright-mcp/
 !.env.*.example
+
+# Keep secrets and local files out of the public repo
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.claude/settings.local.json
+Thumbs.db

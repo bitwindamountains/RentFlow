@@ -25,6 +25,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/invite.page').then((m) => m.InvitePage),
   },
   {
+    path: 'privacy',
+    title: 'Privacy notice · RentFlow',
+    loadComponent: () => import('./pages/privacy.page').then((m) => m.PrivacyPage),
+  },
+  {
     path: 'reset-password',
     title: 'Reset password · RentFlow',
     loadComponent: () => import('./pages/token.page').then((m) => m.ResetPasswordPage),

@@ -158,6 +158,15 @@
     background: transparent;
     color: var(--nav-fg);
   }
+
+  > .sidebar-legal {
+    display: block;
+    margin-top: var(--space-2);
+    color: var(--nav-fg);
+    font-size: var(--text-xs);
+    text-align: center;
+    opacity: 0.7;
+  }
   > .secondary:hover {
     background: var(--nav-hover);
     color: var(--nav-fg-strong);

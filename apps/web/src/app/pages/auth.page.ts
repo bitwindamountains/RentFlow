@@ -1,13 +1,13 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { homeFor, type Profile } from '../core/models';
 
 type Mode = 'login' | 'register' | 'forgot' | 'mfa';
 
-@Component({ selector: 'app-auth-page', imports: [FormsModule], templateUrl: './auth.page.html' })
+@Component({ selector: 'app-auth-page', imports: [FormsModule, RouterLink], templateUrl: './auth.page.html' })
 export class AuthPage {
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);

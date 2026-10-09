@@ -2,11 +2,28 @@
 
 ## Current task
 
-The optional-features list is finished and merged into `main` locally as `ae40ec3`. Nothing has been pushed. Two things are waiting on the user:
-- applying the database migrations;
-- deciding whether to push.
+The deployment-review work and the Supabase setup are committed and pushed to `main` (2026-10-10). The next gate is the GitHub CI `containers` job, which is the first real Docker build. Then come the production blockers under Next steps.
 
 ## Done (newest first)
+
+- **2026-10-10: Committed and pushed the deployment-review work.** A full local CI run passed:
+  - `npm audit` and Prisma validation passed. Lint, typecheck and build were clean.
+  - API: 59 unit tests and 97 e2e tests passed. Web: 17 tests passed.
+  - The deployment-readiness review found:
+    - `db:backup` ran `pg_dump` across every schema, which fails on a shared Supabase database. Fixed: it now dumps only the `schema` named in `DATABASE_URL`.
+    - `deploy/backup.sh` only works with the bundled Postgres. With `compose.managed.yaml`, use `npm run db:backup`, which needs `pg_dump` 17 or later on the host.
+    - The production example uses `connection_limit=10`. On a shared Supabase role capped at 10, use 5, so migrations and `pg_dump` still fit.
+    - The Supabase notes are now in `docs/deployment.md`.
+
+- **2026-10-10: Dev database moved to Supabase** (free tier, Seoul region, PG 17).
+  - The project is shared with 5–6 future apps. RentFlow has its own login role and schema, both named `rentflow`.
+    - The role has `search_path=rentflow`, `statement_timeout=30s` and a limit of 10 connections.
+    - The anon, authenticated and service roles have no access to the schema, so the Data API cannot reach it.
+  - The connection goes through the Supavisor session pooler, because the direct host is IPv6-only.
+  - All 13 migrations are applied. `/health/ready` passed, and the demo account is seeded.
+  - The old local URL is kept as a comment in `.env`.
+  - The Supabase security advisor flags one warning: `rentflow_same_organization` has a mutable `search_path`. This is low risk, because only the `rentflow` role can call it. Fix it in a later migration with `SET search_path FROM CURRENT`.
+  - **Uncommitted work, not by this session:** about 1,100 changed lines from the deployment review (see `docs/deployment-review.md`), including 4 migrations from `20261009*`. Supabase already has these migrations applied, so commit this work and do not discard it.
 
 - **2026-10-02: Merged `mfa` into `main`** (`ae40ec3`). The `mfa` branch also contains `portal-followups`. A full local CI run passed before the merge:
   - `npm audit` found 0 vulnerabilities.
@@ -44,7 +61,12 @@ The optional-features list is finished and merged into `main` locally as `ae40ec
 
 ## Next steps
 
-1. **User action:** apply the migrations to the local dev database. The automatic attempt was blocked by permissions.
+0. **Supabase follow-ups:**
+   - Back up off-site regularly with `npm run db:backup`, because the free tier has no backups.
+   - Keep each app's role connection limit within the shared budget of about 60 connections.
+   - Point the S3 upload driver at Supabase Storage.
+   - Upgrade to Pro before real tenants' data goes in.
+1. **Superseded by Supabase.** This step is only needed for the old local DB: apply the migrations to the local dev database. The automatic attempt was blocked by permissions.
    1. Run `npm run db:local --workspace api`.
    2. In a second terminal, run `npm run db:deploy --workspace api`.
 

@@ -20,6 +20,11 @@ npm run dev:web                            # :4200 (the web client targets :3000
 npm run db:seed:test                       # demo@rentflow.local / RentFlowDemo!2026
 ```
 
+**Dev database is Supabase.** `apps/api/.env` points at a free-tier Supabase project that is shared with other apps.
+- RentFlow has its own `rentflow` role and schema; never use `public`. The `rentflow` role is capped at 10 connections.
+- Connect through the session pooler (port 5432; the exact URL is in `.env`). It works for both the app and `prisma migrate`.
+- The old local Postgres URL is kept as a comment in `.env`. Tests always use their own embedded database, never `.env`.
+
 To check your work, run the same steps as CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)):
 
 ```sh

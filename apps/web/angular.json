@@ -31,6 +31,7 @@
               }
             ],
             "styles": [
+              "@fontsource-variable/inter/opsz.css",
               "src/styles.scss"
             ]
           },

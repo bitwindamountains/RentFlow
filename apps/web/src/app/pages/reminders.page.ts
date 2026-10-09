@@ -17,7 +17,7 @@ import { PaymentLauncher } from '../core/payment-launcher.service';
     <div class="attention-list">
       @for (item of reminders(); track item.type + item.id) {
         <div class="attention-item">
-          <span [class]="'attention-icon ' + (item.severity === 'high' ? 'red' : 'orange')" aria-hidden="true">!</span>
+          <span [class]="'attention-icon ' + (item.severity === 'high' ? 'red' : 'orange')" data-icon="alert" aria-hidden="true"></span>
           <a [routerLink]="item.route"><strong>{{ item.title }}</strong><small>{{ item.detail }}</small></a>
           @if (item.type === 'OVERDUE_BALANCE' && item.leaseId && canCollect()) {
             <button class="secondary" type="button" (click)="payments.open(item.leaseId)">Collect</button>

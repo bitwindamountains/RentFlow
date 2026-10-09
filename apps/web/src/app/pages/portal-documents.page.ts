@@ -22,7 +22,7 @@ import { appendPage } from '../core/pagination';
     <div class="attention-list">
       @for (d of documents(); track d.id) {
         <a class="attention-item" [href]="href(d)" target="_blank" rel="noopener noreferrer">
-          <span class="attention-icon blue" aria-hidden="true">{{ d.kind === 'file' ? '↓' : '↗' }}</span>
+          <span class="attention-icon blue" [attr.data-icon]="d.kind === 'file' ? 'download' : 'external'" aria-hidden="true"></span>
           <span>
             <strong>{{ d.name }}</strong>
             <small>{{ d.category }} · {{ d.kind === 'file' ? describe(d) : 'Opens in a new tab' }} · shared {{ d.createdAt | moment: 'date' }}</small>

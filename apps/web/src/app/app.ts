@@ -152,6 +152,19 @@ export class App {
   protected readonly today = () => this.api.today();
 
   constructor() {
+    // Cursor spotlight on interactive cards: CSS reads --mx/--my (see _motion.scss).
+    // A plain listener, so pointer moves never schedule change detection.
+    document.addEventListener(
+      'pointermove',
+      (event) => {
+        const card = (event.target as Element | null)?.closest?.<HTMLElement>('a.tile, .property-card, a.metric-card');
+        if (!card) return;
+        const box = card.getBoundingClientRect();
+        card.style.setProperty('--mx', `${event.clientX - box.left}px`);
+        card.style.setProperty('--my', `${event.clientY - box.top}px`);
+      },
+      { passive: true },
+    );
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event) => {

@@ -3,14 +3,15 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
+import { CountUpDirective } from '../core/count-up.directive';
 import { DayPipe, MoneyPipe } from '../core/format';
 import type { Dashboard, Reminder } from '../core/models';
-import { fromCents, toCents } from '../core/money';
+import { toCents } from '../core/money';
 import { PaymentLauncher } from '../core/payment-launcher.service';
 
 @Component({
   selector: 'app-dashboard-page',
-  imports: [RouterLink, MoneyPipe, DayPipe],
+  imports: [RouterLink, MoneyPipe, DayPipe, CountUpDirective],
   templateUrl: './dashboard.page.html',
 })
 export class DashboardPage implements OnInit {
@@ -34,6 +35,20 @@ export class DashboardPage implements OnInit {
     const magnitude = 10 ** Math.floor(Math.log10(peak));
     const step = [1, 2, 2.5, 5, 10].find((f) => f * magnitude >= peak) ?? 10;
     return step * magnitude * 100;
+  });
+
+  /** Smoothed six-month "collected" line for the hero tile (viewBox 0 0 100 40). Decorative; the chart below has the numbers. */
+  protected readonly spark = computed(() => {
+    const values = (this.data()?.trend ?? []).map((m) => toCents(m.collected));
+    if (values.length < 2) return null;
+    const max = Math.max(1, ...values);
+    const points = values.map((v, i) => [(i / (values.length - 1)) * 100, 36 - (v / max) * 30]);
+    const at = ([x, y]: number[]) => `${x.toFixed(2)} ${y.toFixed(2)}`;
+    const mid = (a: number[], b: number[]) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    let line = `M${at(points[0])} L${at(mid(points[0], points[1]))}`;
+    for (let i = 1; i < points.length - 1; i++) line += ` Q${at(points[i])} ${at(mid(points[i], points[i + 1]))}`;
+    line += ` L${at(points[points.length - 1])}`;
+    return { line, area: `${line} L100 40 L0 40 Z` };
   });
 
   constructor() {
@@ -76,10 +91,6 @@ export class DashboardPage implements OnInit {
   protected axisLabel(cents: number): string {
     const currency = this.data()?.currency ?? 'PHP';
     return new Intl.NumberFormat('en-PH', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100);
-  }
-
-  protected remainingThisMonth(d: Dashboard): string {
-    return fromCents(Math.max(0, toCents(d.billedThisMonth) - toCents(d.collectedThisMonth)));
   }
 
   protected collectionLabel(d: Dashboard): string {

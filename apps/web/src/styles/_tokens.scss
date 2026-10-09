@@ -58,10 +58,16 @@
   --skeleton: #e7ece8;
   --skeleton-shine: #f4f7f5;
 
-  --shadow-xs: 0 1px 2px rgb(16 44 34 / 0.05);
-  --shadow-sm: 0 1px 2px rgb(16 44 34 / 0.04), 0 2px 8px rgb(16 44 34 / 0.04);
-  --shadow-md: 0 2px 4px rgb(16 44 34 / 0.05), 0 10px 24px rgb(16 44 34 / 0.08);
-  --shadow-lg: 0 24px 64px rgb(8 31 20 / 0.24);
+  // Layered, low-opacity shadows read as soft depth rather than a drop shadow.
+  --shadow-xs: 0 1px 2px rgb(16 44 34 / 0.05), 0 1px 1px rgb(16 44 34 / 0.03);
+  --shadow-sm: 0 1px 2px rgb(16 44 34 / 0.04), 0 4px 12px -2px rgb(16 44 34 / 0.06);
+  --shadow-md: 0 2px 4px rgb(16 44 34 / 0.04), 0 12px 32px -6px rgb(16 44 34 / 0.12);
+  --shadow-lg: 0 24px 64px -12px rgb(8 31 20 / 0.28);
+  // Top-edge light catch on raised surfaces.
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 0.9);
+  --primary-glow: 0 8px 24px -8px rgb(23 107 77 / 0.55);
+  --canvas-glow: radial-gradient(1200px 520px at 70% -12%, rgb(34 126 97 / 0.07), transparent 70%);
+  --grain-opacity: 0.025;
 }
 
 @mixin dark {
@@ -121,17 +127,22 @@
   --skeleton-shine: #24352e;
 
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.2);
-  --shadow-md: 0 2px 4px rgb(0 0 0 / 0.3), 0 10px 24px rgb(0 0 0 / 0.35);
-  --shadow-lg: 0 24px 64px rgb(0 0 0 / 0.55);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px -2px rgb(0 0 0 / 0.25);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 0.3), 0 14px 32px -6px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 24px 64px -12px rgb(0 0 0 / 0.6);
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 0.045);
+  --primary-glow: 0 8px 28px -8px rgb(216 243 107 / 0.45);
+  --canvas-glow: radial-gradient(1200px 520px at 70% -12%, rgb(95 209 163 / 0.06), transparent 70%);
+  --grain-opacity: 0.04;
 }
 
 :root {
   @include light;
 
+  // Self-hosted (CSP font-src 'self'); system fonts until it loads (font-display: swap).
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
+    'Inter Variable', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
   --text-xs: 0.75rem;
   --text-sm: 0.8125rem;
   --text-base: 0.875rem;
@@ -160,6 +171,8 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  // Slight overshoot for things that "land" (icons, badges, toggles).
+  --ease-spring: linear(0, 0.36 9%, 0.75 19%, 1.02 30%, 1.09 38%, 1.07 46%, 1 61%, 0.99 74%, 1);
   --dur-instant: 90ms;
   --dur-fast: 150ms;
   --dur-base: 220ms;

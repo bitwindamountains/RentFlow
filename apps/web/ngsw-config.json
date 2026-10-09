@@ -10,10 +10,10 @@
       }
     },
     {
-      "name": "icons",
+      "name": "icons-and-fonts",
       "installMode": "lazy",
       "updateMode": "prefetch",
-      "resources": { "files": ["/icons/**"] }
+      "resources": { "files": ["/icons/**", "/media/**"] }
     }
   ],
   "dataGroups": [],

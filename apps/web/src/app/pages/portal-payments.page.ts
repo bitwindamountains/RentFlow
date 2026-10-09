@@ -77,7 +77,7 @@ const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
       <div class="attention-list">
         @for (n of notices(); track n.id) {
           <div class="attention-item">
-            <span [class]="'attention-icon ' + tone(n.status)" aria-hidden="true">{{ n.status === 'CONFIRMED' ? '✓' : n.status === 'REJECTED' ? '!' : '…' }}</span>
+            <span [class]="'attention-icon ' + tone(n.status)" [attr.data-icon]="n.status === 'CONFIRMED' ? 'check' : n.status === 'REJECTED' ? 'alert' : 'clock'" aria-hidden="true"></span>
             <span>
               <strong>{{ n.amount | money }} · {{ n.method | label }}{{ n.referenceNumber ? ' · ' + n.referenceNumber : '' }}</strong>
               <small>
@@ -102,7 +102,7 @@ const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
     <div class="attention-list">
       @for (p of payments(); track p.id) {
         <a class="attention-item" [routerLink]="['/portal/receipts', p.id]">
-          <span [class]="'attention-icon ' + (p.status === 'POSTED' ? 'green' : 'red')" aria-hidden="true">{{ p.status === 'POSTED' ? '✓' : '×' }}</span>
+          <span [class]="'attention-icon ' + (p.status === 'POSTED' ? 'green' : 'red')" [attr.data-icon]="p.status === 'POSTED' ? 'check' : 'x'" aria-hidden="true"></span>
           <span>
             <strong>{{ p.amount | money }}@if (p.status !== 'POSTED') { · reversed }</strong>
             <small>{{ p.paidAt | moment: 'date' }} · {{ p.method | label }}{{ p.referenceNumber ? ' · ' + p.referenceNumber : '' }}</small>

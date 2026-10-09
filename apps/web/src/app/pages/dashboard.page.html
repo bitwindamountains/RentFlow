@@ -33,33 +33,39 @@
         <p class="tile-label">
           Collected this month
           @if (d.collectionRate !== null) {
-            <span class="rate-badge">{{ d.collectionRate }}% collected</span>
+            <span class="rate-badge">{{ d.collectionRate }}% of this month paid</span>
           }
         </p>
-        <strong class="tile-value">{{ d.collectedThisMonth | money }}</strong>
+        <strong class="tile-value" [appCountUp]="d.collectedThisMonth | money"></strong>
         <p class="tile-note">
-          {{ d.collectionRate === null ? 'Nothing billed yet this month.' : 'Payments received against this month’s charges.' }}
+          {{ d.collectionRate === null ? 'Nothing billed yet this month.' : 'All payments received this month. Payments settle the oldest charges first.' }}
         </p>
+        @if (spark(); as s) {
+          <svg class="hero-spark" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+            <path class="spark-area" [attr.d]="s.area" />
+            <path class="spark-line" [attr.d]="s.line" vector-effect="non-scaling-stroke" />
+          </svg>
+        }
         <div class="hero-meter">
           <span class="meter" role="img" [attr.aria-label]="collectionLabel(d)"
             ><span [style.--value]="d.collectionRate ?? 0"></span
           ></span>
           <div class="hero-meter-legend">
             <span>Billed <strong>{{ d.billedThisMonth | money }}</strong></span>
-            <span>Still to collect <strong>{{ remainingThisMonth(d) | money }}</strong></span>
+            <span>Still to collect <strong>{{ d.remainingThisMonth | money }}</strong></span>
           </div>
         </div>
       </a>
 
       <a class="tile tile-overdue" [class.has-overdue]="d.overdue !== '0.00'" routerLink="/billing" [queryParams]="{ status: 'overdue' }">
         <p class="tile-label">Overdue now</p>
-        <strong class="tile-value" [class.danger-text]="d.overdue !== '0.00'">{{ d.overdue | money }}</strong>
+        <strong class="tile-value" [class.danger-text]="d.overdue !== '0.00'" [appCountUp]="d.overdue | money"></strong>
         <p class="tile-note">{{ d.outstanding | money }} total outstanding</p>
       </a>
 
       <a class="tile tile-billed" routerLink="/billing">
         <p class="tile-label">Billed this month</p>
-        <strong class="tile-value">{{ d.billedThisMonth | money }}</strong>
+        <strong class="tile-value" [appCountUp]="d.billedThisMonth | money"></strong>
         <p class="tile-note">{{ d.activeLeases }} active {{ d.activeLeases === 1 ? 'lease' : 'leases' }}</p>
       </a>
 
@@ -92,7 +98,7 @@
         <div class="attention-list">
           @for (row of d.topArrears; track row.leaseId) {
             <div class="attention-item">
-              <span [class]="'attention-icon ' + (row.daysOverdue > 30 ? 'red' : 'orange')" aria-hidden="true">{{ row.daysOverdue > 30 ? '!!' : '!' }}</span>
+              <span [class]="'attention-icon ' + (row.daysOverdue > 30 ? 'red' : 'orange')" data-icon="alert" aria-hidden="true"></span>
               <span>
                 <a [routerLink]="['/tenants', row.tenantId]"><strong>{{ row.tenantName }}</strong></a>
                 <small>{{ row.overdue | money }} · {{ row.daysOverdue }} days late · Unit {{ row.unitNumber }}</small>
@@ -103,7 +109,7 @@
             </div>
           } @empty {
             <div class="attention-item">
-              <span class="attention-icon green" aria-hidden="true">✓</span>
+              <span class="attention-icon green" data-icon="check" aria-hidden="true"></span>
               <span><strong>No overdue balances</strong><small>Every tenant is up to date.</small></span>
             </div>
           }
@@ -179,21 +185,21 @@
         <div class="attention-list">
           @if (!d.totalUnits) {
             <a routerLink="/setup" class="attention-item">
-              <span class="attention-icon blue" aria-hidden="true">1</span>
+              <span class="attention-icon blue" data-icon="plus" aria-hidden="true"></span>
               <span><strong>Set up your first rental</strong><small>Add a property, unit, tenant, and lease.</small></span>
               <span aria-hidden="true">&rsaquo;</span>
             </a>
           }
           @for (item of otherReminders(); track item.type + item.id) {
             <a [routerLink]="item.route" class="attention-item">
-              <span [class]="'attention-icon ' + (item.severity === 'high' ? 'red' : 'orange')" aria-hidden="true">!</span>
+              <span [class]="'attention-icon ' + (item.severity === 'high' ? 'red' : 'orange')" data-icon="alert" aria-hidden="true"></span>
               <span><strong>{{ item.title }}</strong><small>{{ item.detail }}</small></span>
               <span aria-hidden="true">&rsaquo;</span>
             </a>
           } @empty {
             @if (d.totalUnits) {
               <div class="attention-item">
-                <span class="attention-icon green" aria-hidden="true">✓</span>
+                <span class="attention-icon green" data-icon="check" aria-hidden="true"></span>
                 <span><strong>Nothing urgent</strong><small>No expiring leases or urgent repairs.</small></span>
               </div>
             }

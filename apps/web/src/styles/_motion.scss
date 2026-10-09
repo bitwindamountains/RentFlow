@@ -199,6 +199,184 @@
   }
 }
 
+/* ---------- Ambient motion and micro-interactions ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  // Page sections settle in sequence when they first render (the bento staggers its own tiles).
+  .page > :not(.bento) {
+    animation: rise var(--dur-slow) var(--ease-out) backwards;
+  }
+  @for $i from 2 through 6 {
+    .page > :nth-child(#{$i}):not(.bento) {
+      animation-delay: #{($i - 1) * 50}ms;
+    }
+  }
+  // Rows cascade in; rows added later (Load more) arrive without delay.
+  tbody tr {
+    animation: row-in 360ms var(--ease-out) backwards;
+  }
+  @for $i from 2 through 12 {
+    tbody tr:nth-child(#{$i}) {
+      animation-delay: #{($i - 1) * 22}ms;
+    }
+  }
+  .attention-icon[data-icon] {
+    animation: icon-land 520ms var(--ease-spring) backwards;
+    animation-delay: 160ms;
+  }
+
+  // Buttons: lift and a light sweep across the primary action.
+  .primary:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+  .primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.28) 50%, transparent 65%) -150% 0 / 250% 100% no-repeat;
+    pointer-events: none;
+  }
+  .primary:not(:disabled):hover::after {
+    animation: sheen 900ms var(--ease-out);
+  }
+  .nav-item:hover .nav-icon .ui-icon {
+    transform: translateX(2px) scale(1.06);
+  }
+
+  // Cursor spotlight on interactive cards (coordinates set in app.ts).
+  @media (hover: hover) {
+    :is(a.tile, .property-card, a.metric-card) {
+      position: relative;
+    }
+    :is(a.tile, .property-card, a.metric-card)::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--chart-collected) 10%, transparent), transparent 70%);
+      opacity: 0;
+      transition: opacity var(--dur-base) var(--ease-out);
+      pointer-events: none;
+    }
+    :is(a.tile, .property-card, a.metric-card):hover::after {
+      opacity: 1;
+    }
+    .property-card {
+      transition:
+        transform var(--dur-base) var(--ease-out),
+        box-shadow var(--dur-base) var(--ease-out),
+        border-color var(--dur-base) var(--ease-out);
+    }
+    .property-card:hover {
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-md), var(--highlight);
+      transform: translateY(-2px);
+    }
+  }
+
+  // Overdue status breathes so it reads as live, not decoration.
+  .status.danger::before {
+    animation: pulse-dot 2.4s var(--ease-out) infinite;
+  }
+
+  // Hero sparkline reveals left to right (a clip, so it is independent of path length).
+  .hero-spark {
+    clip-path: inset(-4px 0 -4px 0);
+    transition: clip-path 1.4s var(--ease-emphasized) 250ms;
+  }
+  @starting-style {
+    .hero-spark {
+      clip-path: inset(-4px 100% -4px 0);
+    }
+  }
+
+  // Top bar gains depth once content scrolls under it.
+  @supports (animation-timeline: scroll()) {
+    .topbar {
+      animation: topbar-lift linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 64px;
+    }
+  }
+
+  // Theme switch: a plain cross-fade of everything, not the page slide used for navigation.
+  :root.theme-switching::view-transition-group(*) {
+    animation: none;
+  }
+  :root.theme-switching::view-transition-old(*) {
+    animation: fade-out 320ms var(--ease-out) both;
+  }
+  :root.theme-switching::view-transition-new(*) {
+    animation: fade-in 320ms var(--ease-out) both;
+  }
+
+  // Sign-in story: slow aurora drift and a floating product glimpse.
+  .auth-story::before {
+    animation: aurora 22s ease-in-out infinite alternate;
+  }
+  .auth-story .auth-preview {
+    animation:
+      rise 700ms var(--ease-out) 300ms backwards,
+      float 7s ease-in-out 1s infinite;
+  }
+  .auth-preview .preview-bars i {
+    transition: height 900ms var(--ease-emphasized);
+  }
+  @for $i from 1 through 6 {
+    .auth-preview .preview-bars i:nth-child(#{$i}) {
+      transition-delay: #{500 + $i * 70}ms;
+    }
+  }
+  @starting-style {
+    .auth-preview .preview-bars i {
+      height: 0;
+    }
+  }
+
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes icon-land {
+    from {
+      opacity: 0;
+      transform: scale(0.6) rotate(-8deg);
+    }
+  }
+  @keyframes sheen {
+    to {
+      background-position: 150% 0;
+    }
+  }
+  @keyframes pulse-dot {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent);
+    }
+    70%,
+    100% {
+      box-shadow: 0 0 0 6px transparent;
+    }
+  }
+  @keyframes topbar-lift {
+    to {
+      box-shadow: var(--shadow-sm);
+    }
+  }
+  @keyframes aurora {
+    to {
+      transform: translate3d(6%, -4%, 0) rotate(8deg) scale(1.08);
+    }
+  }
+  @keyframes float {
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) and (max-width: 640px) {
   // Phones: the payment form is a bottom sheet, so it slides up.
   .modal-layer.enter .payment-modal {

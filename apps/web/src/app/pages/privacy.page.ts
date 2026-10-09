@@ -57,6 +57,8 @@ import { ApiClient } from '../core/api-client.service';
     .privacy-page article { max-width: 46rem; margin: 0 auto; padding: var(--space-6); line-height: 1.65; }
     .privacy-page h1 { margin: var(--space-2) 0 var(--space-4); font-size: var(--text-2xl); line-height: 1.25; }
     .privacy-page h2 { margin: var(--space-6) 0 var(--space-2); font-size: var(--text-lg); }
+    /* Body text, not the small subtitle style panels give a paragraph right after a heading. */
+    .privacy-page article p { margin: 0 0 var(--space-3); color: inherit; font-size: var(--text-md); }
     .privacy-page ul { padding-left: 1.2em; }
     .privacy-page li + li { margin-top: var(--space-2); }
     .privacy-page .auth-brand { display: inline-flex; margin-bottom: var(--space-5); }

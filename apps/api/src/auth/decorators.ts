@@ -20,7 +20,7 @@ export const FINANCE_READERS: MembershipRole[] = ['OWNER', 'MANAGER', 'COLLECTOR
 export const MANAGERS: MembershipRole[] = ['OWNER', 'MANAGER'];
 export const COLLECTORS: MembershipRole[] = ['OWNER', 'MANAGER', 'COLLECTOR'];
 
-/** Stricter per-route limit on top of the global limiter (per client IP). */
+/** Overrides the default limit for this route, retaining the normalized client-IP key. */
 export const RateLimit = (max: number, timeWindow: string) =>
   RouteConfig({
     rateLimit: {

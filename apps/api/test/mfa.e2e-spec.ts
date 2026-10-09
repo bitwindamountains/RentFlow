@@ -1,6 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { timeStep, totpCode } from '../src/auth/mfa.js';
+import { MailerService } from '../src/mail/mailer.service.js';
 import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp } from './helpers.js';
 
 describe('two-step sign-in (TOTP)', () => {
@@ -90,6 +91,11 @@ describe('two-step sign-in (TOTP)', () => {
 
   it('accepts each recovery code once and tells the owner', async () => {
     const first = await signIn();
+    const failure = vi.spyOn(app.get(MailerService), 'enqueue').mockRejectedValueOnce(new Error('queue unavailable'));
+    try {
+      expect((await first.client.post('/auth/login/mfa', { challenge: first.response.body.challenge, code: recoveryCodes[0] })).status).toBe(500);
+      expect(await prismaOf(app).mfaRecoveryCode.count({ where: { user: { email }, usedAt: null } })).toBe(10);
+    } finally { failure.mockRestore(); }
     const used = await first.client.post('/auth/login/mfa', { challenge: first.response.body.challenge, code: recoveryCodes[0]!.toUpperCase() });
     expect(used.status).toBe(200);
     expect(lastEmail(app, email)?.text).toContain('You have 9 left');

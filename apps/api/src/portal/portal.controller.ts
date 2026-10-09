@@ -8,7 +8,8 @@ import { Auth, COLLECTORS, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '.
 import type { SessionContext } from '../auth/session.types.js';
 import { DomainError } from '../common/errors.js';
 import { requireIdempotencyKey } from '../common/idempotency.service.js';
-import { IsDateOnly, IsMoney } from '../common/validation.js';
+import { IsDateOnly, IsMoney, PageQuery } from '../common/validation.js';
+import { arrayPage } from '../common/pagination.js';
 import { isUploadType } from '../storage/file-store.service.js';
 import { sendDocument } from '../work/document-response.js';
 import { PortalAdminService } from './portal-admin.service.js';
@@ -35,8 +36,12 @@ class NoticeDto {
 class InviteDto {
   @emptyToUndefined() @IsOptional() @IsEmail() @MaxLength(254) email?: string;
 }
-class NoticeQuery {
+class NoticeQuery extends PageQuery {
   @IsOptional() @IsIn(['SUBMITTED', 'all']) status?: 'SUBMITTED' | 'all';
+}
+class HistoryQuery extends PageQuery {
+  @IsOptional() @IsString() @MaxLength(200) paymentsCursor?: string;
+  @IsOptional() @IsString() @MaxLength(200) noticesCursor?: string;
 }
 class ConfirmDto {
   @IsOptional() @IsMoney() amount?: string;
@@ -61,8 +66,8 @@ export class PortalController {
   }
 
   @Get('payments')
-  payments(@Auth() auth: SessionContext) {
-    return this.portal.paymentHistory(auth);
+  payments(@Auth() auth: SessionContext, @Query() query: HistoryQuery) {
+    return this.portal.paymentHistory(auth, query);
   }
 
   @Get('payments/:id/receipt')
@@ -71,13 +76,13 @@ export class PortalController {
   }
 
   @Get('maintenance')
-  maintenance(@Auth() auth: SessionContext) {
-    return this.portal.maintenance(auth);
+  async maintenance(@Auth() auth: SessionContext, @Query() query: PageQuery, @Res({ passthrough: true }) reply: FastifyReply) {
+    return arrayPage(reply, await this.portal.maintenance(auth, query));
   }
 
   @Get('documents')
-  documents(@Auth() auth: SessionContext) {
-    return this.portal.documents(auth);
+  async documents(@Auth() auth: SessionContext, @Query() query: PageQuery, @Res({ passthrough: true }) reply: FastifyReply) {
+    return arrayPage(reply, await this.portal.documents(auth, query));
   }
 
   @Get('documents/:id/file')
@@ -149,8 +154,8 @@ export class PortalAdminController {
 
   @Roles(...FINANCE_READERS)
   @Get('payment-notices')
-  notices(@Auth() auth: SessionContext, @Query() query: NoticeQuery) {
-    return this.admin.listNotices(auth.organizationId, query.status);
+  async notices(@Auth() auth: SessionContext, @Query() query: NoticeQuery, @Res({ passthrough: true }) reply: FastifyReply) {
+    return arrayPage(reply, await this.admin.listNotices(auth.organizationId, query));
   }
 
   @Roles(...COLLECTORS)

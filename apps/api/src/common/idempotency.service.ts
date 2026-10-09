@@ -4,8 +4,6 @@ import { sha256, stableStringify } from './crypto.js';
 import { DomainError } from './errors.js';
 import { isUniqueViolation, PrismaService, type Tx } from './prisma.service.js';
 
-const retention = 24 * 60 * 60 * 1000;
-
 export function requireIdempotencyKey(key: string | undefined): string {
   if (!key || key.length < 8 || key.length > 100 || !/^[\w.:-]+$/.test(key))
     throw new DomainError('INVALID_IDEMPOTENCY_KEY');
@@ -31,6 +29,10 @@ export class IdempotencyService {
     if (prior) return prior as T;
     try {
       return await this.prisma.serializable(async (tx) => {
+        // Recheck inside each retry: a competing command may have committed
+        // since the initial lookup, changing the balances work() validates.
+        const replay = await this.lookup(scope, requestHash, tx);
+        if (replay) return replay as T;
         const response = await work(tx);
         await tx.idempotencyKey.create({
           data: {
@@ -38,7 +40,8 @@ export class IdempotencyService {
             requestHash,
             responseCode: 201,
             responseBody: response as Prisma.InputJsonValue,
-            expiresAt: new Date(Date.now() + retention),
+            // Financial retries must remain safe for the lifetime of the record.
+            expiresAt: null,
           },
         });
         return response;
@@ -55,15 +58,12 @@ export class IdempotencyService {
   private async lookup(
     scope: { organizationId: string; key: string; operation: string },
     requestHash: string,
+    db: Tx | PrismaService = this.prisma,
   ) {
-    const record = await this.prisma.idempotencyKey.findUnique({
+    const record = await db.idempotencyKey.findUnique({
       where: { organizationId_key_operation: scope },
     });
     if (!record) return undefined;
-    if (record.expiresAt <= new Date()) {
-      await this.prisma.idempotencyKey.deleteMany({ where: { id: record.id } });
-      return undefined;
-    }
     if (record.requestHash !== requestHash)
       throw new DomainError('IDEMPOTENCY_CONFLICT', 422);
     return record.responseBody ?? undefined;

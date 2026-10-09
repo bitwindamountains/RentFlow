@@ -3,6 +3,10 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from './skip-throttle.js';
 import { Public } from '../auth/decorators.js';
 import { PrismaService } from '../common/prisma.service.js';
+import { readdirSync } from 'node:fs';
+
+const requiredMigrations = readdirSync(new URL('../../prisma/migrations/', import.meta.url), { withFileTypes: true })
+  .filter(entry => entry.isDirectory()).map(entry => entry.name);
 
 @Public()
 @SkipThrottle()
@@ -21,7 +25,10 @@ export class HealthController {
   @ApiOperation({ summary: 'Readiness probe: database reachable and migrated' })
   async ready() {
     try {
-      await this.prisma.$queryRaw`SELECT 1 FROM "JobLock" LIMIT 1`;
+      const applied = await this.prisma.$queryRaw<Array<{ migration_name: string }>>`
+        SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`;
+      const names = new Set(applied.map(row => row.migration_name));
+      if (!requiredMigrations.length || requiredMigrations.some(name => !names.has(name))) throw new Error('Migrations pending');
     } catch {
       throw new ServiceUnavailableException({ code: 'NOT_READY', message: 'Database unavailable' });
     }

@@ -2,6 +2,7 @@ import type { ChargeType, Prisma } from '@prisma/client';
 import { audit } from '../common/audit.js';
 import { DomainError } from '../common/errors.js';
 import type { Tx } from '../common/prisma.service.js';
+import { applyLeaseCredit } from './credit.js';
 
 export interface PostChargeInput {
   organizationId: string;
@@ -67,5 +68,6 @@ export async function postCharge(tx: Tx, input: PostChargeInput) {
     entityId: charge.id,
     after: charge,
   });
+  await applyLeaseCredit(tx, input.organizationId, input.leaseId, input.actorUserId);
   return charge;
 }

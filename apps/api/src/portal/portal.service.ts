@@ -12,6 +12,7 @@ import { PrismaService } from '../common/prisma.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import type { UploadType } from '../storage/file-store.service.js';
 import { documentView, WorkService } from '../work/work.service.js';
+import { createdCursorWhere, listPage, timeCursor, type ListQuery } from '../common/pagination.js';
 
 /** How far back a tenant may report a payment. Older payments go through the landlord directly. */
 const NOTICE_MAX_AGE_DAYS = 90;
@@ -84,7 +85,7 @@ export class PortalService {
       }),
       this.balances.charges(organizationId, { tenantId, status: 'open' }),
       this.balances.tenantBalances(organizationId, [tenantId]),
-      this.recentPayments(organizationId, tenantId, 5),
+      this.recentPayments(organizationId, tenantId, 5).then(page => page.items),
       this.prisma.paymentNotice.findMany({
         where: { organizationId, tenantId, OR: [{ status: 'SUBMITTED' }, { reviewedAt: { gte: new Date(Date.now() - 30 * 86_400_000) } }] },
         include: noticeInclude,
@@ -147,18 +148,20 @@ export class PortalService {
     };
   }
 
-  async paymentHistory(auth: SessionContext) {
+  async paymentHistory(auth: SessionContext, query: { paymentsCursor?: string; noticesCursor?: string; limit?: number } = {}) {
     const { organizationId, tenantId } = this.scope(auth);
+    const limit = query.limit ?? 50;
     const [payments, notices] = await Promise.all([
-      this.recentPayments(organizationId, tenantId, 100),
+      this.recentPayments(organizationId, tenantId, limit, query.paymentsCursor),
       this.prisma.paymentNotice.findMany({
-        where: { organizationId, tenantId },
+        where: { organizationId, tenantId, ...createdCursorWhere(query.noticesCursor) },
         include: noticeInclude,
-        orderBy: { createdAt: 'desc' },
-        take: 100,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
       }),
     ]);
-    return { payments, notices: notices.map(noticeView) };
+    const noticesPage = listPage(notices, limit, noticeView, row => row.createdAt);
+    return { payments: payments.items, paymentsNextCursor: payments.nextCursor, notices: noticesPage.items, noticesNextCursor: noticesPage.nextCursor };
   }
 
   /** Documents staff shared with this tenant: attached to the tenant record or to one of their leases. */
@@ -173,17 +176,18 @@ export class PortalService {
     };
   }
 
-  async documents(auth: SessionContext) {
+  async documents(auth: SessionContext, query: ListQuery = {}) {
     const { organizationId, tenantId } = this.scope(auth);
+    const limit = query.limit ?? 50;
     const rows = await this.prisma.documentRecord.findMany({
-      where: { organizationId, deletedAt: null, ...(await this.sharedDocumentScope(organizationId, tenantId)) },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
+      where: { organizationId, deletedAt: null, AND: [await this.sharedDocumentScope(organizationId, tenantId), createdCursorWhere(query.cursor)] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
-    return rows.map((row) => {
+    return listPage(rows, limit, (row) => {
       const view = documentView(row);
       return { id: view.id, name: view.name, category: view.category, kind: view.kind, url: view.url, contentType: view.contentType, sizeBytes: view.sizeBytes, createdAt: view.createdAt };
-    });
+    }, row => row.createdAt);
   }
 
   async openDocument(auth: SessionContext, id: string) {
@@ -198,15 +202,16 @@ export class PortalService {
     return this.payments.receipt(organizationId, own.id);
   }
 
-  async maintenance(auth: SessionContext) {
+  async maintenance(auth: SessionContext, query: ListQuery = {}) {
     const { organizationId, tenantId } = this.scope(auth);
+    const limit = query.limit ?? 50;
     const rows = await this.prisma.maintenanceRequest.findMany({
-      where: { organizationId, tenantId },
+      where: { organizationId, tenantId, ...createdCursorWhere(query.cursor) },
       include: { unit: { select: { number: true } }, property: { select: { name: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
-    return rows.map((row) => ({
+    return listPage(rows, limit, (row) => ({
       id: row.id,
       title: row.title,
       description: row.description,
@@ -216,7 +221,7 @@ export class PortalService {
       unitNumber: row.unit?.number ?? null,
       createdAt: row.createdAt.toISOString(),
       completedAt: row.completedAt?.toISOString() ?? null,
-    }));
+    }), row => row.createdAt);
   }
 
   async reportMaintenance(
@@ -352,14 +357,15 @@ export class PortalService {
     return { id: document.id, contentType: document.contentType, sizeBytes: document.sizeBytes };
   }
 
-  private async recentPayments(organizationId: string, tenantId: string, take: number) {
+  private async recentPayments(organizationId: string, tenantId: string, limit: number, value?: string) {
+    const cursor = timeCursor(value);
     const rows = await this.prisma.payment.findMany({
-      where: { organizationId, tenantId, status: { in: ['POSTED', 'REVERSED'] } },
+      where: { organizationId, tenantId, status: { in: ['POSTED', 'REVERSED'] }, ...(cursor ? { OR: [{ paidAt: { lt: cursor.date } }, { paidAt: cursor.date, id: { lt: cursor.id } }] } : {}) },
       include: { receipts: { orderBy: { issuedAt: 'desc' }, take: 1 } },
       orderBy: [{ paidAt: 'desc' }, { id: 'desc' }],
-      take,
+      take: limit + 1,
     });
-    return rows.map((payment) => ({
+    return listPage(rows, limit, (payment) => ({
       id: payment.id,
       amount: formatMoney(payment.amount),
       method: payment.method,
@@ -367,6 +373,6 @@ export class PortalService {
       paidAt: payment.paidAt.toISOString(),
       status: payment.status,
       receiptNumber: payment.receipts[0]?.number ?? null,
-    }));
+    }), row => row.paidAt);
   }
 }

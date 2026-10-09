@@ -145,4 +145,20 @@ describe('authentication', () => {
       process.env['RATE_LIMIT_MULTIPLIER'] = previous;
     }
   });
+
+  it('still rate-limits clients that rotate invalid session cookies', async () => {
+    const previous = process.env['RATE_LIMIT_MULTIPLIER'];
+    process.env['RATE_LIMIT_MULTIPLIER'] = '1';
+    try {
+      const statuses: number[] = [];
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const response = await new Client(app).post('/auth/login', { email: 'limit@rentflow.test', password: 'x' }, {
+          'x-forwarded-for': '203.0.113.121', cookie: `rentflow_session=invalid-${attempt}`,
+        });
+        statuses.push(response.status);
+      }
+      expect(statuses.slice(0, 10)).toEqual(Array(10).fill(401));
+      expect(statuses.slice(10)).toEqual([429, 429]);
+    } finally { process.env['RATE_LIMIT_MULTIPLIER'] = previous; }
+  });
 });

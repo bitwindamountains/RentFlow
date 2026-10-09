@@ -92,9 +92,10 @@ export class AuthService {
           entityType: 'Organization',
           entityId: organization.id,
         });
+        await this.sendVerification(tx, user.id, email);
         return this.createSession(tx, user.id, organization.id, { role: 'OWNER', tenantId: null }, false, input.userAgent);
       });
-      await this.sendVerification(issued.context.userId, email);
+      this.mailer.kick();
       return issued;
     } catch (error) {
       if (isUniqueViolation(error)) throw new DomainError('EMAIL_EXISTS', 409);
@@ -187,8 +188,9 @@ export class AuthService {
       // Other devices signed in with the password alone are signed out.
       await tx.session.updateMany({ where: { userId: user.id, revokedAt: null, id: { not: context.sessionId } }, data: { revokedAt: new Date() } });
       await audit(tx, { organizationId: context.organizationId, actorUserId: user.id, action: 'MFA_ENABLED', entityType: 'User', entityId: user.id });
+      await this.mailer.enqueue(tx, { to: user.email, subject: 'Two-step sign-in is on', text: 'Two-step sign-in was turned on for your RentFlow account. You will be asked for a code from your authenticator app when you sign in.' }, 'SECURITY_NOTICE', { userId: user.id, organizationId: context.organizationId });
     });
-    this.securityNotice(user.email, 'Two-step sign-in is on', 'Two-step sign-in was turned on for your RentFlow account. You will be asked for a code from your authenticator app when you sign in.');
+    this.mailer.kick();
     return { recoveryCodes };
   }
 
@@ -198,8 +200,9 @@ export class AuthService {
       await tx.user.update({ where: { id: user.id }, data: { mfaSecret: null, mfaPendingSecret: null, mfaEnabledAt: null, mfaLastStep: null } });
       await tx.mfaRecoveryCode.deleteMany({ where: { userId: user.id } });
       await audit(tx, { organizationId: context.organizationId, actorUserId: user.id, action: 'MFA_DISABLED', entityType: 'User', entityId: user.id });
+      await this.mailer.enqueue(tx, { to: user.email, subject: 'Two-step sign-in is off', text: 'Two-step sign-in was turned off for your RentFlow account. If this was not you, reset your password now and turn it back on.' }, 'SECURITY_NOTICE', { userId: user.id, organizationId: context.organizationId });
     });
-    this.securityNotice(user.email, 'Two-step sign-in is off', 'Two-step sign-in was turned off for your RentFlow account. If this was not you, reset your password now and turn it back on.');
+    this.mailer.kick();
   }
 
   async regenerateRecoveryCodes(context: SessionContext, password: string, code: string) {
@@ -227,11 +230,20 @@ export class AuthService {
   private async checkSecondFactor(user: User, code: string): Promise<'totp' | 'recovery' | null> {
     if (!user.mfaSecret) return null;
     if (looksLikeRecoveryCode(code)) {
-      const used = await this.prisma.mfaRecoveryCode.updateMany({
-        where: { userId: user.id, codeHash: recoveryCodeHash(code), usedAt: null },
-        data: { usedAt: new Date() },
+      return this.prisma.$transaction(async tx => {
+        const used = await tx.mfaRecoveryCode.updateMany({
+          where: { userId: user.id, codeHash: recoveryCodeHash(code), usedAt: null },
+          data: { usedAt: new Date() },
+        });
+        if (used.count !== 1) return null;
+        const left = await tx.mfaRecoveryCode.count({ where: { userId: user.id, usedAt: null } });
+        await this.mailer.enqueue(tx, {
+          to: user.email,
+          subject: 'A recovery code was used to sign in',
+          text: `A recovery code was used for your RentFlow account. You have ${left} left. If this was not you, reset your password and create new recovery codes on the Account page.`,
+        }, 'SECURITY_NOTICE', { userId: user.id });
+        return 'recovery' as const;
       });
-      return used.count === 1 ? 'recovery' : null;
     }
     const step = verifyTotp(decryptSecret(user.mfaSecret), code, user.mfaLastStep);
     if (step === null) return null;
@@ -249,19 +261,10 @@ export class AuthService {
   }
 
   private async noticeRecoveryCodeUsed(user: User, organizationId: string): Promise<void> {
-    const left = await this.prisma.mfaRecoveryCode.count({ where: { userId: user.id, usedAt: null } });
-    await this.prisma.$transaction((tx) =>
-      audit(tx, { organizationId, actorUserId: user.id, action: 'MFA_RECOVERY_CODE_USED', entityType: 'User', entityId: user.id }),
-    );
-    this.securityNotice(
-      user.email,
-      'A recovery code was used to sign in',
-      `Someone signed in to your RentFlow account with a recovery code. You have ${left} left. If this was not you, reset your password and create new recovery codes on the Account page.`,
-    );
-  }
-
-  private securityNotice(to: string, subject: string, text: string): void {
-    this.mailer.sendInBackground({ to, subject, text }, 'SECURITY_NOTICE');
+    await this.prisma.$transaction(async (tx) => {
+      await audit(tx, { organizationId, actorUserId: user.id, action: 'MFA_RECOVERY_CODE_USED', entityType: 'User', entityId: user.id });
+    });
+    this.mailer.kick();
   }
 
   /** The workspace a sign-in lands in: the named one, or the oldest active membership. */
@@ -398,22 +401,26 @@ export class AuthService {
     const email = normalizeEmail(emailInput);
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || user.disabledAt) return;
-    const token = await this.issueToken(user.id, 'PASSWORD_RESET', resetLifetime);
-    this.mailer.sendInBackground(
-      {
-        to: email,
-        subject: 'Reset your RentFlow password',
-        text: [
-          `Hi ${user.displayName},`,
-          '',
-          'Use this link to choose a new RentFlow password. It expires in 30 minutes and works once:',
-          this.mailer.link('/reset-password', { token }),
-          '',
-          'If you did not ask for this, ignore this email. Your password has not changed.',
-        ].join('\n'),
-      },
-      'PASSWORD_RESET',
-    );
+    await this.prisma.$transaction(async (tx) => {
+      const { token, record } = await this.createToken(tx, user.id, 'PASSWORD_RESET', resetLifetime);
+      await this.mailer.enqueue(tx,
+        {
+          to: email,
+          subject: 'Reset your RentFlow password',
+          text: [
+            `Hi ${user.displayName},`,
+            '',
+            'Use this link to choose a new RentFlow password. It expires in 30 minutes and works once:',
+            this.mailer.link('/reset-password', { token }),
+            '',
+            'If you did not ask for this, ignore this email. Your password has not changed.',
+          ].join('\n'),
+        },
+        'PASSWORD_RESET',
+        { userId: user.id, tokenId: record.id, expiresAt: record.expiresAt },
+      );
+    });
+    this.mailer.kick();
   }
 
   async resetPassword(token: string, password: string): Promise<void> {
@@ -452,7 +459,10 @@ export class AuthService {
 
   async resendVerification(context: SessionContext): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: context.userId } });
-    if (!user.emailVerifiedAt) await this.sendVerification(user.id, user.email);
+    if (!user.emailVerifiedAt) {
+      await this.prisma.$transaction(tx => this.sendVerification(tx, user.id, user.email));
+      this.mailer.kick();
+    }
   }
 
   async changePassword(context: SessionContext, current: string, next: string): Promise<void> {
@@ -543,17 +553,19 @@ export class AuthService {
   }
 
   private async issueToken(userId: string, type: UserTokenType, lifetime: number): Promise<string> {
+    return (await this.prisma.$transaction(tx => this.createToken(tx, userId, type, lifetime))).token;
+  }
+
+  private async createToken(tx: Tx, userId: string, type: UserTokenType, lifetime: number) {
     const token = randomToken(32);
-    await this.prisma.$transaction([
-      this.prisma.userToken.updateMany({
-        where: { userId, type, usedAt: null },
-        data: { usedAt: new Date() },
-      }),
-      this.prisma.userToken.create({
-        data: { userId, type, tokenHash: sha256(token), expiresAt: new Date(Date.now() + lifetime) },
-      }),
-    ]);
-    return token;
+    await tx.userToken.updateMany({
+      where: { userId, type, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    const record = await tx.userToken.create({
+      data: { userId, type, tokenHash: sha256(token), expiresAt: new Date(Date.now() + lifetime) },
+    });
+    return { token, record };
   }
 
   private async consumeToken(tx: Tx, token: string, type: UserTokenType) {
@@ -568,9 +580,9 @@ export class AuthService {
     return record;
   }
 
-  private async sendVerification(userId: string, email: string): Promise<void> {
-    const token = await this.issueToken(userId, 'EMAIL_VERIFICATION', verificationLifetime);
-    this.mailer.sendInBackground(
+  private async sendVerification(tx: Tx, userId: string, email: string): Promise<void> {
+    const { token, record } = await this.createToken(tx, userId, 'EMAIL_VERIFICATION', verificationLifetime);
+    await this.mailer.enqueue(tx,
       {
         to: email,
         subject: 'Confirm your RentFlow email',
@@ -582,6 +594,7 @@ export class AuthService {
         ].join('\n'),
       },
       'EMAIL_VERIFICATION',
+      { userId, tokenId: record.id, expiresAt: record.expiresAt },
     );
   }
 }

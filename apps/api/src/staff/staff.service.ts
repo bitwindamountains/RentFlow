@@ -52,6 +52,7 @@ export class StaffService {
     if (input.role === 'OWNER' || input.role === 'TENANT') throw new DomainError('INVALID_ROLE', 422);
     const email = normalizeEmail(input.email);
     const token = randomToken(32);
+    const link = this.mailer.link('/accept-invite', { token });
     const invitation = await this.prisma.$transaction(async (tx) => {
       const member = await tx.membership.findFirst({
         where: { organizationId, user: { email }, status: { in: ['ACTIVE', 'SUSPENDED', 'INVITED'] } },
@@ -81,22 +82,23 @@ export class StaffService {
         entityId: created.id,
         after: { role: input.role },
       });
+      await this.mailer.enqueue(tx,
+        {
+          to: email,
+          subject: `You're invited to ${created.organization.name} on RentFlow`,
+          text: [
+            `You have been invited to join ${created.organization.name} on RentFlow as ${created.role.toLowerCase()}.`,
+            '',
+            'Accept the invitation (valid for 7 days):',
+            link,
+          ].join('\n'),
+        },
+        'STAFF_INVITATION',
+        { organizationId, invitationId: created.id, expiresAt: created.expiresAt },
+      );
       return created;
     });
-    const link = this.mailer.link('/accept-invite', { token });
-    this.mailer.sendInBackground(
-      {
-        to: email,
-        subject: `You're invited to ${invitation.organization.name} on RentFlow`,
-        text: [
-          `You have been invited to join ${invitation.organization.name} on RentFlow as ${invitation.role.toLowerCase()}.`,
-          '',
-          'Accept the invitation (valid for 7 days):',
-          link,
-        ].join('\n'),
-      },
-      'STAFF_INVITATION',
-    );
+    this.mailer.kick();
     return {
       id: invitation.id,
       email,

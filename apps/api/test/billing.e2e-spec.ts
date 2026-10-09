@@ -117,11 +117,11 @@ describe('billing, payments, and balances', () => {
     expect(first.body.receiptNumber).toMatch(/-\d{4}-\d{6}$/);
     expect(first.body.paidAt).toBe(yesterday);
     const second = await pay(rental, '1000.00', [{ chargeId: charge.id, amount: '999.90' }]);
-    expect(second.body.unallocated).toBe('0.10');
+    expect(second.body.unallocated).toBe('0.00');
     const [after] = await openCharges(rental.lease.id);
-    expect(after.outstanding).toBe('3500.00');
+    expect(after.outstanding).toBe('3499.90');
     const tenant = (await owner.get(`/tenants/${rental.tenant.id}`)).body;
-    // Ledger balance = 7000.00 − 2500.10 − 1000.00 (0.10 unallocated credit counts).
+    // Any remainder is allocated to existing debt; ledger and open charges agree.
     expect(tenant.balance).toBe('3499.90');
   });
 

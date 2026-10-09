@@ -353,8 +353,8 @@ export class LeasesService {
     for (const lease of due)
       await this.prisma.serializable(async (tx) => {
         const current = await tx.lease.findFirst({ where: { id: lease.id, status: 'ACTIVE' } });
-        if (!current) return;
-        await this.close(tx, lease.id, lease.rentableSpaceId, 'EXPIRED', lease.endDate!);
+        if (!current?.endDate || current.endDate >= parseDateOnly(today)) return;
+        await this.close(tx, current.id, current.rentableSpaceId, 'EXPIRED', current.endDate);
         await audit(tx, {
           organizationId,
           action: 'LEASE_EXPIRED',

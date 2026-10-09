@@ -7,7 +7,6 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { randomUUID } from 'node:crypto';
 import { AppModule } from './app.module.js';
-import { sha256 } from './common/crypto.js';
 import { environment, sessionCookieName } from './config/environment.js';
 import { UPLOAD_TYPES } from './storage/file-store.service.js';
 
@@ -47,11 +46,8 @@ export async function createApp(options: { logger?: false } = {}): Promise<NestF
     global: true,
     max: () => 300 * Number(process.env['RATE_LIMIT_MULTIPLIER'] ?? 1),
     timeWindow: '1 minute',
-    // Authenticated clients are limited per session, anonymous ones per IP.
-    keyGenerator: (request) => {
-      const session = (request as { cookies?: Record<string, string> }).cookies?.[sessionCookieName()];
-      return session ? `s:${sha256(session).slice(0, 32)}` : `ip:${request.ip}`;
-    },
+    // Use the plugin's normalized IP key, including on public auth routes.
+    // A caller-supplied cookie is not proof of an authenticated identity.
     errorResponseBuilder: (_request, context) => ({
       statusCode: 429,
       code: 'RATE_LIMITED',
@@ -86,7 +82,7 @@ export async function createApp(options: { logger?: false } = {}): Promise<NestF
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['content-type', 'x-csrf-token', 'idempotency-key', 'x-request-id'],
-    exposedHeaders: ['x-request-id', 'retry-after'],
+    exposedHeaders: ['x-request-id', 'retry-after', 'x-next-cursor'],
     origin: env.WEB_ORIGIN.split(','),
     maxAge: 600,
   });

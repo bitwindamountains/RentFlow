@@ -194,6 +194,7 @@ model Organization {
   expenses            Expense[]
   maintenanceRequests MaintenanceRequest[]
   documents           DocumentRecord[]
+  storageObjects      StorageObject[]
   staffInvitations    StaffInvitation[]
   units               Unit[]
   rentableSpaces      RentableSpace[]
@@ -523,6 +524,7 @@ model Payment {
   notice          PaymentNotice?
 
   @@index([organizationId, paidAt, status])
+  @@index([organizationId, tenantId, paidAt, id])
   @@index([organizationId, referenceNumber])
   @@index([tenantId])
   @@index([leaseId])
@@ -651,11 +653,33 @@ model IdempotencyKey {
   responseCode   Int?
   responseBody   Json?
   lockedUntil    DateTime?    @db.Timestamptz(3)
-  expiresAt      DateTime     @db.Timestamptz(3)
+  expiresAt      DateTime?    @db.Timestamptz(3)
   createdAt      DateTime     @default(now()) @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, key, operation])
+  @@index([expiresAt])
+}
+
+/// Sensitive mail bodies (including one-time links) are encrypted, then cleared after delivery/expiry.
+model MailDelivery {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String?      @db.Uuid
+  userId         String?      @db.Uuid
+  kind           String
+  encryptedBody  String?
+  tokenId        String?      @db.Uuid
+  invitationId   String?      @db.Uuid
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  availableAt    DateTime     @default(now()) @db.Timestamptz(3)
+  expiresAt      DateTime     @db.Timestamptz(3)
+  processedAt    DateTime?    @db.Timestamptz(3)
+  lastError      String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([status, availableAt])
+  @@index([organizationId, status])
   @@index([expiresAt])
 }
 
@@ -666,6 +690,7 @@ model OutboxEvent {
   aggregateType  String
   aggregateId    String
   payload        Json
+  deliveredTo    String[]     @default([])
   status         OutboxStatus @default(PENDING)
   attempts       Int          @default(0)
   availableAt    DateTime     @default(now()) @db.Timestamptz(3)
@@ -722,8 +747,32 @@ model MaintenanceRequest {
   tenant         Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status, priority])
+  @@index([organizationId, status, priority(sort: Desc), createdAt(sort: Desc), id(sort: Desc)], map: "MaintenanceRequest_staff_page_idx")
+  @@index([organizationId, tenantId, createdAt, id], map: "MaintenanceRequest_portal_page_idx")
   @@index([tenantId, createdAt])
   @@index([propertyId, unitId])
+}
+
+enum StorageObjectState {
+  PENDING
+  READY
+  DELETE_PENDING
+  DELETED
+}
+
+/// Reserve quota before writing bytes; keep deletion work durable across crashes.
+model StorageObject {
+  key            String             @id
+  organizationId String             @db.Uuid
+  sizeBytes      Int
+  state          StorageObjectState @default(PENDING)
+  availableAt    DateTime            @db.Timestamptz(3)
+  attempts       Int                @default(0)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, state])
+  @@index([state, availableAt])
 }
 
 model DocumentRecord {
@@ -748,6 +797,7 @@ model DocumentRecord {
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, category, createdAt])
+  @@index([organizationId, createdAt, id])
   @@index([organizationId, entityType, entityId])
 }
 
@@ -797,6 +847,8 @@ model PaymentNotice {
   payment         Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status, createdAt])
+  @@index([organizationId, status, createdAt, id], map: "PaymentNotice_staff_page_idx")
+  @@index([organizationId, tenantId, createdAt, id], map: "PaymentNotice_portal_page_idx")
   @@index([tenantId, createdAt])
   @@index([leaseId])
 }

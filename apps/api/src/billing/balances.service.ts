@@ -105,11 +105,12 @@ export class BalancesService {
     return new Map(rows.map((row) => [row.tenantId, row.balance]));
   }
 
-  /** Outstanding per active lease, used by the collect-payment picker. */
+  /** Active leases and ended leases still requiring settlement. */
   async leaseOutstanding(organizationId: string) {
     return this.prisma.$queryRaw<
       Array<{
         leaseId: string;
+        leaseStatus: string;
         tenantId: string;
         firstName: string;
         lastName: string;
@@ -120,7 +121,7 @@ export class BalancesService {
         balance: Prisma.Decimal;
       }>
     >`
-      SELECT l.id AS "leaseId", t.id AS "tenantId", t."firstName", t."lastName",
+      SELECT * FROM (SELECT l.id AS "leaseId", l.status::text AS "leaseStatus", t.id AS "tenantId", t."firstName", t."lastName",
              u.number AS "unitNumber", pr.name AS "propertyName", l."monthlyRent",
              COALESCE((
                SELECT SUM(c.amount
@@ -133,8 +134,9 @@ export class BalancesService {
       JOIN "RentableSpace" s ON s.id = l."rentableSpaceId"
       JOIN "Unit" u ON u.id = s."unitId"
       JOIN "Property" pr ON pr.id = u."propertyId"
-      WHERE l."organizationId" = ${organizationId}::uuid AND l.status = 'ACTIVE'
-      ORDER BY t."lastName", t."firstName", u.number`;
+      WHERE l."organizationId" = ${organizationId}::uuid AND l.status IN ('ACTIVE', 'EXPIRED', 'TERMINATED')) options
+      WHERE "leaseStatus" = 'ACTIVE' OR outstanding > 0
+      ORDER BY "lastName", "firstName", "unitNumber"`;
   }
 
   /** Overdue balances grouped by lease with aging buckets (days past due). */

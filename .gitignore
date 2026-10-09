@@ -14,6 +14,7 @@ apps/api/backups/
 apps/web/.ui-review/
 *.tsbuildinfo
 .playwright-mcp/
+graphify-out/
 !.env.*.example
 
 # Keep secrets and local files out of the public repo

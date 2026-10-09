@@ -3,6 +3,7 @@ import { ApiClient, type ApiError } from '../core/api-client.service';
 import { describeFile } from '../core/files';
 import { MomentPipe } from '../core/format';
 import type { PortalDocument } from '../core/models';
+import { appendPage } from '../core/pagination';
 
 @Component({
   selector: 'app-portal-documents-page',
@@ -32,18 +33,28 @@ import type { PortalDocument } from '../core/models';
       }
     </div>
   </section>
+  @if (nextCursor()) { <button class="secondary" type="button" (click)="load(true)" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more documents' }}</button> }
 </div>`,
 })
 export class PortalDocumentsPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly documents = signal<PortalDocument[]>([]);
+  protected readonly nextCursor = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
 
   ngOnInit(): void {
-    this.api.get<PortalDocument[]>('/portal/documents').subscribe({
-      next: (rows) => {
-        this.documents.set(rows);
+    this.load();
+  }
+
+  protected load(more = false): void {
+    if (more && (this.loading() || !this.nextCursor())) return;
+    this.loading.set(true);
+    this.error.set('');
+    this.api.getList<PortalDocument>('/portal/documents', { cursor: more ? this.nextCursor() : null }).subscribe({
+      next: (page) => {
+        this.documents.update(rows => more ? appendPage(rows, page.items) : page.items);
+        this.nextCursor.set(page.nextCursor);
         this.loading.set(false);
       },
       error: (error: ApiError) => {

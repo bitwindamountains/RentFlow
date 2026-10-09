@@ -6,6 +6,14 @@ import { ApiClient, type ApiError, isUncertain } from '../core/api-client.servic
 import { DayPipe, LabelPipe, MomentPipe, MoneyPipe } from '../core/format';
 import type { PaymentNotice, PortalHome, PortalPayment } from '../core/models';
 import { isMoney } from '../core/money';
+import { appendPage } from '../core/pagination';
+
+interface PaymentHistory {
+  payments: PortalPayment[];
+  notices: PaymentNotice[];
+  paymentsNextCursor: string | null;
+  noticesNextCursor: string | null;
+}
 
 const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
@@ -88,6 +96,7 @@ const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
     </section>
   }
 
+  @if (noticesNextCursor()) { <button class="secondary" type="button" (click)="loadMore('notices')" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more reports' }}</button> }
   <h2>Payment history</h2>
   <section class="panel">
     <div class="attention-list">
@@ -105,6 +114,7 @@ const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
       }
     </div>
   </section>
+  @if (paymentsNextCursor()) { <button class="secondary" type="button" (click)="loadMore('payments')" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more payments' }}</button> }
 </div>`,
 })
 export class PortalPaymentsPage implements OnInit {
@@ -113,6 +123,9 @@ export class PortalPaymentsPage implements OnInit {
   protected readonly home = signal<PortalHome | null>(null);
   protected readonly payments = signal<PortalPayment[]>([]);
   protected readonly notices = signal<PaymentNotice[]>([]);
+  protected readonly paymentsNextCursor = signal<string | null>(null);
+  protected readonly noticesNextCursor = signal<string | null>(null);
+  private loadVersion = 0;
   protected readonly leases = computed(() => (this.home()?.leases ?? []).filter((l) => l.status === 'ACTIVE'));
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
@@ -132,18 +145,52 @@ export class PortalPaymentsPage implements OnInit {
   }
 
   private load(then?: () => void): void {
+    const version = ++this.loadVersion;
+    this.loading.set(true);
+    this.paymentsNextCursor.set(null);
+    this.noticesNextCursor.set(null);
     forkJoin({
       home: this.api.get<PortalHome>('/portal/home'),
-      history: this.api.get<{ payments: PortalPayment[]; notices: PaymentNotice[] }>('/portal/payments'),
+      history: this.api.get<PaymentHistory>('/portal/payments'),
     }).subscribe({
       next: ({ home, history }) => {
+        if (version !== this.loadVersion) return;
         this.home.set(home);
         this.payments.set(history.payments);
         this.notices.set(history.notices);
+        this.paymentsNextCursor.set(history.paymentsNextCursor);
+        this.noticesNextCursor.set(history.noticesNextCursor);
         this.loading.set(false);
         then?.();
       },
       error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
+        this.error.set(error.message);
+        this.loading.set(false);
+      },
+    });
+  }
+
+  protected loadMore(kind: 'payments' | 'notices'): void {
+    const cursor = kind === 'payments' ? this.paymentsNextCursor() : this.noticesNextCursor();
+    if (!cursor || this.loading()) return;
+    const version = this.loadVersion;
+    this.loading.set(true);
+    this.error.set('');
+    this.api.get<PaymentHistory>('/portal/payments', { [`${kind}Cursor`]: cursor }).subscribe({
+      next: history => {
+        if (version !== this.loadVersion) return;
+        if (kind === 'payments') {
+          this.payments.update(rows => appendPage(rows, history.payments));
+          this.paymentsNextCursor.set(history.paymentsNextCursor);
+        } else {
+          this.notices.update(rows => appendPage(rows, history.notices));
+          this.noticesNextCursor.set(history.noticesNextCursor);
+        }
+        this.loading.set(false);
+      },
+      error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
         this.error.set(error.message);
         this.loading.set(false);
       },

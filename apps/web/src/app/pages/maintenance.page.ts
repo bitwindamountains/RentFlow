@@ -1,4 +1,5 @@
 import { Component, type OnInit, computed, inject, signal } from '@angular/core';
+import { appendPage } from '../core/pagination';
 import { FormsModule } from '@angular/forms';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { DayPipe, LabelPipe, MomentPipe, statusTone } from '../core/format';
@@ -103,6 +104,7 @@ interface PropertyOption {
       </tbody>
     </table>
   </section>
+  @if (nextCursor()) { <button class="secondary" type="button" (click)="load(true)" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more work orders' }}</button> }
 </div>`,
 })
 export class MaintenancePage implements OnInit {
@@ -110,6 +112,8 @@ export class MaintenancePage implements OnInit {
   protected readonly filters = ['active', 'closed', 'all'] as const;
   protected readonly filter = signal<'active' | 'closed' | 'all'>('active');
   protected readonly orders = signal<WorkOrder[]>([]);
+  protected readonly nextCursor = signal<string | null>(null);
+  private loadVersion = 0;
   protected readonly properties = signal<PropertyOption[]>([]);
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
@@ -129,14 +133,22 @@ export class MaintenancePage implements OnInit {
     return this.properties().find((p) => p.id === this.draft.propertyId)?.units ?? [];
   }
 
-  protected load(): void {
+  protected load(more = false): void {
+    if (more && (this.loading() || !this.nextCursor())) return;
+    const version = ++this.loadVersion;
+    const cursor = more ? this.nextCursor() : null;
+    if (!more) this.nextCursor.set(null);
     this.loading.set(true);
-    this.api.get<WorkOrder[]>('/maintenance', { status: this.filter() }).subscribe({
-      next: (rows) => {
-        this.orders.set(rows);
+    this.error.set('');
+    this.api.getList<WorkOrder>('/maintenance', { status: this.filter(), cursor }).subscribe({
+      next: (page) => {
+        if (version !== this.loadVersion) return;
+        this.orders.update(rows => more ? appendPage(rows, page.items) : page.items);
+        this.nextCursor.set(page.nextCursor);
         this.loading.set(false);
       },
       error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
         this.error.set(error.message);
         this.loading.set(false);
       },
@@ -168,7 +180,7 @@ export class MaintenancePage implements OnInit {
   protected move(order: WorkOrder, status: WorkOrder['status']): void {
     this.api.patch<WorkOrder>(`/maintenance/${order.id}`, { status }).subscribe({
       next: (updated) => {
-        this.orders.update((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
+        this.load();
         this.notice.set(`“${order.title}” is now ${status.replace('_', ' ').toLowerCase()}.`);
       },
       error: (error: ApiError) => this.error.set(error.message),

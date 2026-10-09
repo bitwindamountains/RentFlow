@@ -394,6 +394,8 @@ model Tenant {
   createdAt        DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
   archivedAt       DateTime?            @db.Timestamptz(3)
+  /// Personal details were erased on request; financial records remain under the anonymized name.
+  erasedAt         DateTime?            @db.Timestamptz(3)
   organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   primaryLeases    Lease[]              @relation("PrimaryTenant")
   occupancies      LeaseOccupant[]

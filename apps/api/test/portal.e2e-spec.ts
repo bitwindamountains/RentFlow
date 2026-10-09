@@ -66,13 +66,14 @@ describe('tenant portal', () => {
   });
 
   it('denies tenants every staff endpoint', async () => {
-    const reads = ['/tenants', `/tenants/${rentalA.tenant.id}`, '/payments', '/charges', '/dashboard', '/reminders', '/arrears', '/leases', '/properties', '/documents', '/maintenance', '/expenses', '/staff', '/payment-notices', '/audit-log', '/collections/options', `/tenants/${rentalA.tenant.id}/portal`];
+    const reads = ['/tenants', `/tenants/${rentalA.tenant.id}`, '/payments', '/charges', '/dashboard', '/reminders', '/arrears', '/leases', '/properties', '/documents', '/maintenance', '/expenses', '/staff', '/payment-notices', '/audit-log', '/collections/options', `/tenants/${rentalA.tenant.id}/portal`, `/tenants/${rentalA.tenant.id}/export`];
     for (const path of reads) expect([path, (await tenantA.get(path)).status]).toEqual([path, 403]);
     const writes: Array<[string, unknown]> = [
       ['/payments', { tenantId: rentalA.tenant.id, leaseId: rentalA.lease.id, amount: '1.00', method: 'CASH', paidAt: new Date().toISOString(), allocations: [] }],
       ['/tenants', { firstName: 'X', lastName: 'Y' }],
       [`/tenants/${rentalA.tenant.id}/portal/invite`, {}],
       ['/staff/invitations', { email: `x-${unique()}@t.test`, role: 'MANAGER' }],
+      [`/tenants/${rentalA.tenant.id}/erase`, { password: PASSWORD }],
     ];
     for (const [path, body] of writes) expect([path, (await tenantA.post(path, body)).status]).toEqual([path, 403]);
     // And staff cannot use the tenant routes.

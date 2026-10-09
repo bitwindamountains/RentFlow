@@ -279,7 +279,8 @@ export class WorkService {
         action: 'DOCUMENT_LINKED',
         entityType: 'DocumentRecord',
         entityId: row.id,
-        after: { name: row.name, category: row.category, entityType: row.entityType },
+        // No name: files are often named after people, and audit rows are never rewritten.
+        after: { category: row.category, entityType: row.entityType },
       });
       return documentView(row);
     });
@@ -336,8 +337,8 @@ export class WorkService {
           action: 'DOCUMENT_UPLOADED',
           entityType: 'DocumentRecord',
           entityId: row.id,
+          // No name: files are often named after people, and audit rows are never rewritten.
           after: {
-            name: row.name,
             category: row.category,
             entityType: row.entityType,
             contentType: row.contentType,

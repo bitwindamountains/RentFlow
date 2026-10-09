@@ -24,9 +24,14 @@ import { IsDateOnly, IsMoney } from '../common/validation.js';
 import { LeasesService, type FirstMonthMode } from './leases.service.js';
 import { PropertiesService } from './properties.service.js';
 import { RentalSetupService } from './setup.service.js';
+import { TenantPrivacyService } from './tenant-privacy.service.js';
 import { TenantsService } from './tenants.service.js';
 
 const trim = () => Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
+class EraseTenantDto {
+  @IsString() @MinLength(1) @MaxLength(128) password!: string;
+}
+
 const emptyToUndefined = () => Transform(({ value }) => (value === '' ? undefined : value));
 const FIRST_MONTH: FirstMonthMode[] = ['FULL', 'PRORATED', 'NONE'];
 
@@ -98,6 +103,7 @@ export class RentalsController {
     private readonly tenants: TenantsService,
     private readonly leases: LeasesService,
     private readonly setup: RentalSetupService,
+    private readonly privacy: TenantPrivacyService,
   ) {}
 
   @Roles(...ALL_ROLES)
@@ -156,6 +162,20 @@ export class RentalsController {
   @Post('tenants/:id/archive')
   archiveTenant(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.tenants.archive(auth.organizationId, auth.userId, id);
+  }
+
+  /** Everything the workspace holds about one tenant, for a data-subject access request. */
+  @Roles(...MANAGERS)
+  @Get('tenants/:id/export')
+  exportTenant(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.privacy.export(auth.organizationId, auth.userId, id);
+  }
+
+  /** Erases a former tenant's personal details; financial records stay, anonymized. */
+  @Roles('OWNER')
+  @Post('tenants/:id/erase')
+  eraseTenant(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string, @Body() input: EraseTenantDto) {
+    return this.privacy.erase(auth.organizationId, auth.userId, id, input.password);
   }
 
   @Get('leases')

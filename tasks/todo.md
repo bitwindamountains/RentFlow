@@ -18,7 +18,7 @@ Details, acceptance criteria and verification for each task are in [plan.md](pla
 - [x] T6a Tenant data export
 - [x] T6b Tenant erasure (anonymize, refuse while a balance or lease is open)
 - [x] T7 Pin Docker images; CI on `ubuntu-24.04` with current actions
-- [ ] T8 Push and confirm CI starts on push (C+U)
+- [ ] T8 Push and confirm CI starts on push (C+U). Pushed 2026-10-11, but **no CI run started** (GitHub created no check suite). Started by hand: run 38005527295 passed, with no warnings. Remaining (U): check Settings → Actions → General and repository rules.
 - [ ] **CP1** Local and GitHub CI green, visual review, docs updated, you review the diff
 
 ## Phase 2: blockers

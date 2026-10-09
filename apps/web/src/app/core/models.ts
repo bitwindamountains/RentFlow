@@ -9,8 +9,10 @@ export function homeFor(role: Role | null | undefined): string {
 
 export interface Profile {
   user: { id: string; email: string; name: string; emailVerified: boolean; mfaEnabled?: boolean };
-  organization: { id: string; name: string; slug: string; currency: string; timezone: string };
+  organization: { id: string; name: string; slug: string; currency: string; timezone: string; requireOwnerMfa?: boolean };
   role: Role;
+  /** An owner who must turn on two-step sign-in before using this workspace. */
+  mfaSetupRequired?: boolean;
   csrfToken: string;
   sessionExpiresAt: string;
   workspaces: Array<{ name: string; slug: string; role: Role }>;

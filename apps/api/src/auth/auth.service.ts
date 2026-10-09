@@ -5,6 +5,7 @@ import { audit } from '../common/audit.js';
 import {
   assertPasswordPolicy,
   hashPassword,
+  needsRehash,
   randomToken,
   sha256,
   verifyPassword,
@@ -117,6 +118,12 @@ export class AuthService {
     if (!user || !valid || user.disabledAt) throw new DomainError('INVALID_CREDENTIALS', 401);
     const membership = await this.loginMembership(user.id, input.workspace);
     if (!membership) throw new DomainError('INVALID_CREDENTIALS', 401);
+    // Only a verified password can upgrade its own hash; the old hash stays valid until then.
+    if (needsRehash(user.passwordHash))
+      await this.prisma.user.updateMany({
+        where: { id: user.id, passwordHash: user.passwordHash },
+        data: { passwordHash: await hashPassword(input.password) },
+      });
     if (user.mfaEnabledAt)
       return { mfaRequired: true, challenge: await this.issueToken(user.id, 'MFA_CHALLENGE', mfaChallengeLifetime) };
     return this.prisma.$transaction((tx) =>

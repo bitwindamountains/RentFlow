@@ -192,7 +192,7 @@ export class App {
   }
 
   private isPublicPath(path: string): boolean {
-    return ['/auth', '/accept-invite', '/reset-password', '/verify-email'].some((prefix) => path.startsWith(prefix));
+    return ['/auth', '/accept-invite', '/reset-password', '/verify-email', '/privacy'].some((prefix) => path.startsWith(prefix));
   }
 
   protected canRecordPayment(): boolean {

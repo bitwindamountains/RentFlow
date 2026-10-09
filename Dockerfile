@@ -3,7 +3,9 @@
 #   api      – production API (non-root, prod dependencies only)
 #   migrate  – runs `prisma migrate deploy` once per release
 #   web      – Caddy serving the PWA and proxying /api to the API
-ARG NODE_VERSION=24-alpine
+# Exact versions so a rebuild or rollback gets the same base. Bump deliberately:
+# check hub.docker.com/_/node and /_/caddy, rebuild, and let CI's container job pass.
+ARG NODE_VERSION=24.21.0-alpine3.24
 
 FROM node:${NODE_VERSION} AS deps
 RUN apk add --no-cache openssl
@@ -53,7 +55,7 @@ FROM deps AS web-build
 COPY apps/web apps/web
 RUN npm run build --workspace web
 
-FROM caddy:2-alpine AS web
+FROM caddy:2.11.7-alpine AS web
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=web-build /app/apps/web/dist/web/browser /srv
 EXPOSE 80 443

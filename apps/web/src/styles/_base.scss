@@ -7,6 +7,9 @@ html {
   background: var(--canvas);
   color: var(--text);
   font-family: var(--font-sans);
+  // Inter: single-storey "a" (cv11), open digits (ss01), optical sizes for display text.
+  font-feature-settings: 'cv11', 'ss01';
+  font-optical-sizing: auto;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -16,18 +19,37 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100dvh;
-  background: var(--canvas);
+  background: var(--canvas-glow) no-repeat, var(--canvas);
   color: var(--text);
   font-size: var(--text-md);
   line-height: 1.5;
+}
+// Faint film grain keeps large flat areas from looking digital. Decorative only.
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@media print {
+  body::after {
+    display: none;
+  }
 }
 h1,
 h2,
 h3 {
   margin: 0;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
+  line-height: 1.2;
+  font-weight: 680;
+  letter-spacing: -0.022em;
   text-wrap: balance;
+}
+h1 {
+  letter-spacing: -0.032em;
 }
 p {
   text-wrap: pretty;

@@ -134,6 +134,7 @@ export interface Dashboard {
   billedThisMonth: string;
   collectedThisMonth: string;
   collectionRate: number | null;
+  remainingThisMonth: string;
   outstanding: string;
   overdue: string;
   activeLeases: number;

@@ -54,7 +54,7 @@ import type { PortalHome } from '../core/models';
         <div class="attention-list">
           @for (c of h.openCharges; track c.id) {
             <div class="attention-item">
-              <span [class]="'attention-icon ' + (c.overdue ? 'red' : 'blue')" aria-hidden="true">{{ c.overdue ? '!' : '₱' }}</span>
+              <span [class]="'attention-icon ' + (c.overdue ? 'red' : 'blue')" [attr.data-icon]="c.overdue ? 'alert' : 'receipt'" aria-hidden="true"></span>
               <span>
                 <strong>{{ c.description }}{{ c.billingPeriod ? ' · ' + c.billingPeriod : '' }}</strong>
                 <small>Due {{ c.dueDate | day }}@if (c.outstanding !== c.amount) { · {{ c.amount | money }} billed }</small>
@@ -66,7 +66,7 @@ import type { PortalHome } from '../core/models';
             </div>
           } @empty {
             <div class="attention-item">
-              <span class="attention-icon green" aria-hidden="true">✓</span>
+              <span class="attention-icon green" data-icon="check" aria-hidden="true"></span>
               <span><strong>No open charges</strong><small>New rent appears here when it is billed.</small></span>
             </div>
           }
@@ -95,7 +95,7 @@ import type { PortalHome } from '../core/models';
         <div class="attention-list">
           @for (p of h.recentPayments; track p.id) {
             <a class="attention-item" [routerLink]="['/portal/receipts', p.id]">
-              <span class="attention-icon green" aria-hidden="true">✓</span>
+              <span class="attention-icon green" data-icon="check" aria-hidden="true"></span>
               <span><strong>{{ p.amount | money }}</strong><small>{{ p.paidAt | moment: 'date' }} · {{ p.method | label }}@if (p.status === 'REVERSED') { · reversed }</small></span>
               <span class="text-button">{{ p.receiptNumber ?? 'Receipt' }} &rsaquo;</span>
             </a>

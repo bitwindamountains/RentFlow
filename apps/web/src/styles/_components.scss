@@ -23,14 +23,22 @@
     transform var(--dur-instant) var(--ease-out);
 }
 .primary {
+  position: relative;
+  isolation: isolate;
   padding: 10px 16px;
-  border: 1px solid transparent;
-  background: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 80%, black);
+  // Lit from above: a lighter top edge reads as a physical, pressable surface.
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 86%, white), var(--primary) 60%);
   color: var(--on-primary);
-  box-shadow: var(--shadow-xs);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    var(--shadow-xs);
 }
 .primary:not(:disabled):hover {
-  background: var(--primary-hover);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary-hover) 88%, white), var(--primary-hover) 60%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    var(--primary-glow);
 }
 .secondary,
 .filter-button {
@@ -38,10 +46,12 @@
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
+  box-shadow: var(--shadow-xs), var(--highlight);
 }
 .secondary:not(:disabled):hover,
 .filter-button:not(:disabled):hover {
-  background: var(--surface-3);
+  border-color: color-mix(in srgb, var(--text) 28%, var(--border-strong));
+  background: var(--surface-2);
 }
 .filter-button[aria-pressed='true'] {
   border-color: var(--text);
@@ -130,12 +140,19 @@
     min-height: 104px;
     resize: vertical;
   }
+  input:hover:not(:focus, :disabled),
+  select:hover:not(:focus, :disabled),
+  textarea:hover:not(:focus, :disabled) {
+    border-color: color-mix(in srgb, var(--text) 30%, var(--border-strong));
+  }
   input:focus,
   select:focus,
   textarea:focus {
     border-color: var(--focus);
     outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 20%, transparent);
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--focus) 16%, transparent),
+      var(--shadow-xs);
   }
   input.ng-touched.ng-invalid,
   select.ng-touched.ng-invalid,
@@ -242,7 +259,7 @@ summary {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm), var(--highlight);
 }
 .panel {
   padding: clamp(var(--space-5), 2.4vw, var(--space-6));
@@ -564,6 +581,31 @@ label.attention-item:has(input:checked) {
   border-radius: 10px;
   font-size: var(--text-sm);
   font-weight: 800;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent);
+}
+// Line icons as masks: one definition, tinted by the tone class through currentColor.
+$attention-icons: (
+  alert: "%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5h.01'/%3E",
+  check: "%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E",
+  plus: "%3Cpath d='M12 5v14M5 12h14'/%3E",
+  receipt: "%3Cpath d='M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'/%3E",
+  download: "%3Cpath d='M12 4v11M7 10l5 5 5-5M5 20h14'/%3E",
+  external: "%3Cpath d='M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'/%3E",
+  clock: "%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E",
+  x: "%3Cpath d='M6 6l12 12M18 6L6 18'/%3E",
+  wrench: "%3Cpath d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z'/%3E",
+);
+.attention-icon[data-icon]::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  mask: var(--icon) center / contain no-repeat;
+}
+@each $name, $shape in $attention-icons {
+  .attention-icon[data-icon='#{$name}'] {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E#{$shape}%3C/svg%3E");
+  }
 }
 .all-actions {
   display: grid;
@@ -732,6 +774,8 @@ label.attention-item:has(input:checked) {
   padding: var(--space-5);
   overflow-y: auto;
   background: var(--scrim);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
 }
 .payment-modal {
   position: relative;

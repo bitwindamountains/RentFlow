@@ -15,7 +15,16 @@ export class ThemeService {
 
   set(preference: ThemePreference): void {
     this.preference.set(preference);
-    this.apply(preference);
+    // Cross-fade the whole screen between themes where supported and motion is welcome.
+    const reduce = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? true;
+    if (reduce || !document.startViewTransition) this.apply(preference);
+    else {
+      const root = document.documentElement;
+      root.classList.add('theme-switching');
+      document
+        .startViewTransition(() => this.apply(preference))
+        .finished.finally(() => root.classList.remove('theme-switching'));
+    }
     try {
       if (preference === 'system') localStorage.removeItem(STORAGE_KEY);
       else localStorage.setItem(STORAGE_KEY, preference);

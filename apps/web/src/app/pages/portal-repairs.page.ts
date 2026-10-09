@@ -60,7 +60,7 @@ import { appendPage } from '../core/pagination';
     <div class="attention-list">
       @for (r of repairs(); track r.id) {
         <div class="attention-item">
-          <span [class]="'attention-icon ' + tone(r.status)" aria-hidden="true">{{ r.status === 'COMPLETED' ? '✓' : '•' }}</span>
+          <span [class]="'attention-icon ' + tone(r.status)" [attr.data-icon]="r.status === 'COMPLETED' ? 'check' : 'wrench'" aria-hidden="true"></span>
           <span>
             <strong>{{ r.title }}</strong>
             <small>Unit {{ r.unitNumber }} · reported {{ r.createdAt | moment: 'date' }} · {{ r.priority | label }} priority</small>

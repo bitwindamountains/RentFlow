@@ -2,8 +2,11 @@
 
 ## Current task
 
-The deployment-review work and the Supabase setup are committed and pushed to `main` (2026-10-10). The next gate is the GitHub CI `containers` job, which is the first real Docker build. Then come the production blockers under Next steps.
-- **GitHub Actions has never run on this repo.** The API reports 0 runs in total, even though Actions is enabled and the `CI` workflow is registered. The push of `abee1fb` started nothing. The user needs to check the repo's Actions tab and the account's billing or verification status. A run can also be started with `gh workflow run CI`.
+All work is committed and pushed to `main` (2026-10-10). **GitHub CI passed for the first time** (run 37970550334, started manually), including the `containers` job:
+- The Docker images build.
+- The production stack starts and passes its proxy, readiness and PWA checks.
+
+Pushes to `main` still do not start CI on their own. Start it with `gh workflow run CI`, and check the repo's Actions settings for push events. The remaining production blockers are listed under Next steps.
 
 ## Done (newest first)
 

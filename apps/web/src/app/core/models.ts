@@ -175,6 +175,8 @@ export interface TenantDetail {
   email: string | null;
   phone: string | null;
   status: string;
+  /** Personal details were erased on request. */
+  erasedAt?: string | null;
   createdAt: string;
   balance: string;
   leases: Array<{

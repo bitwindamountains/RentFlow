@@ -36,6 +36,10 @@ import type { TenantForm } from './tenants.page';
         @if (canManage()) {
           <button class="secondary" type="button" (click)="edit(t)">Edit</button>
           @if (t.status !== 'ARCHIVED') { <button class="secondary" type="button" (click)="archive()">Archive</button> }
+          <button class="secondary" type="button" (click)="exportData(t)">Export data</button>
+        }
+        @if (isOwner() && t.status === 'ARCHIVED' && !t.erasedAt && !eraseOpen()) {
+          <button class="text-button danger-text" type="button" (click)="eraseOpen.set(true)">Erase personal details</button>
         }
       </div>
     </section>
@@ -60,7 +64,24 @@ import type { TenantForm } from './tenants.page';
       </form>
     }
 
-    @if (canManage()) { <app-portal-access [tenantId]="t.id" [email]="t.email" /> }
+    @if (t.erasedAt) {
+      <div class="inline-notice" role="status">This tenant’s personal details were erased on {{ t.erasedAt | moment: 'date' }}. Their financial records are kept.</div>
+    }
+
+    @if (eraseOpen()) {
+      <form #eraser="ngForm" class="panel operations-form" (ngSubmit)="eraser.valid && erase()">
+        <h2>Erase personal details</h2>
+        <p>This removes the tenant’s name, email, phone and address, ends their portal access, and deletes their documents, payment screenshots and repair photos. Charges, payments, receipts and leases are kept under an anonymized name. It can’t be undone. Export their data first if they asked for a copy.</p>
+        <label class="field"><span>Your password</span>
+          <input name="erasePassword" type="password" [(ngModel)]="erasePassword" required autocomplete="current-password" /></label>
+        <div class="modal-actions">
+          <button class="secondary" type="button" (click)="eraseOpen.set(false); erasePassword = ''">Cancel</button>
+          <button class="secondary danger-text" type="submit" [disabled]="saving() || !eraser.valid">Erase</button>
+        </div>
+      </form>
+    }
+
+    @if (canManage() && !t.erasedAt) { <app-portal-access [tenantId]="t.id" [email]="t.email" /> }
 
     <section class="summary-strip">
       <div><span>Balance</span><strong [class.danger-text]="owes()">{{ t.balance | money }}</strong></div>
@@ -159,6 +180,9 @@ export class TenantDetailPage implements OnInit {
   protected readonly tone = statusTone;
   protected readonly today = () => this.api.today();
   protected readonly canManage = computed(() => this.api.hasRole('OWNER', 'MANAGER'));
+  protected readonly isOwner = computed(() => this.api.hasRole('OWNER'));
+  protected readonly eraseOpen = signal(false);
+  protected erasePassword = '';
   protected readonly canCollect = computed(() => this.api.hasRole('OWNER', 'MANAGER', 'COLLECTOR'));
   protected readonly owes = computed(() => toCents(this.tenant()?.balance) > 0);
   protected readonly activeLease = computed(() => this.tenant()?.leases.find((l) => l.status === 'ACTIVE'));
@@ -230,6 +254,35 @@ export class TenantDetailPage implements OnInit {
           this.error.set(error.message);
         },
       });
+  }
+
+  protected exportData(t: TenantDetail): void {
+    this.api.get<unknown>(`/tenants/${this.id}/export`).subscribe({
+      next: (data) => {
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        const link = Object.assign(document.createElement('a'), { href: url, download: `tenant-${t.lastName}-${t.id.slice(0, 8)}.json` });
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        this.notice.set('Tenant data downloaded. Files listed in it download from their paths while you are signed in.');
+      },
+      error: (error: ApiError) => this.error.set(error.message),
+    });
+  }
+
+  protected erase(): void {
+    this.saving.set(true);
+    this.api.post(`/tenants/${this.id}/erase`, { password: this.erasePassword }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.eraseOpen.set(false);
+        this.erasePassword = '';
+        this.notice.set('Personal details erased.');
+      },
+      error: (error: ApiError) => {
+        this.saving.set(false);
+        this.error.set(error.message);
+      },
+    });
   }
 
   protected archive(): void {

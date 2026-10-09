@@ -382,7 +382,7 @@ export class PaymentsService {
   }
 }
 
-function depositBalance(transactions: Array<{ type: DepositTransactionType; amount: Prisma.Decimal }>) {
+export function depositBalance(transactions: Array<{ type: DepositTransactionType; amount: Prisma.Decimal }>) {
   return transactions.reduce(
     (sum, item) => (item.type === 'RECEIPT' || item.type === 'ADJUSTMENT' ? sum.plus(item.amount) : sum.minus(item.amount)),
     ZERO,

@@ -304,6 +304,7 @@ model PropertyGrant {
   property     Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@unique([membershipId, propertyId])
+  @@index([propertyId])
 }
 
 model Property {
@@ -553,6 +554,7 @@ model PaymentReversal {
   payment        Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, paymentId])
+  @@index([paymentId])
 }
 
 model DepositAccount {
@@ -564,6 +566,8 @@ model DepositAccount {
   organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   lease          Lease                @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   transactions   DepositTransaction[]
+
+  @@index([organizationId])
 }
 
 model DepositTransaction {
@@ -751,6 +755,7 @@ model MaintenanceRequest {
   @@index([organizationId, tenantId, createdAt, id], map: "MaintenanceRequest_portal_page_idx")
   @@index([tenantId, createdAt])
   @@index([propertyId, unitId])
+  @@index([unitId])
 }
 
 enum StorageObjectState {

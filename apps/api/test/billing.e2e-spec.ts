@@ -246,10 +246,29 @@ describe('billing, payments, and balances', () => {
       expect(dashboard.billedThisMonth).toBe('1000.00');
       expect(dashboard.collectedThisMonth).toBe('1000.00');
       expect(dashboard.collectionRate).toBe(100);
+      expect(dashboard.remainingThisMonth).toBe('0.00');
       expect(dashboard.outstanding).toBe('2000.00');
       expect(dashboard.occupiedUnits).toBe(1);
       expect(dashboard.trend).toHaveLength(6);
       expect(dashboard.trend.at(-1)).toEqual({ month: today().slice(0, 7), billed: '1000.00', collected: '1000.00' });
+    } finally {
+      owner = saved;
+    }
+  });
+
+  it('does not count cash applied to arrears as collected on this month', async () => {
+    const saved = owner;
+    owner = (await registerOwner(app)).client;
+    try {
+      const old = await createRental(owner, { startDate: monthStart(-2), rent: '1000.00', firstMonth: 'NONE' });
+      await owner.post('/billing/run', {});
+      const oldest = (await openCharges(old.lease.id)).find((c: { billingPeriod: string }) => c.billingPeriod !== today().slice(0, 7));
+      expect(oldest).toBeDefined();
+      await pay(old, '1000.00', [{ chargeId: oldest.id, amount: '1000.00' }]);
+      const dashboard = (await owner.get('/dashboard')).body;
+      expect(dashboard.collectedThisMonth).toBe('1000.00');
+      expect(dashboard.collectionRate).toBe(0);
+      expect(dashboard.remainingThisMonth).toBe('1000.00');
     } finally {
       owner = saved;
     }

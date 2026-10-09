@@ -88,6 +88,8 @@ export class ReportsService {
       billedThisMonth: formatMoney(billed),
       collectedThisMonth: formatMoney(received?.total ?? ZERO),
       collectionRate: billed.isZero() ? null : Number(collectedOnBilled.div(billed).mul(100).toFixed(1)),
+      // Same basis as collectionRate: cash applied to older arrears does not reduce this month's balance.
+      remainingThisMonth: formatMoney(Prisma.Decimal.max(ZERO, billed.minus(collectedOnBilled))),
       outstanding: formatMoney(totals?.outstanding ?? ZERO),
       overdue: formatMoney(totals?.overdue ?? ZERO),
       activeLeases,

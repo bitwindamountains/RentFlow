@@ -61,6 +61,8 @@ export class Client {
         ...headers,
       },
     });
+    // Wait for the local log-mail worker so assertions observe completed delivery.
+    await this.app.get(MailerService).processPending();
     const setCookie = response.headers['set-cookie'];
     if (setCookie) {
       const first = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0]!;

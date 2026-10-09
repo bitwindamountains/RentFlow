@@ -8,7 +8,9 @@ import { formatMoney, parseMoney } from '../common/money.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { environment } from '../config/environment.js';
 import { FileStore, sniffType, type UploadType } from '../storage/file-store.service.js';
+import { StorageService } from '../storage/storage.service.js';
 import { decodeCursor, encodeCursor, type Page } from '../common/validation.js';
+import { createdCursorWhere, listPage, timeCursor, type ListQuery } from '../common/pagination.js';
 
 const transitions: Record<MaintenanceStatus, MaintenanceStatus[]> = {
   OPEN: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
@@ -34,6 +36,7 @@ export class WorkService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly files: FileStore,
+    private readonly storage: StorageService,
   ) {}
 
   // ---------------------------------------------------------------- expenses
@@ -130,7 +133,12 @@ export class WorkService {
   }
 
   // ------------------------------------------------------------- maintenance
-  async listMaintenance(organizationId: string, status?: 'active' | 'closed' | 'all') {
+  async listMaintenance(organizationId: string, query: ListQuery & { status?: 'active' | 'closed' | 'all' }) {
+    const { status } = query;
+    const limit = query.limit ?? 50;
+    const cursor = timeCursor(query.cursor);
+    if (cursor && !(await this.prisma.maintenanceRequest.findFirst({ where: { id: cursor.id, organizationId }, select: { id: true } })))
+      throw new DomainError('INVALID_CURSOR', 400);
     const rows = await this.prisma.maintenanceRequest.findMany({
       where: {
         organizationId,
@@ -138,10 +146,11 @@ export class WorkService {
         ...(status === 'closed' ? { status: { in: ['COMPLETED', 'CANCELLED'] } } : {}),
       },
       include: { property: { select: { name: true } }, unit: { select: { number: true } } },
-      orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
-      take: 500,
+      orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
+      take: limit + 1,
     });
-    return rows.map(maintenanceView);
+    return listPage(rows, limit, maintenanceView, row => row.createdAt);
   }
 
   async createMaintenance(
@@ -235,13 +244,14 @@ export class WorkService {
   }
 
   // --------------------------------------------------------------- documents
-  async listDocuments(organizationId: string, filter: { entityType?: DocumentEntity; entityId?: string }) {
+  async listDocuments(organizationId: string, filter: ListQuery & { entityType?: DocumentEntity; entityId?: string }) {
+    const limit = filter.limit ?? 50;
     const rows = await this.prisma.documentRecord.findMany({
-      where: { organizationId, deletedAt: null, ...filter },
-      orderBy: { createdAt: 'desc' },
-      take: 500,
+      where: { organizationId, deletedAt: null, entityType: filter.entityType, entityId: filter.entityId, ...createdCursorWhere(filter.cursor) },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
-    return rows.map(documentView);
+    return listPage(rows, limit, documentView, row => row.createdAt);
   }
 
   async createDocument(
@@ -289,24 +299,21 @@ export class WorkService {
     if (!body.length) throw new DomainError('FILE_EMPTY', 400);
     if (body.length > environment().UPLOAD_MAX_BYTES) throw new DomainError('FILE_TOO_LARGE', 413);
     if (sniffType(body) !== input.contentType) throw new DomainError('FILE_TYPE_MISMATCH', 415);
-    await this.assertEntity(this.prisma, organizationId, input);
-    const used = await this.prisma.documentRecord.aggregate({
-      where: { organizationId, deletedAt: null, storageKey: { not: null } },
-      _sum: { sizeBytes: true },
-    });
-    if ((used._sum.sizeBytes ?? 0) + body.length > environment().STORAGE_QUOTA_BYTES)
-      throw new DomainError('STORAGE_QUOTA_EXCEEDED', 413);
-
     const id = randomUUID();
     const storageKey = FileStore.keyFor(organizationId, id, input.contentType);
+    await this.prisma.$transaction(async (tx) => {
+      await this.storage.reserve(tx, organizationId, storageKey, body.length);
+      await this.assertEntity(tx, organizationId, input);
+    });
     try {
-      await this.files.put(storageKey, body, input.contentType);
-    } catch (error) {
-      this.logger.error(`STORAGE_PUT_FAILED ${(error as Error).name}`);
-      throw new DomainError('STORAGE_UNAVAILABLE', 503);
-    }
-    try {
+      try {
+        await this.files.put(storageKey, body, input.contentType);
+      } catch (error) {
+        this.logger.error(`STORAGE_PUT_FAILED ${(error as Error).name}`);
+        throw new DomainError('STORAGE_UNAVAILABLE', 503);
+      }
       return await this.prisma.$transaction(async (tx) => {
+        await this.storage.finalize(tx, storageKey);
         await this.assertEntity(tx, organizationId, input);
         const row = await tx.documentRecord.create({
           data: {
@@ -340,7 +347,16 @@ export class WorkService {
         return documentView(row);
       });
     } catch (error) {
-      await this.files.delete(storageKey); // never leave an unrecorded file behind
+      try {
+        // A lost commit acknowledgement must never erase a successfully recorded file.
+        if (!(await this.prisma.documentRecord.findUnique({ where: { storageKey }, select: { id: true } }))) {
+          await this.storage.remove(this.prisma, storageKey);
+          await this.storage.processPending(storageKey);
+        }
+      } catch {
+        // The original reservation remains available to the recovery job if the DB is down.
+        this.logger.error({ event: 'UPLOAD_CLEANUP_DEFERRED', key: storageKey });
+      }
       throw error;
     }
   }
@@ -394,6 +410,7 @@ export class WorkService {
         data: { deletedAt: new Date() },
       });
       if (!updated.count || !row) throw notFound('DOCUMENT_NOT_FOUND');
+      if (row.storageKey) await this.storage.remove(tx, row.storageKey);
       await audit(tx, {
         organizationId,
         actorUserId,
@@ -403,7 +420,9 @@ export class WorkService {
       });
       return row.storageKey;
     });
-    if (storageKey) await this.files.delete(storageKey);
+    if (storageKey) await this.storage.processPending(storageKey).catch(() => {
+      this.logger.error({ event: 'STORAGE_CLEANUP_DEFERRED', key: storageKey });
+    });
     return { deleted: true };
   }
 

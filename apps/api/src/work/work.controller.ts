@@ -33,6 +33,7 @@ import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '..
 import type { SessionContext } from '../auth/session.types.js';
 import { DomainError } from '../common/errors.js';
 import { IsDateOnly, IsMoney, PageQuery } from '../common/validation.js';
+import { arrayPage } from '../common/pagination.js';
 import { isUploadType } from '../storage/file-store.service.js';
 import { sendDocument } from './document-response.js';
 import { DOCUMENT_ENTITIES, type DocumentEntity, WorkService } from './work.service.js';
@@ -69,7 +70,7 @@ class MaintenanceUpdateDto {
   @IsOptional() @IsString() @MinLength(3) @MaxLength(2000) description?: string;
   @IsOptional() @ValidateIf((_o, value) => value !== null) @IsDateOnly() dueOn?: string | null;
 }
-class MaintenanceQuery {
+class MaintenanceQuery extends PageQuery {
   @IsOptional() @IsIn(['active', 'closed', 'all']) status?: 'active' | 'closed' | 'all';
 }
 class DocumentMetaDto {
@@ -81,7 +82,7 @@ class DocumentMetaDto {
 class DocumentDto extends DocumentMetaDto {
   @IsUrl({ require_protocol: true, protocols: ['https'], require_tld: true }) @MaxLength(2000) url!: string;
 }
-class DocumentQuery {
+class DocumentQuery extends PageQuery {
   @IsOptional() @IsIn(DOCUMENT_ENTITIES) entityType?: DocumentEntity;
   @IsOptional() @IsUUID() entityId?: string;
 }
@@ -120,8 +121,8 @@ export class WorkController {
 
   @Roles(...ALL_ROLES)
   @Get('maintenance')
-  maintenance(@Auth() auth: SessionContext, @Query() query: MaintenanceQuery) {
-    return this.work.listMaintenance(auth.organizationId, query.status);
+  async maintenance(@Auth() auth: SessionContext, @Query() query: MaintenanceQuery, @Res({ passthrough: true }) reply: FastifyReply) {
+    return arrayPage(reply, await this.work.listMaintenance(auth.organizationId, query));
   }
 
   @Roles(...MAINTAINERS)
@@ -141,8 +142,8 @@ export class WorkController {
   }
 
   @Get('documents')
-  documents(@Auth() auth: SessionContext, @Query() query: DocumentQuery) {
-    return this.work.listDocuments(auth.organizationId, query);
+  async documents(@Auth() auth: SessionContext, @Query() query: DocumentQuery, @Res({ passthrough: true }) reply: FastifyReply) {
+    return arrayPage(reply, await this.work.listDocuments(auth.organizationId, query));
   }
 
   @Roles(...MANAGERS)

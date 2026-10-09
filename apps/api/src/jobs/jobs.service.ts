@@ -6,6 +6,8 @@ import { environment } from '../config/environment.js';
 import { BillingService } from '../billing/billing.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { LeasesService } from '../rentals/leases.service.js';
+import { StorageService } from '../storage/storage.service.js';
+import { MailerService } from '../mail/mailer.service.js';
 
 const interval = 15 * 60 * 1000;
 const leaseDuration = 10 * 60 * 1000;
@@ -20,43 +22,74 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(JobsService.name);
   private readonly owner = randomUUID();
   private timer?: NodeJS.Timeout;
-  private running?: Promise<void>;
+  private startupTimer?: NodeJS.Timeout;
+  private running?: Promise<{ organizations: number; charges: number; expired: number } | undefined>;
+  private stopping = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
     private readonly leases: LeasesService,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
+    private readonly mailer: MailerService,
   ) {}
 
   onApplicationBootstrap(): void {
     if (!environment().ENABLE_JOBS) return;
     this.timer = setInterval(() => void this.tick(), interval);
     this.timer.unref();
-    setTimeout(() => void this.tick(), 10_000).unref();
+    this.startupTimer = setTimeout(() => void this.tick(), 10_000);
+    this.startupTimer.unref();
   }
 
   async onModuleDestroy(): Promise<void> {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
+    if (this.startupTimer) clearTimeout(this.startupTimer);
     await this.running;
   }
 
   async tick(): Promise<{ organizations: number; charges: number; expired: number } | undefined> {
-    if (!(await this.acquire('daily-operations'))) return undefined;
-    let resolveRun!: () => void;
-    this.running = new Promise((resolve) => (resolveRun = resolve));
+    if (this.running || this.stopping) return undefined;
+    this.running = this.executeTick();
+    try { return await this.running; }
+    finally { this.running = undefined; }
+  }
+
+  private async executeTick() {
+    let acquired = false;
+    let heartbeat: NodeJS.Timeout | undefined;
+    let renewing: Promise<void> | undefined;
+    let lost = false;
+    const renew = async () => {
+      if (lost) throw new Error('Job lease lost');
+      if (renewing) return renewing;
+      renewing = this.renew('daily-operations');
+      try { await renewing; }
+      catch (error) { lost = true; throw error; }
+      finally { renewing = undefined; }
+    };
     try {
-      return await this.runAll();
+      acquired = await this.acquire('daily-operations');
+      if (!acquired) return undefined;
+      heartbeat = setInterval(() => { void renew().catch(() => { lost = true; }); }, leaseDuration / 3);
+      heartbeat.unref();
+      return await this.runAll(renew);
     } catch (error) {
       this.logger.error({ event: 'JOB_FAILED', job: 'daily-operations', type: (error as Error)?.name });
       return undefined;
     } finally {
-      await this.release('daily-operations');
-      resolveRun();
+      if (heartbeat) clearInterval(heartbeat);
+      await renewing?.catch(() => undefined);
+      if (acquired) {
+        try { await this.release('daily-operations'); }
+        catch (error) { this.logger.error({ event: 'JOB_RELEASE_FAILED', type: (error as Error)?.name }); }
+      }
     }
   }
 
-  async runAll() {
+  async runAll(checkLease: () => Promise<void> = async () => undefined) {
     const organizations = await this.prisma.organization.findMany({
       where: { status: 'ACTIVE' },
       select: { id: true, timezone: true },
@@ -64,10 +97,12 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     let charges = 0;
     let expired = 0;
     for (const organization of organizations) {
+      await checkLease();
       try {
         const today = todayInZone(organization.timezone);
-        expired += await this.leases.expireEnded(organization.id, today);
         charges += (await this.billing.runBilling(organization.id, null, today)).created;
+        await this.billing.applyExistingCredits(organization.id);
+        expired += await this.leases.expireEnded(organization.id, today);
       } catch (error) {
         // One organization's failure must not block billing for the others.
         this.logger.error({
@@ -78,9 +113,13 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
       }
     }
     // Staff alerts that could not be sent right away (provider down, crash) are retried here.
+    await checkLease();
     await this.notifications.processPending();
+    await checkLease();
+    await this.storage.processPending();
+    await checkLease();
+    await this.mailer.processPending();
     const now = new Date();
-    await this.prisma.idempotencyKey.deleteMany({ where: { expiresAt: { lt: now } } });
     await this.prisma.userToken.deleteMany({ where: { expiresAt: { lt: new Date(now.getTime() - 86_400_000) } } });
     await this.prisma.session.deleteMany({
       where: { OR: [{ expiresAt: { lt: new Date(now.getTime() - 30 * 86_400_000) } }, { revokedAt: { lt: new Date(now.getTime() - 30 * 86_400_000) } }] },
@@ -95,12 +134,18 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   private async acquire(name: string): Promise<boolean> {
-    const until = new Date(Date.now() + leaseDuration);
     const rows = await this.prisma.$executeRaw`
-      INSERT INTO "JobLock" (name, owner, "lockedUntil") VALUES (${name}, ${this.owner}, ${until})
+      INSERT INTO "JobLock" (name, owner, "lockedUntil") VALUES (${name}, ${this.owner}, now() + make_interval(secs => ${leaseDuration / 1000}::int))
       ON CONFLICT (name) DO UPDATE SET owner = EXCLUDED.owner, "lockedUntil" = EXCLUDED."lockedUntil"
-      WHERE "JobLock"."lockedUntil" < now() OR "JobLock".owner = EXCLUDED.owner`;
+      WHERE "JobLock"."lockedUntil" < now()`;
     return rows === 1;
+  }
+
+  private async renew(name: string): Promise<void> {
+    const rows = await this.prisma.$executeRaw`
+      UPDATE "JobLock" SET "lockedUntil" = now() + make_interval(secs => ${leaseDuration / 1000}::int)
+      WHERE name = ${name} AND owner = ${this.owner} AND "lockedUntil" > now()`;
+    if (rows !== 1) throw new Error('Job lease lost');
   }
 
   private async release(name: string): Promise<void> {

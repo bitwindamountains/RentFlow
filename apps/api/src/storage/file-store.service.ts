@@ -1,5 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { createReadStream } from 'node:fs';
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
@@ -78,6 +78,7 @@ class LocalDriver implements Driver {
 
   async delete(key: string): Promise<void> {
     await rm(this.path(key), { force: true });
+    await rm(`${this.path(key)}.partial`, { force: true });
   }
 }
 
@@ -100,6 +101,7 @@ class S3Driver implements Driver {
         ContentLength: body.length,
         ServerSideEncryption: this.env.S3_ENDPOINT ? undefined : 'AES256',
       }),
+      { abortSignal: AbortSignal.timeout(60_000) },
     );
   }
 
@@ -115,7 +117,7 @@ class S3Driver implements Driver {
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key }));
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key }), { abortSignal: AbortSignal.timeout(30_000) });
   }
 }
 
@@ -126,7 +128,6 @@ class S3Driver implements Driver {
  */
 @Injectable()
 export class FileStore {
-  private readonly logger = new Logger(FileStore.name);
   private driver?: Driver;
 
   private get active(): Driver {
@@ -148,13 +149,9 @@ export class FileStore {
     return this.active.get(key);
   }
 
-  /** Best effort: a failure is logged for follow-up, never surfaced to the user. */
+  /** The caller must retain durable cleanup work if this fails. */
   async delete(key: string): Promise<void> {
-    try {
-      assertKey(key);
-      await this.active.delete(key);
-    } catch (error) {
-      this.logger.error(`STORAGE_DELETE_FAILED key=${key} ${(error as Error).name}`);
-    }
+    assertKey(key);
+    await this.active.delete(key);
   }
 }

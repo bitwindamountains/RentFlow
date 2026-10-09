@@ -8,6 +8,7 @@ import { formatMoney, parseMoney, sumMoney, ZERO } from '../common/money.js';
 import { PrismaService, type Tx } from '../common/prisma.service.js';
 import { decodeCursor, encodeCursor, type Page } from '../common/validation.js';
 import { BalancesService } from '../billing/balances.service.js';
+import { applyLeaseCredit } from '../billing/credit.js';
 
 export interface PaymentInput {
   tenantId: string;
@@ -106,6 +107,7 @@ export class PaymentsService {
     const rows = await this.balances.leaseOutstanding(organizationId);
     return rows.map((row) => ({
       leaseId: row.leaseId,
+      leaseStatus: row.leaseStatus,
       tenantId: row.tenantId,
       tenantName: `${row.firstName} ${row.lastName}`,
       unitNumber: row.unitNumber,
@@ -203,7 +205,8 @@ export class PaymentsService {
           after: { amount, method: input.method, paidAt, receiptNumber, allocations },
         });
         if (withinTransaction) await withinTransaction(tx, { id: payment.id, receiptNumber });
-        return paymentView(payment);
+        await applyLeaseCredit(tx, organizationId, lease.id, actorUserId);
+        return paymentView(await tx.payment.findUniqueOrThrow({ where: { id: payment.id }, include: paymentInclude }));
       },
     );
   }
@@ -278,6 +281,7 @@ export class PaymentsService {
         reason,
         after: reversal,
       });
+      await applyLeaseCredit(tx, organizationId, payment.leaseId, actorUserId);
       return { id: reversal.id, paymentId, amount: formatMoney(payment.amount), status: 'REVERSED' };
     });
   }

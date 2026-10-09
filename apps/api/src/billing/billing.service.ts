@@ -10,6 +10,7 @@ import { decodeCursor, encodeCursor, type Page } from '../common/validation.js';
 import { BalancesService, chargeView } from './balances.service.js';
 import { postCharge } from './ledger.js';
 import { duePeriods } from './periods.js';
+import { applyLeaseCredit } from './credit.js';
 
 export interface ChargeInput {
   leaseId: string;
@@ -284,10 +285,11 @@ export class BillingService {
     const schedules = await this.prisma.billingSchedule.findMany({
       where: {
         organizationId,
-        status: 'ACTIVE',
+        OR: [{ status: 'ACTIVE' }, { status: 'ENDED', lease: { status: { in: ['EXPIRED', 'TERMINATED'] } } }],
         startsOn: { lte: parseDateOnly(asOf) },
-        lease: { status: 'ACTIVE' },
+        lease: { status: { in: ['ACTIVE', 'EXPIRED', 'TERMINATED'] } },
       },
+      include: { lease: { select: { endDate: true } } },
     });
     const posted = await this.prisma.charge.findMany({
       where: {
@@ -313,7 +315,8 @@ export class BillingService {
       const periods = duePeriods(
         {
           startsOn: formatDateOnly(schedule.startsOn),
-          endsOn: schedule.endsOn ? formatDateOnly(schedule.endsOn) : null,
+          endsOn: [schedule.endsOn, schedule.lease.endDate].filter((date): date is Date => date !== null)
+            .map(formatDateOnly).sort()[0] ?? null,
           billingDay: schedule.billingDay,
           dueDay: schedule.dueDay,
         },
@@ -328,21 +331,35 @@ export class BillingService {
           continue;
         }
         try {
-          await this.prisma.serializable((tx) =>
-            postCharge(tx, {
+          const didPost = await this.prisma.serializable(async (tx) => {
+            // Re-read eligibility, window and amount in the posting transaction.
+            // Termination or rent changes must not leave a stale schedule in use.
+            const current = await tx.billingSchedule.findUniqueOrThrow({ where: { id: schedule.id }, include: { lease: true } });
+            if (!['ACTIVE', 'EXPIRED', 'TERMINATED'].includes(current.lease.status) ||
+                (current.status !== 'ACTIVE' && !(current.status === 'ENDED' && ['EXPIRED', 'TERMINATED'].includes(current.lease.status)))) return false;
+            const end = [current.endsOn, current.lease.endDate].filter((date): date is Date => date !== null).map(formatDateOnly).sort()[0];
+            const due = duePeriods({ startsOn: formatDateOnly(current.startsOn), endsOn: end,
+              billingDay: current.billingDay, dueDay: current.dueDay }, asOf).find(item => item.period === period.period);
+            if (!due) return false;
+            const existing = await tx.charge.findFirst({ where: { leaseId: current.leaseId, billingPeriod: period.period,
+              OR: [{ billingScheduleId: current.id }, ...(current.chargeType === 'RENT' ? [{ type: 'RENT' as const, status: 'POSTED' as const }] : [])] } });
+            if (existing) return false;
+            await postCharge(tx, {
               organizationId,
-              leaseId: schedule.leaseId,
-              billingScheduleId: schedule.id,
-              type: schedule.chargeType,
-              description: schedule.description,
-              amount: schedule.amount,
+              leaseId: current.leaseId,
+              billingScheduleId: current.id,
+              type: current.chargeType,
+              description: current.description,
+              amount: current.amount,
               billingPeriod: period.period,
-              dueDate: parseDateOnly(period.dueDate),
+              dueDate: parseDateOnly(due.dueDate),
               actorUserId,
               auditAction: 'SCHEDULED_CHARGE_POSTED',
-            }),
-          );
-          created++;
+            });
+            return true;
+          });
+          if (didPost) created++;
+          else skipped++;
         } catch (error) {
           if (isUniqueViolation(error) || (error instanceof DomainError && error.code === 'CHARGE_EXISTS')) {
             skipped++;
@@ -353,6 +370,15 @@ export class BillingService {
       }
     }
     return { asOf, period: periodOf(asOf), schedules: schedules.length, created, skipped };
+  }
+
+  /** Reconcile credit retained by older releases, also for leases without schedules. */
+  async applyExistingCredits(organizationId: string) {
+    const leases = await this.prisma.$queryRaw<Array<{ leaseId: string }>>`
+      SELECT DISTINCT p."leaseId" FROM "Payment" p
+      WHERE p."organizationId" = ${organizationId}::uuid AND p.status = 'POSTED' AND p."leaseId" IS NOT NULL
+        AND p.amount > COALESCE((SELECT SUM(a.amount) FROM "PaymentAllocation" a WHERE a."paymentId" = p.id), 0)`;
+    for (const lease of leases) await this.prisma.serializable(tx => applyLeaseCredit(tx, organizationId, lease.leaseId));
   }
 
   async today(organizationId: string): Promise<string> {

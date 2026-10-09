@@ -1,8 +1,8 @@
-import EmbeddedPostgres from 'embedded-postgres';
+import EmbeddedPostgres from '../scripts/disposable-postgres.mjs';
 import { execSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { TestProject } from 'vitest/node';
 
 /**
@@ -21,20 +21,34 @@ export default async function setup(project: TestProject) {
       port,
       user: 'rentflow_test',
       password: 'rentflow_test',
-      persistent: false,
+      // Remove it ourselves with retries: Windows can briefly hold files after stop.
+      persistent: true,
       onLog: () => undefined,
     });
-    await postgres.initialise();
-    await postgres.start();
-    await postgres.createDatabase('rentflow_test');
-    url = `postgresql://rentflow_test:rentflow_test@127.0.0.1:${port}/rentflow_test`;
+    let started = false;
     stop = async () => {
-      await postgres.stop();
+      if (started) await postgres.stop();
+      if (dirname(resolve(directory)) !== resolve(tmpdir())) throw new Error('Unexpected test database directory');
       await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }).catch(() => undefined);
     };
+    try {
+      await postgres.initialise();
+      await postgres.start();
+      started = true;
+      await postgres.createDatabase('rentflow_test');
+      url = `postgresql://rentflow_test:rentflow_test@127.0.0.1:${port}/rentflow_test`;
+    } catch (error) {
+      await stop();
+      throw error;
+    }
   }
-  execSync('npx prisma migrate deploy', { stdio: 'pipe', env: { ...process.env, DATABASE_URL: url } });
-  project.provide('databaseUrl', url);
+  try {
+    execSync('npx prisma migrate deploy', { stdio: 'pipe', env: { ...process.env, DATABASE_URL: url } });
+    project.provide('databaseUrl', url);
+  } catch (error) {
+    await stop?.();
+    throw error;
+  }
   return async () => {
     await stop?.();
   };

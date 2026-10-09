@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolve } from 'node:path';
 import { validateEnvironment } from './environment.js';
 
 const base = {
@@ -8,10 +9,15 @@ const base = {
   MAIL_PROVIDER: 'resend',
   RESEND_API_KEY: 're_test',
   MAIL_FROM: 'RentFlow <billing@example.com>',
+  MAIL_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString('base64'),
   STORAGE_DIR: '/data/uploads',
 };
 
 describe('validateEnvironment', () => {
+  it('requires a 32-byte key for durable mail in production', () => {
+    expect(() => validateEnvironment({ ...base, MAIL_ENCRYPTION_KEY: undefined })).toThrow('MAIL_ENCRYPTION_KEY');
+    expect(() => validateEnvironment({ ...base, MAIL_ENCRYPTION_KEY: 'c2hvcnQ=' })).toThrow('MAIL_ENCRYPTION_KEY');
+  });
   it('accepts a complete production configuration with safe defaults', () => {
     expect(validateEnvironment(base)).toMatchObject({
       NODE_ENV: 'production',
@@ -41,15 +47,19 @@ describe('validateEnvironment', () => {
 
   it('requires HTTPS origins and real email delivery in production', () => {
     expect(() => validateEnvironment({ ...base, WEB_ORIGIN: 'http://app.example.com' })).toThrow('https');
+    expect(() => validateEnvironment({ ...base, APP_URL: 'http://app.example.com' })).toThrow('APP_URL must use https');
     expect(() => validateEnvironment({ ...base, MAIL_PROVIDER: 'log' })).toThrow('MAIL_PROVIDER');
     expect(() => validateEnvironment({ ...base, MAIL_PROVIDER: 'smtp' })).toThrow('SMTP_URL');
   });
 
   it('rejects malformed origins', () => {
     expect(() => validateEnvironment({ ...base, WEB_ORIGIN: 'javascript:alert(1)' })).toThrow('Invalid WEB_ORIGIN');
+    expect(() => validateEnvironment({ ...base, APP_URL: 'https://user:password@app.example.com' })).toThrow('Invalid APP_URL');
+    expect(() => validateEnvironment({ ...base, WEB_ORIGIN: 'https://app.example.com/#fragment' })).toThrow('Invalid WEB_ORIGIN');
   });
 
   it('requires uploads to live on a persistent absolute path or in S3 in production', () => {
+    expect(validateEnvironment({ ...base, STORAGE_DIR: resolve('test-uploads') }).STORAGE_DRIVER).toBe('local');
     expect(() => validateEnvironment({ ...base, STORAGE_DIR: undefined })).toThrow('STORAGE_DIR');
     expect(() => validateEnvironment({ ...base, STORAGE_DIR: 'uploads' })).toThrow('STORAGE_DIR');
     expect(() => validateEnvironment({ ...base, STORAGE_DRIVER: 's3', S3_BUCKET: 'docs' })).toThrow('S3_REGION');

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { MembershipRole } from '@prisma/client';
+import { sha256 } from '../common/crypto.js';
 import { formatDateOnly } from '../common/dates.js';
 import { formatMoney } from '../common/money.js';
 import { PrismaService, type Tx } from '../common/prisma.service.js';
@@ -47,7 +48,7 @@ export class NotificationsService {
 
   /** Claims due events (skipping ones another run holds), sends them, and records the outcome. */
   async processPending(limit = 25): Promise<{ processed: number; failed: number }> {
-    const claimed = await this.prisma.$queryRaw<Array<{ id: string; organizationId: string; topic: string; aggregateId: string; attempts: number }>>`
+    const claimed = await this.prisma.$queryRaw<Array<{ id: string; organizationId: string; topic: string; aggregateId: string; attempts: number; deliveredTo: string[] }>>`
       UPDATE "OutboxEvent" SET status = 'PROCESSING', attempts = attempts + 1,
              "availableAt" = now() + make_interval(mins => ${CLAIM_MINUTES}::int)
       WHERE id IN (
@@ -56,30 +57,33 @@ export class NotificationsService {
         ORDER BY "availableAt" LIMIT ${limit}::int
         FOR UPDATE SKIP LOCKED
       )
-      RETURNING id, "organizationId", topic, "aggregateId", attempts`;
+      RETURNING id, "organizationId", topic, "aggregateId", attempts, "deliveredTo"`;
     let processed = 0;
     let failed = 0;
     for (const event of claimed) {
       let error: string | null = null;
       try {
         const messages = await this.messages(event.organizationId, event.topic as StaffAlertTopic, event.aggregateId);
-        let delivered = 0;
         for (const message of messages) {
+          if (event.deliveredTo.includes(message.to)) continue;
+          const owned = await this.prisma.outboxEvent.updateMany({
+            where: { id: event.id, status: 'PROCESSING', attempts: event.attempts },
+            data: { availableAt: new Date(Date.now() + CLAIM_MINUTES * 60_000) },
+          });
+          if (!owned.count) throw new Error('Alert claim lost');
           try {
-            await this.mailer.send(message);
-            delivered += 1;
+            await this.mailer.send({ ...message, idempotencyKey: `alert-${event.id}-${sha256(message.to)}` });
+            await this.prisma.outboxEvent.update({ where: { id: event.id }, data: { deliveredTo: { push: message.to } } });
           } catch (sendError) {
             error = (sendError as Error)?.name ?? 'Error';
           }
         }
-        // Some recipients got it: retrying would duplicate their copies.
-        if (delivered || !messages.length) error = null;
       } catch (buildError) {
         error = (buildError as Error)?.name ?? 'Error';
       }
       if (!error) {
-        await this.prisma.outboxEvent.update({
-          where: { id: event.id },
+        await this.prisma.outboxEvent.updateMany({
+          where: { id: event.id, status: 'PROCESSING', attempts: event.attempts },
           data: { status: 'PROCESSED', processedAt: new Date(), lastError: null },
         });
         processed += 1;
@@ -87,8 +91,8 @@ export class NotificationsService {
       }
       failed += 1;
       const giveUp = event.attempts >= MAX_ATTEMPTS;
-      await this.prisma.outboxEvent.update({
-        where: { id: event.id },
+      await this.prisma.outboxEvent.updateMany({
+        where: { id: event.id, status: 'PROCESSING', attempts: event.attempts },
         data: {
           status: giveUp ? 'FAILED' : 'PENDING',
           lastError: error.slice(0, 200),

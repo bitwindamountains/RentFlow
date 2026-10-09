@@ -1,8 +1,10 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { createHash } from 'node:crypto';
-import { readdir } from 'node:fs/promises';
+import { readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { FileStore } from '../src/storage/file-store.service.js';
+import { StorageService } from '../src/storage/storage.service.js';
 import { Client, createRental, PASSWORD, prismaOf, registerOwner, startApp, unique } from './helpers.js';
 
 const pdf = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(2048, 0x20), Buffer.from('\n%%EOF')]);
@@ -135,5 +137,63 @@ describe('document uploads', () => {
       prismaOf(app).documentRecord.update({ where: { id: link.body.id }, data: { storageKey: `${organizationId}/${link.body.id}.pdf` } }),
     ).rejects.toThrow();
   });
-});
 
+  it('reserves quota before concurrent uploads write their bytes', async () => {
+    const other = await registerOwner(app);
+    const org = other.profile.organization.id;
+    const body = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(999_991)]);
+    for (let i = 0; i < 9; i++) expect((await upload(other.client, body, 'application/pdf')).status).toBe(201);
+    const results = await Promise.all([upload(other.client, body, 'application/pdf'), upload(other.client, body, 'application/pdf')]);
+    expect(results.map(r => r.status).sort()).toEqual([201, 413]);
+    const reserved = await prismaOf(app).storageObject.aggregate({ where: { organizationId: org, state: { not: 'DELETED' } }, _sum: { sizeBytes: true } });
+    expect(reserved._sum.sizeBytes).toBe(10_000_000);
+    expect(await prismaOf(app).documentRecord.count({ where: { organizationId: org } })).toBe(10);
+  });
+
+  it('retries failed deletions and releases quota only after cleanup succeeds', async () => {
+    const created = await upload(owner, pdf, 'application/pdf');
+    const key = `${organizationId}/${created.body.id}.pdf`;
+    const failure = vi.spyOn(app.get(FileStore), 'delete').mockRejectedValueOnce(new Error('storage offline'));
+    try {
+      expect((await owner.delete(`/documents/${created.body.id}`)).status).toBe(200);
+      expect(await storedFiles()).toContain(`${created.body.id}.pdf`);
+      expect((await prismaOf(app).storageObject.findUniqueOrThrow({ where: { key } })).state).toBe('DELETE_PENDING');
+      expect((await owner.get(`/documents/${created.body.id}/file`)).status).toBe(404);
+    } finally { failure.mockRestore(); }
+    await prismaOf(app).storageObject.update({ where: { key }, data: { availableAt: new Date(0) } });
+    await app.get(StorageService).processPending();
+    expect(await storedFiles()).not.toContain(`${created.body.id}.pdf`);
+    expect((await prismaOf(app).storageObject.findUniqueOrThrow({ where: { key } })).state).toBe('DELETED');
+  });
+
+  it('recovers abandoned uploads, including partial local files, without removing active files', async () => {
+    const files = app.get(FileStore);
+    const key = FileStore.keyFor(organizationId, crypto.randomUUID(), 'application/pdf');
+    const active = FileStore.keyFor(organizationId, crypto.randomUUID(), 'application/pdf');
+    await prismaOf(app).storageObject.createMany({ data: [
+      { key, organizationId, sizeBytes: pdf.length, availableAt: new Date(0) },
+      { key: active, organizationId, sizeBytes: pdf.length, availableAt: new Date(Date.now() + 60_000) },
+    ] });
+    await files.put(key, pdf, 'application/pdf');
+    await files.put(active, pdf, 'application/pdf');
+    await writeFile(join(process.env['STORAGE_DIR']!, `${key}.partial`), pdf);
+    await app.get(StorageService).processPending();
+    expect(await files.get(key)).toBeNull();
+    expect(await storedFiles()).not.toContain(`${key.split('/')[1]}.partial`);
+    expect(await storedFiles()).toContain(active.split('/')[1]);
+    expect((await prismaOf(app).storageObject.findUniqueOrThrow({ where: { key: active } })).state).toBe('PENDING');
+  });
+
+  it('cleans up bytes even when a storage write fails after creating the object', async () => {
+    const files = app.get(FileStore);
+    const put = files.put.bind(files);
+    const failure = vi.spyOn(files, 'put').mockImplementationOnce(async (...args) => {
+      await put(...args);
+      throw new Error('write acknowledgement lost');
+    });
+    const before = (await storedFiles()).sort();
+    try { expect((await upload(owner, pdf, 'application/pdf')).status).toBe(503); }
+    finally { failure.mockRestore(); }
+    expect((await storedFiles()).sort()).toEqual(before);
+  });
+});

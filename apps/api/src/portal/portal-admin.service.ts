@@ -4,13 +4,14 @@ import { normalizeEmail } from '../auth/auth.service.js';
 import { BalancesService } from '../billing/balances.service.js';
 import { audit } from '../common/audit.js';
 import { randomToken, sha256 } from '../common/crypto.js';
-import { formatDateOnly } from '../common/dates.js';
+import { formatDateOnly, paymentDateInstant } from '../common/dates.js';
 import { DomainError, notFound } from '../common/errors.js';
 import { formatMoney, parseMoney, ZERO } from '../common/money.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { MailerService } from '../mail/mailer.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import { noticeView } from './portal.service.js';
+import { createdCursorWhere, listPage, type ListQuery } from '../common/pagination.js';
 
 const invitationLifetime = 7 * 86_400_000;
 
@@ -56,6 +57,7 @@ export class PortalAdminService {
 
   async invite(organizationId: string, actorUserId: string, tenantId: string, emailInput?: string) {
     const token = randomToken(32);
+    const link = this.mailer.link('/accept-invite', { token, for: 'tenant' });
     const invitation = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.findFirst({
         where: { id: tenantId, organizationId },
@@ -93,24 +95,25 @@ export class PortalAdminService {
         entityType: 'Tenant',
         entityId: tenantId,
       });
-      return { ...created, organizationName: tenant.organization.name, firstName: tenant.firstName };
+      await this.mailer.enqueue(tx,
+        {
+          to: created.email,
+          subject: `Your tenant portal for ${tenant.organization.name}`,
+          text: [
+            `Hi ${tenant.firstName},`,
+            '',
+            `${tenant.organization.name} invited you to the RentFlow tenant portal. You can see what you owe, download receipts, tell them about payments, and report repairs.`,
+            '',
+            'Set up your account (link valid for 7 days):',
+            link,
+          ].join('\n'),
+        },
+        'PORTAL_INVITATION',
+        { organizationId, invitationId: created.id, expiresAt: created.expiresAt },
+      );
+      return created;
     });
-    const link = this.mailer.link('/accept-invite', { token, for: 'tenant' });
-    this.mailer.sendInBackground(
-      {
-        to: invitation.email,
-        subject: `Your tenant portal for ${invitation.organizationName}`,
-        text: [
-          `Hi ${invitation.firstName},`,
-          '',
-          `${invitation.organizationName} invited you to the RentFlow tenant portal. You can see what you owe, download receipts, tell them about payments, and report repairs.`,
-          '',
-          'Set up your account (link valid for 7 days):',
-          link,
-        ].join('\n'),
-      },
-      'PORTAL_INVITATION',
-    );
+    this.mailer.kick();
     // Returned once so staff can also send it by SMS or Messenger.
     return { status: 'INVITED' as const, email: invitation.email, expiresAt: invitation.expiresAt.toISOString(), link };
   }
@@ -135,16 +138,19 @@ export class PortalAdminService {
   }
 
   // ----------------------------------------------------------- payment notices
-  async listNotices(organizationId: string, status: 'SUBMITTED' | 'all' = 'SUBMITTED') {
+  async listNotices(organizationId: string, query: ListQuery & { status?: 'SUBMITTED' | 'all' } = {}) {
+    const status = query.status ?? 'SUBMITTED';
+    const limit = query.limit ?? 50;
+    const direction = status === 'all' ? 'desc' : 'asc';
     const notices = await this.prisma.paymentNotice.findMany({
-      where: { organizationId, ...(status === 'all' ? {} : { status }) },
+      where: { organizationId, ...(status === 'all' ? {} : { status }), ...createdCursorWhere(query.cursor, direction) },
       include: {
         payment: { include: { receipts: { orderBy: { issuedAt: 'desc' }, take: 1 } } },
         tenant: { select: { firstName: true, lastName: true } },
         lease: { select: { rentableSpace: { select: { unit: { select: { number: true, property: { select: { name: true } } } } } } } },
       },
-      orderBy: { createdAt: status === 'all' ? 'desc' : 'asc' },
-      take: 200,
+      orderBy: [{ createdAt: direction }, { id: direction }],
+      take: limit + 1,
     });
     const proofs = await this.prisma.documentRecord.findMany({
       where: { organizationId, entityType: 'PaymentNotice', entityId: { in: notices.map((n) => n.id) }, deletedAt: null },
@@ -152,7 +158,7 @@ export class PortalAdminService {
     });
     const outstanding = await this.balances.leaseOutstanding(organizationId);
     const owed = new Map(outstanding.map((row) => [row.leaseId, row.outstanding]));
-    return notices.map((notice) => ({
+    return listPage(notices, limit, (notice) => ({
       ...noticeView(notice),
       tenantId: notice.tenantId,
       tenantName: `${notice.tenant.firstName} ${notice.tenant.lastName}`,
@@ -160,7 +166,7 @@ export class PortalAdminService {
       propertyName: notice.lease.rentableSpace.unit.property.name,
       leaseOutstanding: formatMoney(owed.get(notice.leaseId) ?? ZERO),
       proofs: proofs.filter((p) => p.entityId === notice.id).map((p) => ({ id: p.id, contentType: p.contentType })),
-    }));
+    }), row => row.createdAt);
   }
 
   /**
@@ -173,7 +179,7 @@ export class PortalAdminService {
     id: string,
     overrides: { amount?: string; method?: PaymentMethod; referenceNumber?: string; paidOn?: string },
   ) {
-    const notice = await this.prisma.paymentNotice.findFirst({ where: { id, organizationId }, include: { tenant: true } });
+    const notice = await this.prisma.paymentNotice.findFirst({ where: { id, organizationId }, include: { tenant: true, organization: { select: { timezone: true } } } });
     if (!notice) throw notFound('NOTICE_NOT_FOUND');
     if (notice.status === 'CONFIRMED' && notice.paymentId)
       return { notice: noticeView(await this.reload(notice.id)), alreadyConfirmed: true };
@@ -202,8 +208,7 @@ export class PortalAdminService {
         method: overrides.method ?? notice.method,
         referenceNumber: overrides.referenceNumber ?? notice.referenceNumber ?? undefined,
         notes: 'Reported by the tenant in the portal',
-        // Noon in the Philippines keeps the payment on the reported calendar day.
-        paidAt: `${paidOn}T04:00:00.000Z`,
+        paidAt: paymentDateInstant(paidOn, notice.organization.timezone),
         allocations,
       },
       `notice-${notice.id}`,
@@ -221,27 +226,29 @@ export class PortalAdminService {
           entityId: notice.id,
           after: { paymentId: created.id, receiptNumber: created.receiptNumber },
         });
+        if (notice.tenant.email)
+          await this.mailer.enqueue(tx,
+            {
+              to: notice.tenant.email,
+              subject: `Payment received — receipt ${created.receiptNumber}`,
+              text: [
+                `Hi ${notice.tenant.firstName},`,
+                '',
+                `Your payment of ${formatMoney(amount)} on ${paidOn} has been confirmed. Receipt ${created.receiptNumber} is in your tenant portal:`,
+                this.mailer.link('/portal/payments', {}),
+              ].join('\n'),
+            },
+            'PAYMENT_NOTICE_CONFIRMED',
+            { organizationId },
+          );
       },
     );
-    if (notice.tenant.email)
-      this.mailer.sendInBackground(
-        {
-          to: notice.tenant.email,
-          subject: `Payment received — receipt ${payment.receiptNumber}`,
-          text: [
-            `Hi ${notice.tenant.firstName},`,
-            '',
-            `Your payment of ${payment.amount} on ${paidOn} has been confirmed. Receipt ${payment.receiptNumber} is in your tenant portal:`,
-            this.mailer.link('/portal/payments', {}),
-          ].join('\n'),
-        },
-        'PAYMENT_NOTICE_CONFIRMED',
-      );
+    this.mailer.kick();
     return { notice: noticeView(await this.reload(notice.id)), payment, alreadyConfirmed: false };
   }
 
   async rejectNotice(organizationId: string, actorUserId: string, id: string, reason: string) {
-    const notice = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.paymentNotice.updateMany({
         where: { id, organizationId, status: 'SUBMITTED' },
         data: { status: 'REJECTED', rejectionReason: reason.trim(), reviewedBy: actorUserId, reviewedAt: new Date() },
@@ -251,25 +258,27 @@ export class PortalAdminService {
         throw exists ? new DomainError('NOTICE_NOT_PENDING', 409) : notFound('NOTICE_NOT_FOUND');
       }
       await audit(tx, { organizationId, actorUserId, action: 'PAYMENT_NOTICE_REJECTED', entityType: 'PaymentNotice', entityId: id });
-      return tx.paymentNotice.findUniqueOrThrow({ where: { id }, include: { tenant: true } });
+      const notice = await tx.paymentNotice.findUniqueOrThrow({ where: { id }, include: { tenant: true } });
+      if (notice.tenant.email)
+        await this.mailer.enqueue(tx,
+          {
+            to: notice.tenant.email,
+            subject: 'We could not match your payment',
+            text: [
+              `Hi ${notice.tenant.firstName},`,
+              '',
+              `Your payment report of ${formatMoney(notice.amount)} on ${formatDateOnly(notice.paidOn)} was not confirmed:`,
+              reason.trim(),
+              '',
+              'Check the details in your tenant portal or contact your landlord:',
+              this.mailer.link('/portal/payments', {}),
+            ].join('\n'),
+          },
+          'PAYMENT_NOTICE_REJECTED',
+          { organizationId },
+        );
     });
-    if (notice.tenant.email)
-      this.mailer.sendInBackground(
-        {
-          to: notice.tenant.email,
-          subject: 'We could not match your payment',
-          text: [
-            `Hi ${notice.tenant.firstName},`,
-            '',
-            `Your payment report of ${formatMoney(notice.amount)} on ${formatDateOnly(notice.paidOn)} was not confirmed:`,
-            reason.trim(),
-            '',
-            'Check the details in your tenant portal or contact your landlord:',
-            this.mailer.link('/portal/payments', {}),
-          ].join('\n'),
-        },
-        'PAYMENT_NOTICE_REJECTED',
-      );
+    this.mailer.kick();
     return { notice: noticeView(await this.reload(id)) };
   }
 

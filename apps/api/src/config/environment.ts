@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { isAbsolute } from 'node:path';
+
 export type Environment = 'development' | 'test' | 'production';
 export type MailProvider = 'log' | 'resend' | 'smtp';
 export type StorageDriver = 'local' | 's3';
@@ -13,6 +16,7 @@ export interface AppEnvironment {
   ENABLE_JOBS: boolean;
   MAIL_PROVIDER: MailProvider;
   MAIL_FROM: string;
+  MAIL_ENCRYPTION_KEY: Buffer;
   RESEND_API_KEY: string;
   SMTP_URL: string;
   SESSION_ABSOLUTE_HOURS: number;
@@ -45,11 +49,11 @@ function integer(input: Record<string, unknown>, name: string, fallback: number,
 function origin(value: string, name: string): string {
   try {
     const url = new URL(value.trim());
-    if (!['http:', 'https:'].includes(url.protocol) || url.pathname !== '/' || url.search)
+    if (!['http:', 'https:'].includes(url.protocol) || url.pathname !== '/' || url.search || url.hash || url.username || url.password)
       throw new Error();
     return url.origin;
   } catch {
-    throw new Error(`Invalid ${name}: ${value}`);
+    throw new Error(`Invalid ${name}: expected an HTTP(S) origin without credentials, path, query or fragment`);
   }
 }
 
@@ -77,6 +81,7 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   if (production && origins.some((item) => !item.startsWith('https://')))
     throw new Error('WEB_ORIGIN must use https in production');
   const appUrl = origin(String(input['APP_URL'] ?? origins[0]), 'APP_URL');
+  if (production && !appUrl.startsWith('https://')) throw new Error('APP_URL must use https in production');
 
   const logLevel = String(input['LOG_LEVEL'] ?? (production ? 'log' : 'debug'));
   if (!logLevels.has(logLevel)) throw new Error('LOG_LEVEL must be error, warn, log, debug, or verbose');
@@ -97,7 +102,7 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   const storageDriver = String(input['STORAGE_DRIVER'] ?? 'local') as StorageDriver;
   if (storageDriver !== 'local' && storageDriver !== 's3') throw new Error('STORAGE_DRIVER must be local or s3');
   // Uploaded tenant documents (IDs, leases) must live somewhere that is backed up, never in the container layer.
-  if (production && storageDriver === 'local' && !String(input['STORAGE_DIR'] ?? '').startsWith('/'))
+  if (production && storageDriver === 'local' && !isAbsolute(String(input['STORAGE_DIR'] ?? '')))
     throw new Error('STORAGE_DIR must be an absolute path on a persistent volume when STORAGE_DRIVER=local in production');
   const storageDir = String(input['STORAGE_DIR'] ?? '.data/uploads');
   const s3 = {
@@ -116,6 +121,10 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   const mfaKeyText = String(input['MFA_ENCRYPTION_KEY'] ?? '').trim();
   const mfaKey = mfaKeyText ? Buffer.from(mfaKeyText, 'base64') : null;
   if (mfaKey && mfaKey.length !== 32) throw new Error('MFA_ENCRYPTION_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)');
+  const mailKeyText = String(input['MAIL_ENCRYPTION_KEY'] ?? '').trim();
+  if (production && !mailKeyText) throw new Error('MAIL_ENCRYPTION_KEY is required in production');
+  const mailKey = mailKeyText ? Buffer.from(mailKeyText, 'base64') : createHash('sha256').update('rentflow-development-mail-key').digest();
+  if (mailKey.length !== 32) throw new Error('MAIL_ENCRYPTION_KEY must be 32 random bytes, base64-encoded');
 
   return {
     NODE_ENV: nodeEnv,
@@ -128,6 +137,7 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     ENABLE_JOBS: String(input['ENABLE_JOBS'] ?? (nodeEnv === 'test' ? 'false' : 'true')) === 'true',
     MAIL_PROVIDER: mailProvider,
     MAIL_FROM: mailFrom,
+    MAIL_ENCRYPTION_KEY: mailKey,
     RESEND_API_KEY: resendKey,
     SMTP_URL: smtpUrl,
     SESSION_ABSOLUTE_HOURS: integer(input, 'SESSION_ABSOLUTE_HOURS', 12, 1, 720),

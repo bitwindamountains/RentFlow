@@ -33,6 +33,24 @@ export function addDays(date: string, days: number): string {
   return formatDateOnly(value);
 }
 
+/** Use the first instant of a reported local date, which has no known clock time.
+ * Searching the date boundary handles DST without assuming a fixed UTC offset.
+ */
+export function paymentDateInstant(date: string, timeZone: string, now = new Date()): string {
+  const midnight = parseDateOnly(date).getTime();
+  if (date > todayInZone(timeZone, now)) throw new DomainError('FUTURE_PAYMENT_DATE', 422);
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  let left = midnight - 36 * 3_600_000;
+  let right = midnight + 36 * 3_600_000;
+  while (left < right) {
+    const middle = Math.floor((left + right) / 2);
+    if (formatter.format(new Date(middle)) < date) left = middle + 1;
+    else right = middle;
+  }
+  if (formatter.format(new Date(left)) !== date) throw new DomainError('INVALID_DATE');
+  return new Date(left).toISOString();
+}
+
 export function daysInMonth(year: number, monthIndex: number): number {
   return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 }

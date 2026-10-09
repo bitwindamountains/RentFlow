@@ -95,4 +95,36 @@ describe('staff alerts for tenant reports', () => {
     expect(inbox(ownerEmail, /Broken window latch/)).toHaveLength(1);
     expect(await prismaOf(app).outboxEvent.findUniqueOrThrow({ where: { id: event.id } })).toMatchObject({ status: 'PROCESSED', attempts: 2 });
   });
+
+  it('retries only failed recipients after a partial delivery', async () => {
+    await settle();
+    const mailer = app.get(MailerService);
+    const send = mailer.send.bind(mailer);
+    const failure = vi.spyOn(mailer, 'send').mockImplementation(message =>
+      message.to === staff['MAINTENANCE'] ? Promise.reject(new Error('temporary failure')) : send(message));
+    let eventId: string;
+    try {
+      const response = await tenant.post('/portal/maintenance', { title: 'Partial delivery regression', description: 'A leaking tap needs repair.', priority: 'LOW' });
+      expect(response.status).toBe(201);
+      await settle();
+      const event = await prismaOf(app).outboxEvent.findFirstOrThrow({ where: { aggregateId: response.body.id } });
+      eventId = event.id;
+      expect(event.status).toBe('PENDING');
+      expect(event.deliveredTo).toEqual([ownerEmail]);
+    } finally { failure.mockRestore(); }
+    await prismaOf(app).outboxEvent.update({ where: { id: eventId! }, data: { availableAt: new Date(0) } });
+    await app.get(NotificationsService).processPending();
+    expect(inbox(ownerEmail, /Partial delivery regression/)).toHaveLength(1);
+    expect(inbox(staff['MAINTENANCE']!, /Partial delivery regression/)).toHaveLength(1);
+    expect(await prismaOf(app).outboxEvent.findUniqueOrThrow({ where: { id: eventId! } })).toMatchObject({ status: 'PROCESSED', attempts: 2 });
+  });
+
+  it('exposes exhausted alerts only to managers in their own workspace', async () => {
+    const event = await prismaOf(app).outboxEvent.findFirstOrThrow({ where: { aggregateType: 'MaintenanceRequest', deliveredTo: { has: ownerEmail } } });
+    await prismaOf(app).outboxEvent.update({ where: { id: event.id }, data: { status: 'FAILED', attempts: 5, lastError: 'Error' } });
+    expect((await owner.get('/notifications/failed')).body.some((row: { id: string }) => row.id === event.id)).toBe(true);
+    expect((await tenant.get('/notifications/failed')).status).toBe(403);
+    const other = await registerOwner(app);
+    expect((await other.client.get('/notifications/failed')).body).toEqual([]);
+  });
 });

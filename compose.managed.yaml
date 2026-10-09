@@ -1,0 +1,7 @@
+# Compose 2.24.4+: use with compose.prod.yaml for an external PostgreSQL database.
+# docker compose -f compose.prod.yaml -f compose.managed.yaml --env-file .env.production up -d --build
+services:
+  postgres:
+    profiles: [bundled-database]
+  migrate:
+    depends_on: !reset {}

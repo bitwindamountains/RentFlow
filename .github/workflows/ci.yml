@@ -24,6 +24,7 @@ jobs:
           --health-cmd "pg_isready -U rentflow -d rentflow_test"
           --health-interval 5s --health-timeout 5s --health-retries 20
     env:
+      DATABASE_URL: postgresql://rentflow:rentflow@localhost:5432/rentflow_test
       TEST_DATABASE_URL: postgresql://rentflow:rentflow@localhost:5432/rentflow_test
     steps:
       - uses: actions/checkout@v4
@@ -43,3 +44,44 @@ jobs:
       - run: npm run test:e2e --workspace api
       - run: npm run test --workspace web -- --watch=false
       - run: npm run build
+      - name: Backup and smoke script syntax
+        run: sh -n deploy/backup.sh && sh -n deploy/smoke.sh
+      - name: Backup failure handling and test process status
+        run: node --test deploy/backup.test.mjs apps/api/scripts/disposable-postgres.test.mjs
+
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure isolated production stack
+        run: |
+          cat > .env.production <<'EOF'
+          SITE_ADDRESS=:80
+          WEB_ORIGIN=https://localhost
+          POSTGRES_PASSWORD=ci-disposable-only
+          DATABASE_URL=postgresql://rentflow:ci-disposable-only@postgres:5432/rentflow
+          MAIL_PROVIDER=smtp
+          MAIL_FROM=RentFlow <no-reply@example.test>
+          MAIL_ENCRYPTION_KEY=Y2ktZGlzcG9zYWJsZS1tYWlsLWtleS0wMTIzNDU2Nzg=
+          SMTP_URL=smtp://127.0.0.1:1025
+          ENABLE_JOBS=false
+          EOF
+      - name: Validate bundled and managed database configurations
+        run: |
+          docker compose -f compose.prod.yaml --env-file .env.production config --quiet
+          docker compose -f compose.prod.yaml -f compose.managed.yaml --env-file .env.production config --quiet
+      - name: Build and start all deployment targets
+        run: docker compose -f compose.prod.yaml --env-file .env.production up -d --build --wait --wait-timeout 180
+      - name: Verify production proxy, readiness and PWA assets
+        run: sh deploy/smoke.sh http://localhost
+      - name: Verify bundled backup artifacts
+        run: |
+          sh deploy/backup.sh "$RUNNER_TEMP/rentflow-backups"
+          gzip -t "$RUNNER_TEMP"/rentflow-backups/*.gz
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose -f compose.prod.yaml --env-file .env.production logs --no-color
+      - name: Stop isolated stack
+        if: always()
+        run: docker compose -f compose.prod.yaml --env-file .env.production down --volumes

@@ -45,7 +45,7 @@ RUN mkdir -p /data/uploads && chown node:node /data/uploads && chmod 700 /data/u
 WORKDIR /app/apps/api
 USER node
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:3000/api/v1/health/live || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:3000/api/v1/health/ready || exit 1
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/main.js"]
 

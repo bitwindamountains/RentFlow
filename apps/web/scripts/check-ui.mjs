@@ -15,7 +15,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -23,7 +23,7 @@ const apiDir = join(root, 'apps/api');
 const webDir = join(root, 'apps/web');
 const out = join(webDir, '.ui-review');
 const { chromium } = await import(pathToFileURL(join(root, 'node_modules/.cache/rentflow-ui-tools/node_modules/playwright/index.mjs')).href);
-const { default: EmbeddedPostgres } = await import(pathToFileURL(join(root, 'node_modules/embedded-postgres/dist/index.js')).href);
+const { default: EmbeddedPostgres } = await import(pathToFileURL(join(apiDir, 'scripts/disposable-postgres.mjs')).href);
 
 const API = 'http://localhost:3000/api/v1';
 const WEB = 'http://localhost:4200';
@@ -57,7 +57,7 @@ async function waitFor(url, label, timeoutMs = 180_000) {
 }
 
 function start(command, args, options) {
-  const child = spawn(command, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(command, args, { ...options, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   child.stdout.on('data', (chunk) => (log = (log + chunk).slice(-4000)));
   child.stderr.on('data', (chunk) => (log = (log + chunk).slice(-4000)));
@@ -80,7 +80,11 @@ async function stopAll() {
     } else child.kill('SIGTERM');
   }
   if (postgres) await postgres.stop().catch(() => undefined);
-  if (dataDir) await rm(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }).catch(() => undefined);
+  if (dataDir) {
+    assert.equal(dirname(resolve(dataDir)), resolve(tmpdir()));
+    assert.ok(basename(dataDir).startsWith('rentflow-ui-pg-'));
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  }
 }
 
 async function launchBrowser() {
@@ -103,7 +107,7 @@ async function startStack() {
 
   dataDir = await mkdtemp(join(tmpdir(), 'rentflow-ui-pg-'));
   const port = 55_000 + Math.floor(Math.random() * 800);
-  postgres = new EmbeddedPostgres({ databaseDir: dataDir, port, user: 'ui', password: 'ui', persistent: false, onLog: () => undefined });
+  postgres = new EmbeddedPostgres({ databaseDir: dataDir, port, user: 'ui', password: 'ui', persistent: true, onLog: () => undefined });
   await postgres.initialise();
   await postgres.start();
   await postgres.createDatabase('rentflow');
@@ -233,6 +237,7 @@ async function review(browser, storageState, label, routes) {
         if (broken.length) problems.push(`${name}: amount wraps or overflows (${broken.join(', ')})`);
       }
       await context.close();
+      console.log(`Checked ${label}: ${routes.length} routes at ${width}px in ${colorScheme} mode.`);
     }
   }
 }

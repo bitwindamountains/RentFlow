@@ -22,6 +22,7 @@ describe('production configuration over local services', () => {
     vi.stubEnv('SMTP_URL', smtp.url);
     vi.stubEnv('MAIL_ENCRYPTION_KEY', randomBytes(32).toString('base64'));
     vi.stubEnv('MFA_ENCRYPTION_KEY', randomBytes(32).toString('base64'));
+    vi.stubEnv('PRIVACY_CONTACT_EMAIL', 'privacy@example.test');
     app = await startApp();
     owner = await registerOwner(app);
   });
@@ -30,6 +31,12 @@ describe('production configuration over local services', () => {
     await smtp?.close();
     vi.unstubAllEnvs();
     resetEnvironmentCache();
+  });
+
+  it('serves the privacy contact to signed-out visitors', async () => {
+    const response = await new Client(app).get('/privacy');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ contactEmail: 'privacy@example.test' });
   });
 
   it('sets production cookies and security headers, hides docs, and enforces CSRF', async () => {

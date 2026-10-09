@@ -33,6 +33,8 @@ export interface AppEnvironment {
   STORAGE_QUOTA_BYTES: number;
   /** 32-byte key for encrypting authenticator secrets; null turns MFA setup off in production. */
   MFA_ENCRYPTION_KEY: Buffer | null;
+  /** Shown on the public privacy notice as the contact for personal-data requests. */
+  PRIVACY_CONTACT_EMAIL: string;
 }
 
 const environments = new Set<Environment>(['development', 'test', 'production']);
@@ -123,6 +125,10 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   if (production && !mfaKeyText) throw new Error('MFA_ENCRYPTION_KEY is required in production');
   const mfaKey = mfaKeyText ? Buffer.from(mfaKeyText, 'base64') : null;
   if (mfaKey && mfaKey.length !== 32) throw new Error('MFA_ENCRYPTION_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)');
+  const privacyContact = String(input['PRIVACY_CONTACT_EMAIL'] ?? '').trim();
+  // The Data Privacy Act requires the privacy notice to name a contact.
+  if (production && !privacyContact) throw new Error('PRIVACY_CONTACT_EMAIL is required in production');
+  if (privacyContact && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(privacyContact)) throw new Error('PRIVACY_CONTACT_EMAIL must be an email address');
   const mailKeyText = String(input['MAIL_ENCRYPTION_KEY'] ?? '').trim();
   if (production && !mailKeyText) throw new Error('MAIL_ENCRYPTION_KEY is required in production');
   const mailKey = mailKeyText ? Buffer.from(mailKeyText, 'base64') : createHash('sha256').update('rentflow-development-mail-key').digest();
@@ -155,6 +161,7 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     UPLOAD_MAX_BYTES: integer(input, 'UPLOAD_MAX_MB', 10, 1, 50) * 1_048_576,
     STORAGE_QUOTA_BYTES: integer(input, 'STORAGE_QUOTA_MB', 2048, 10, 1_048_576) * 1_048_576,
     MFA_ENCRYPTION_KEY: mfaKey,
+    PRIVACY_CONTACT_EMAIL: privacyContact,
   };
 }
 

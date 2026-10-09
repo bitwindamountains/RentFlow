@@ -11,6 +11,7 @@ const base = {
   MAIL_FROM: 'RentFlow <billing@example.com>',
   MAIL_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString('base64'),
   MFA_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
+  PRIVACY_CONTACT_EMAIL: 'privacy@example.com',
   STORAGE_DIR: '/data/uploads',
 };
 
@@ -33,6 +34,12 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ ...base, MFA_ENCRYPTION_KEY: undefined })).toThrow('MFA_ENCRYPTION_KEY is required');
     expect(validateEnvironment({ ...base, NODE_ENV: 'development', MFA_ENCRYPTION_KEY: undefined }).MFA_ENCRYPTION_KEY).toBeNull();
     expect(() => validateEnvironment({ ...base, MFA_ENCRYPTION_KEY: 'c2hvcnQ=' })).toThrow('MFA_ENCRYPTION_KEY');
+  });
+
+  it('requires a privacy contact email in production', () => {
+    expect(() => validateEnvironment({ ...base, PRIVACY_CONTACT_EMAIL: undefined })).toThrow('PRIVACY_CONTACT_EMAIL is required');
+    expect(() => validateEnvironment({ ...base, PRIVACY_CONTACT_EMAIL: 'not an email' })).toThrow('must be an email');
+    expect(validateEnvironment({ ...base, NODE_ENV: 'development', PRIVACY_CONTACT_EMAIL: undefined }).PRIVACY_CONTACT_EMAIL).toBe('');
   });
 
   it('fails closed when NODE_ENV is missing instead of assuming development', () => {

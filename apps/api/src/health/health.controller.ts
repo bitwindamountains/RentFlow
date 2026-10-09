@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from './skip-throttle.js';
 import { Public } from '../auth/decorators.js';
 import { PrismaService } from '../common/prisma.service.js';
+import { environment } from '../config/environment.js';
 import { readdirSync } from 'node:fs';
 
 const requiredMigrations = readdirSync(new URL('../../prisma/migrations/', import.meta.url), { withFileTypes: true })
@@ -33,5 +34,17 @@ export class HealthController {
       throw new ServiceUnavailableException({ code: 'NOT_READY', message: 'Database unavailable' });
     }
     return { status: 'ready', timestamp: new Date().toISOString() };
+  }
+}
+
+/** Public facts the signed-out privacy notice needs. */
+@Public()
+@ApiTags('health')
+@Controller('privacy')
+export class PrivacyController {
+  @Get()
+  @ApiOperation({ summary: 'Contact for personal-data requests, shown on the privacy notice' })
+  contact() {
+    return { contactEmail: environment().PRIVACY_CONTACT_EMAIL || null };
   }
 }

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { timeStep, totpCode } from '../src/auth/mfa.js';
 import { sha256 } from '../src/common/crypto.js';
 import { MailerService } from '../src/mail/mailer.service.js';
-import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp } from './helpers.js';
+import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp, unique } from './helpers.js';
 
 describe('two-step sign-in (TOTP)', () => {
   let app: NestFastifyApplication;
@@ -136,5 +136,56 @@ describe('two-step sign-in (TOTP)', () => {
     const plain = await signIn();
     expect(plain.response.body.user.email).toBe(email);
     expect(plain.response.headers['set-cookie']).toBeDefined();
+  });
+
+  describe('required for owners of a workspace', () => {
+    /** Registers without the test helper, so the new-workspace default (required) applies. */
+    const strictOwner = async () => {
+      const client = new Client(app);
+      const ownerEmail = `strict-${unique()}@rentflow.test`;
+      const registered = await client.post('/auth/register', { email: ownerEmail, password: PASSWORD, name: 'Strict Owner', organizationName: `Strict ${unique()}` });
+      expect(registered.status).toBe(201);
+      return { client, ownerEmail, registered: registered.body };
+    };
+    const turnOn = async (client: Client) => {
+      const setup = await client.post('/auth/mfa/setup', { password: PASSWORD });
+      expect((await client.post('/auth/mfa/enable', { code: totpCode(setup.body.secret, timeStep()) })).status).toBe(200);
+      return setup.body.secret as string;
+    };
+
+    it('blocks everything but account routes until the owner turns it on', async () => {
+      const { client, registered } = await strictOwner();
+      expect(registered).toMatchObject({ role: 'OWNER', mfaSetupRequired: true, organization: { requireOwnerMfa: true } });
+      for (const response of [await client.get('/dashboard'), await client.post('/tenants', { firstName: 'A', lastName: 'B' })]) {
+        expect(response.status).toBe(403);
+        expect(response.body.code).toBe('MFA_SETUP_REQUIRED');
+      }
+      expect((await client.get('/auth/me')).status).toBe(200);
+      expect((await client.get('/auth/sessions')).status).toBe(200);
+
+      await turnOn(client);
+      expect((await client.get('/auth/me')).body.mfaSetupRequired).toBe(false);
+      expect((await client.get('/dashboard')).status).toBe(200);
+    });
+
+    it('does not apply to other roles, and changes only with the password and a code', async () => {
+      const { client, ownerEmail } = await strictOwner();
+      const secret = await turnOn(client);
+      const staffEmail = `manager-${unique()}@rentflow.test`;
+      const invite = await client.post('/staff/invitations', { email: staffEmail, role: 'MANAGER' });
+      await new Client(app).post('/staff/invitations/accept', { token: invite.body.token, name: 'Manager', password: PASSWORD });
+      const manager = new Client(app);
+      expect((await manager.post('/auth/login', { email: staffEmail, password: PASSWORD })).body.mfaSetupRequired).toBe(false);
+      expect((await manager.get('/dashboard')).status).toBe(200);
+      expect((await manager.post('/auth/mfa/owner-requirement', { required: false, password: PASSWORD, code: '000000' })).status).toBe(403);
+
+      expect((await client.post('/auth/mfa/owner-requirement', { required: false, password: PASSWORD, code: '000000' })).body.code).toBe('MFA_CODE_INVALID');
+      expect((await client.post('/auth/mfa/owner-requirement', { required: false, password: 'wrong password!!', code: '000000' })).body.code).toBe('PASSWORD_INCORRECT');
+      await prismaOf(app).user.update({ where: { email: ownerEmail }, data: { mfaLastStep: timeStep() - 2 } });
+      const off = await client.post('/auth/mfa/owner-requirement', { required: false, password: PASSWORD, code: totpCode(secret, timeStep()) });
+      expect(off.body).toEqual({ requireOwnerMfa: false });
+      expect((await client.get('/auth/me')).body.organization.requireOwnerMfa).toBe(false);
+      expect(await prismaOf(app).auditLog.count({ where: { action: 'OWNER_MFA_NOT_REQUIRED' } })).toBeGreaterThan(0);
+    });
   });
 });

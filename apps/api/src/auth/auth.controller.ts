@@ -1,11 +1,11 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { FastifyReply } from 'fastify';
 import { PASSWORD_MAX_LENGTH } from '../common/crypto.js';
 import { environment, sessionCookieName } from '../config/environment.js';
 import { AuthService, type IssuedSession } from './auth.service.js';
-import { ANY_MEMBER, Auth, Public, RateLimit, Roles } from './decorators.js';
+import { AllowWithoutMfa, ANY_MEMBER, Auth, Public, RateLimit, Roles } from './decorators.js';
 import type { SessionContext } from './session.types.js';
 
 class RegisterDto {
@@ -46,6 +46,9 @@ class MfaCodeDto {
 class MfaChangeDto extends PasswordDto {
   @IsString() @MinLength(6) @MaxLength(20) code!: string;
 }
+class OwnerMfaRequirementDto extends MfaChangeDto {
+  @IsBoolean() required!: boolean;
+}
 class SwitchWorkspaceDto {
   @IsString() @MinLength(1) @MaxLength(160) workspace!: string;
 }
@@ -56,6 +59,8 @@ type CookieReply = FastifyReply & {
 };
 
 @ApiTags('authentication')
+// Account routes stay usable while an owner still has to turn on required two-step sign-in.
+@AllowWithoutMfa()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -120,6 +125,14 @@ export class AuthController {
   @Post('mfa/disable')
   async mfaDisable(@Auth() session: SessionContext, @Body() input: MfaChangeDto) {
     await this.auth.disableMfa(session, input.password, input.code);
+  }
+
+  @Roles('OWNER')
+  @RateLimit(10, '15 minutes')
+  @HttpCode(200)
+  @Post('mfa/owner-requirement')
+  ownerMfaRequirement(@Auth() session: SessionContext, @Body() input: OwnerMfaRequirementDto) {
+    return this.auth.setOwnerMfaRequirement(session, input.required, input.password, input.code);
   }
 
   @Roles(...ANY_MEMBER)

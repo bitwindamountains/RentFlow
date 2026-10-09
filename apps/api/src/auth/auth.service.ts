@@ -37,6 +37,16 @@ const mfaChallengeAttempts = 5;
 export const LOGIN_FAILURE_LIMIT = 10;
 const loginFailureWindow = 15 * 60 * 1000;
 
+/** Same rule as in resolveSession, for sessions being created. */
+async function ownerMfaSetupRequired(tx: Tx, userId: string, organizationId: string, role: MembershipRole): Promise<boolean> {
+  if (role !== 'OWNER') return false;
+  const [organization, user] = await Promise.all([
+    tx.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { requireOwnerMfa: true } }),
+    tx.user.findUniqueOrThrow({ where: { id: userId }, select: { mfaEnabledAt: true } }),
+  ]);
+  return organization.requireOwnerMfa && !user.mfaEnabledAt;
+}
+
 export interface IssuedSession {
   token: string;
   context: SessionContext;
@@ -240,6 +250,23 @@ export class AuthService {
     this.mailer.kick();
   }
 
+  /** Owner setting; either direction needs the owner's password and a current code. */
+  async setOwnerMfaRequirement(context: SessionContext, required: boolean, password: string, code: string) {
+    if (context.role !== 'OWNER') throw new DomainError('FORBIDDEN', 403);
+    const user = await this.verifiedForMfaChange(context, password, code);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.organization.update({ where: { id: context.organizationId }, data: { requireOwnerMfa: required } });
+      await audit(tx, {
+        organizationId: context.organizationId,
+        actorUserId: user.id,
+        action: required ? 'OWNER_MFA_REQUIRED' : 'OWNER_MFA_NOT_REQUIRED',
+        entityType: 'Organization',
+        entityId: context.organizationId,
+      });
+    });
+    return { requireOwnerMfa: required };
+  }
+
   async regenerateRecoveryCodes(context: SessionContext, password: string, code: string) {
     const user = await this.verifiedForMfaChange(context, password, code);
     const recoveryCodes = newRecoveryCodes();
@@ -326,7 +353,7 @@ export class AuthService {
     if (!token || token.length > 200) return undefined;
     const session = await this.prisma.session.findUnique({
       where: { tokenHash: sha256(token) },
-      include: { user: { select: { disabledAt: true, emailVerifiedAt: true } } },
+      include: { user: { select: { disabledAt: true, emailVerifiedAt: true, mfaEnabledAt: true } } },
     });
     const now = Date.now();
     if (!session || session.revokedAt || session.expiresAt.getTime() <= now) return undefined;
@@ -343,7 +370,7 @@ export class AuthService {
         status: 'ACTIVE',
         organization: { status: 'ACTIVE' },
       },
-      select: { role: true, tenantId: true, tenant: { select: { status: true } } },
+      select: { role: true, tenantId: true, tenant: { select: { status: true } }, organization: { select: { requireOwnerMfa: true } } },
     });
     if (!membership) return undefined;
     // An archived tenant loses portal access immediately.
@@ -362,6 +389,7 @@ export class AuthService {
       tenantId: membership.role === 'TENANT' ? membership.tenantId : null,
       expiresAt: session.expiresAt,
       emailVerified: Boolean(session.user.emailVerifiedAt),
+      mfaSetupRequired: membership.role === 'OWNER' && membership.organization.requireOwnerMfa && !session.user.mfaEnabledAt,
     };
   }
 
@@ -400,8 +428,10 @@ export class AuthService {
         slug: membership.organization.slug,
         currency: membership.organization.currency,
         timezone: membership.organization.timezone,
+        requireOwnerMfa: membership.organization.requireOwnerMfa,
       },
       role: membership.role,
+      mfaSetupRequired: context.mfaSetupRequired,
       csrfToken: context.csrfToken,
       sessionExpiresAt: context.expiresAt.toISOString(),
       workspaces: workspaces.map((item) => ({ ...item.organization, role: item.role })),
@@ -583,6 +613,7 @@ export class AuthService {
         tenantId: role === 'TENANT' ? membership.tenantId : null,
         expiresAt,
         emailVerified,
+        mfaSetupRequired: await ownerMfaSetupRequired(tx, userId, organizationId, role),
       },
     };
   }

@@ -21,6 +21,7 @@ describe('production configuration over local services', () => {
     vi.stubEnv('MAIL_FROM', 'RentFlow <no-reply@example.test>');
     vi.stubEnv('SMTP_URL', smtp.url);
     vi.stubEnv('MAIL_ENCRYPTION_KEY', randomBytes(32).toString('base64'));
+    vi.stubEnv('MFA_ENCRYPTION_KEY', randomBytes(32).toString('base64'));
     app = await startApp();
     owner = await registerOwner(app);
   });

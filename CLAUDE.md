@@ -131,6 +131,15 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 - There are no per-component stylesheets for shared UI. The global design system is SCSS partials in `src/styles/`: `_tokens`, `_base`, `_shell`, `_components`, `_pages`, `_motion`.
 - Colours are tokens with light and dark themes. `ThemeService` sets `data-theme`.
 - All motion must sit behind `prefers-reduced-motion: no-preference`, including view transitions and `animate.enter`/`animate.leave`.
+  - Entrance animations that move elements use `backwards` fill, never `both`. A transform that stays applied would turn the element into a containing block for `position: fixed` children.
+- **Type:** Inter Variable is self-hosted from `@fontsource-variable/inter` (opsz) through `angular.json` styles, because the CSP allows only `font-src 'self'`. Use `tabular-nums` for money.
+- **Icons:**
+  - Attention icons are `<span class="attention-icon {tone}" data-icon="alert|check|plus|receipt|download|external|clock|x|wrench">`. They are SVG masks defined in `_components.scss`; never use text glyphs.
+  - Other icons are inline `<svg class="ui-icon">`.
+- **Effects:**
+  - Animate money figures with `[appCountUp]="value | money"` (`core/count-up.directive.ts`). It is display only, and the final text is always the input.
+  - Interactive cards (`a.tile`, `.property-card`, `a.metric-card`) get a cursor spotlight from one passive listener in `app.ts`.
+  - Theme switches cross-fade through a view transition. `ThemeService` adds `theme-switching` to `<html>` while it runs.
 
 ## Docs
 

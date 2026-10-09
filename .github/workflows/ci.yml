@@ -65,6 +65,7 @@ jobs:
           MAIL_PROVIDER=smtp
           MAIL_FROM=RentFlow <no-reply@example.test>
           MAIL_ENCRYPTION_KEY=Y2ktZGlzcG9zYWJsZS1tYWlsLWtleS0wMTIzNDU2Nzg=
+          MFA_ENCRYPTION_KEY=Y2ktZGlzcG9zYWJsZS1tZmEta2V5LTAxMjM0NTY3ODk=
           SMTP_URL=smtp://127.0.0.1:1025
           ENABLE_JOBS=false
           EOF

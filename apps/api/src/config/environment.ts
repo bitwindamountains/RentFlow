@@ -119,6 +119,8 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   }
 
   const mfaKeyText = String(input['MFA_ENCRYPTION_KEY'] ?? '').trim();
+  // New workspaces require owners to use two-step sign-in, which cannot be set up without this key.
+  if (production && !mfaKeyText) throw new Error('MFA_ENCRYPTION_KEY is required in production');
   const mfaKey = mfaKeyText ? Buffer.from(mfaKeyText, 'base64') : null;
   if (mfaKey && mfaKey.length !== 32) throw new Error('MFA_ENCRYPTION_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)');
   const mailKeyText = String(input['MAIL_ENCRYPTION_KEY'] ?? '').trim();

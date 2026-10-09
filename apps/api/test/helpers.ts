@@ -92,6 +92,8 @@ export async function registerOwner(app: NestFastifyApplication, label = unique(
     organizationName: `Org ${label}`,
   });
   if (response.status !== 201) throw new Error(`register failed: ${response.status} ${response.text}`);
+  // New workspaces require owner two-step sign-in; tests opt in where they cover it.
+  await prismaOf(app).organization.update({ where: { id: response.body.organization.id }, data: { requireOwnerMfa: false } });
   return { client, email, profile: response.body };
 }
 

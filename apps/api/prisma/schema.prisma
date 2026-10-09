@@ -175,6 +175,9 @@ model Organization {
   timezone            String               @default("Asia/Manila")
   receiptPrefix       String               @default("RF")
   status              OrganizationStatus   @default(ACTIVE)
+  /// Owners must turn on two-step sign-in before using the workspace.
+  /// On for new workspaces; the migration left existing ones off.
+  requireOwnerMfa     Boolean              @default(true)
   createdAt           DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
   memberships         Membership[]

@@ -26,11 +26,13 @@ try {
   await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.upsert({
       where: { slug: organizationSlug },
-      update: { name: 'RentFlow Demo', status: 'ACTIVE' },
+      // The shared demo login must work without an authenticator app.
+      update: { name: 'RentFlow Demo', status: 'ACTIVE', requireOwnerMfa: false },
       create: {
         name: 'RentFlow Demo',
         slug: organizationSlug,
         receiptPrefix: 'DEMO',
+        requireOwnerMfa: false,
         receiptSequence: { create: {} },
       },
     });

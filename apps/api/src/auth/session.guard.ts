@@ -10,7 +10,7 @@ import type { MembershipRole } from '@prisma/client';
 import { timingSafeEqual } from 'node:crypto';
 import { sessionCookieName } from '../config/environment.js';
 import { AuthService } from './auth.service.js';
-import { IS_PUBLIC, ROLES } from './decorators.js';
+import { ALLOW_WITHOUT_MFA, IS_PUBLIC, ROLES } from './decorators.js';
 import type { AuthenticatedRequest } from './session.types.js';
 
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -50,6 +50,11 @@ export class SessionGuard implements CanActivate {
     const roles = this.reflector.getAllAndOverride<MembershipRole[]>(ROLES, targets);
     if (!roles?.length || !roles.includes(session.role))
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Your role cannot perform this action.' });
+    if (session.mfaSetupRequired && !this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA, targets))
+      throw new ForbiddenException({
+        code: 'MFA_SETUP_REQUIRED',
+        message: 'This workspace requires owners to turn on two-step sign-in. Set it up on the Account page.',
+      });
     request.auth = session;
     return true;
   }

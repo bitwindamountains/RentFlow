@@ -249,6 +249,17 @@ model UserToken {
   @@index([expiresAt])
 }
 
+/// One failed sign-in, keyed by the SHA-256 of the normalized email so unknown
+/// emails are tracked the same way as real ones. Purged after a day.
+model LoginFailure {
+  id        String   @id @default(uuid()) @db.Uuid
+  emailHash String   @db.Char(64)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([emailHash, createdAt])
+  @@index([createdAt])
+}
+
 model JobLock {
   name        String   @id
   owner       String

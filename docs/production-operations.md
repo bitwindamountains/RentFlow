@@ -13,6 +13,9 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
   - **Storage:** secrets are encrypted with `MFA_ENCRYPTION_KEY`.
   - **Changes:** turning it off, or replacing recovery codes, needs the password and a code. Turning it on signs out the person's other devices.
 - **Rate limits.** The default is 300 requests/minute per normalized client IP. Sign-in, registration, password reset, email verification, and invitation acceptance override this with stricter per-route/IP limits. Unverified cookies never select a rate-limit bucket.
+- **Per-account sign-in backoff.** After 10 wrong passwords or two-step codes for one email within 15 minutes, from any mix of IPs, sign-in for that email is refused until older failures age out. The response is the same generic error as any failed sign-in, so it does not reveal whether the email exists. Failures are stored in the database (hashed email only), so the limit holds across API instances, and a successful sign-in clears them.
+  - **Tradeoff:** someone who knows an email address can keep that person from signing in for 15 minutes at a time. Existing sessions are not affected. Owners should keep a signed-in device.
+- **Passwords** are hashed with scrypt (N=2^14, r=8, p=5) in a versioned format. Hashes from older releases are upgraded at the person's next successful sign-in.
 - **Financial integrity.**
   - Posted charges and payments are never edited or deleted. Corrections use adjustments (discount, waiver, credit note), voids, and reversals, and every one of these writes a ledger entry.
   - Money is `numeric(19,4)` and is validated to two decimals. The web app calculates in integer centavos.

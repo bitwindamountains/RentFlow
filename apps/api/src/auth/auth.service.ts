@@ -32,6 +32,10 @@ const resetLifetime = 30 * 60 * 1000;
 const verificationLifetime = 48 * 60 * 60 * 1000;
 const mfaChallengeLifetime = 5 * 60 * 1000;
 const mfaChallengeAttempts = 5;
+// Per-account backoff across all IPs: after this many failed passwords or codes
+// for one email within the window, sign-in is refused until older failures age out.
+export const LOGIN_FAILURE_LIMIT = 10;
+const loginFailureWindow = 15 * 60 * 1000;
 
 export interface IssuedSession {
   token: string;
@@ -110,12 +114,16 @@ export class AuthService {
     workspace?: string;
     userAgent?: string;
   }): Promise<IssuedSession | MfaChallenge> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizeEmail(input.email) },
-    });
-    // Always run scrypt so the response time does not reveal registered emails.
+    const email = normalizeEmail(input.email);
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    const blocked = await this.loginBlocked(email);
+    // Always run scrypt so the response time does not reveal registered emails or a block.
     const valid = await verifyPassword(input.password, user?.passwordHash);
-    if (!user || !valid || user.disabledAt) throw new DomainError('INVALID_CREDENTIALS', 401);
+    if (blocked) throw new DomainError('INVALID_CREDENTIALS', 401);
+    if (!user || !valid || user.disabledAt) {
+      await this.recordLoginFailure(email);
+      throw new DomainError('INVALID_CREDENTIALS', 401);
+    }
     const membership = await this.loginMembership(user.id, input.workspace);
     if (!membership) throw new DomainError('INVALID_CREDENTIALS', 401);
     // Only a verified password can upgrade its own hash; the old hash stays valid until then.
@@ -126,6 +134,7 @@ export class AuthService {
       });
     if (user.mfaEnabledAt)
       return { mfaRequired: true, challenge: await this.issueToken(user.id, 'MFA_CHALLENGE', mfaChallengeLifetime) };
+    await this.clearLoginFailures(email);
     return this.prisma.$transaction((tx) =>
       this.createSession(
         tx,
@@ -148,10 +157,12 @@ export class AuthService {
     if (!record || record.type !== 'MFA_CHALLENGE' || record.usedAt || record.expiresAt <= new Date() || record.attempts >= mfaChallengeAttempts)
       throw new DomainError('MFA_CHALLENGE_INVALID', 401);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
-    if (user.disabledAt || !user.mfaEnabledAt) throw new DomainError('MFA_CHALLENGE_INVALID', 401);
+    if (user.disabledAt || !user.mfaEnabledAt || (await this.loginBlocked(user.email)))
+      throw new DomainError('MFA_CHALLENGE_INVALID', 401);
     const factor = await this.checkSecondFactor(user, input.code);
     if (!factor) {
       await this.prisma.userToken.updateMany({ where: { id: record.id, attempts: { lt: mfaChallengeAttempts } }, data: { attempts: { increment: 1 } } });
+      await this.recordLoginFailure(user.email);
       throw new DomainError('INVALID_MFA_CODE', 401);
     }
     const claimed = await this.prisma.userToken.updateMany({ where: { id: record.id, usedAt: null }, data: { usedAt: new Date() } });
@@ -159,9 +170,26 @@ export class AuthService {
     const membership = await this.loginMembership(user.id, input.workspace);
     if (!membership) throw new DomainError('INVALID_CREDENTIALS', 401);
     if (factor === 'recovery') await this.noticeRecoveryCodeUsed(user, membership.organizationId);
+    await this.clearLoginFailures(user.email);
     return this.prisma.$transaction((tx) =>
       this.createSession(tx, user.id, membership.organizationId, membership, Boolean(user.emailVerifiedAt), input.userAgent),
     );
+  }
+
+  // ------------------------------------------------------------ sign-in backoff
+  private async loginBlocked(email: string): Promise<boolean> {
+    const failures = await this.prisma.loginFailure.count({
+      where: { emailHash: sha256(email), createdAt: { gt: new Date(Date.now() - loginFailureWindow) } },
+    });
+    return failures >= LOGIN_FAILURE_LIMIT;
+  }
+
+  private async recordLoginFailure(email: string): Promise<void> {
+    await this.prisma.loginFailure.create({ data: { emailHash: sha256(email) } });
+  }
+
+  private async clearLoginFailures(email: string): Promise<void> {
+    await this.prisma.loginFailure.deleteMany({ where: { emailHash: sha256(email) } });
   }
 
   // ------------------------------------------------------------ two-step setup

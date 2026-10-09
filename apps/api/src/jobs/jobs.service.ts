@@ -121,6 +121,7 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.mailer.processPending();
     const now = new Date();
     await this.prisma.userToken.deleteMany({ where: { expiresAt: { lt: new Date(now.getTime() - 86_400_000) } } });
+    await this.prisma.loginFailure.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 86_400_000) } } });
     await this.prisma.session.deleteMany({
       where: { OR: [{ expiresAt: { lt: new Date(now.getTime() - 30 * 86_400_000) } }, { revokedAt: { lt: new Date(now.getTime() - 30 * 86_400_000) } }] },
     });

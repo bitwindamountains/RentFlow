@@ -1,6 +1,8 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { LOGIN_FAILURE_LIMIT } from '../src/auth/auth.service.js';
+import { sha256 } from '../src/common/crypto.js';
 import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp, tokenIn, unique } from './helpers.js';
 
 describe('authentication', () => {
@@ -58,6 +60,29 @@ describe('authentication', () => {
     expect(wrong.status).toBe(401);
     expect(unknown.status).toBe(401);
     expect(wrong.body).toEqual(unknown.body);
+  });
+
+  it('refuses an account after ten failed passwords from any mix of IPs, without revealing it', async () => {
+    const { email } = await registerOwner(app);
+    const from = (n: number) => ({ 'x-forwarded-for': `198.51.100.${n}` });
+    for (let attempt = 1; attempt <= LOGIN_FAILURE_LIMIT; attempt += 1)
+      expect((await new Client(app).post('/auth/login', { email, password: 'not the password at all' }, from(attempt))).status).toBe(401);
+
+    const blocked = await new Client(app).post('/auth/login', { email, password: PASSWORD }, from(200));
+    const unknown = await new Client(app).post('/auth/login', { email: `nobody-${unique()}@x.test`, password: PASSWORD }, from(201));
+    expect(blocked.status).toBe(401);
+    expect(blocked.body).toEqual(unknown.body);
+    expect(blocked.headers['set-cookie']).toBeUndefined();
+
+    // Other accounts are unaffected.
+    const other = await registerOwner(app);
+    expect((await new Client(app).post('/auth/login', { email: other.email, password: PASSWORD }, from(202))).status).toBe(200);
+
+    // Once the failures age out of the window, the right password works and clears them.
+    const failures = prismaOf(app).loginFailure;
+    await failures.updateMany({ where: { emailHash: sha256(email) }, data: { createdAt: new Date(Date.now() - 16 * 60 * 1000) } });
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, from(203))).status).toBe(200);
+    expect(await failures.count({ where: { emailHash: sha256(email) } })).toBe(0);
   });
 
   it('upgrades a password hash from before versioning at the next sign-in', async () => {

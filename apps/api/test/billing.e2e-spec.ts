@@ -274,6 +274,21 @@ describe('billing, payments, and balances', () => {
     }
   });
 
+  it('nets adjustments out of the trend, as on the billed tile', async () => {
+    const saved = owner;
+    owner = (await registerOwner(app)).client;
+    try {
+      const rental = await createRental(owner, { startDate: monthStart(0), rent: '1000.00', firstMonth: 'FULL' });
+      const [charge] = await openCharges(rental.lease.id);
+      expect((await owner.post(`/charges/${charge.id}/adjustments`, { type: 'DISCOUNT', amount: '200.00', reason: 'Loyalty' })).status).toBe(201);
+      const dashboard = (await owner.get('/dashboard')).body;
+      expect(dashboard.billedThisMonth).toBe('800.00');
+      expect(dashboard.trend.at(-1).billed).toBe('800.00');
+    } finally {
+      owner = saved;
+    }
+  });
+
   it('changes rent from a future date without rewriting billed months', async () => {
     const rental = await createRental(owner, { startDate: monthStart(-1), rent: '10000.00' });
     await owner.post('/billing/run', {});

@@ -42,7 +42,8 @@ export class ReportsService {
       Array<{ month: string; billed: Prisma.Decimal | null; collected: Prisma.Decimal | null }>
     >`
       SELECT to_char(m, 'YYYY-MM') AS month,
-        (SELECT SUM(c.amount) FROM "Charge" c WHERE c."organizationId" = ${organizationId}::uuid AND c.status = 'POSTED'
+        (SELECT SUM(c.amount - COALESCE((SELECT SUM(a.amount) FROM "ChargeAdjustment" a WHERE a."chargeId" = c.id), 0))
+           FROM "Charge" c WHERE c."organizationId" = ${organizationId}::uuid AND c.status = 'POSTED'
            AND date_trunc('month', c."dueDate") = m) AS billed,
         (SELECT SUM(p.amount) FROM "Payment" p WHERE p."organizationId" = ${organizationId}::uuid AND p.status = 'POSTED'
            AND date_trunc('month', (p."paidAt" AT TIME ZONE ${org.timezone})) = m) AS collected

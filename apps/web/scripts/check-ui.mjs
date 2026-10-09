@@ -258,7 +258,7 @@ try {
     await seedContext.close();
 
     // Signed-out pages.
-    await review(browser, undefined, 'public', ['/auth']);
+    await review(browser, undefined, 'public', ['/auth', '/privacy']);
     const staff = await signIn(browser, seeded.ownerEmail);
     await review(browser, staff, 'staff', [
       '/dashboard', '/properties', '/tenants', `/tenants/${seeded.tenantId}`, '/leases', '/billing', '/payments', '/deposits',

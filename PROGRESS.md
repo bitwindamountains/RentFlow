@@ -2,7 +2,7 @@
 
 ## Current task
 
-Working through `tasks/plan.md`: Phase 1 (code) is committed on `main` but not pushed (2026-10-11). Before that, all work was committed and pushed to `main` (2026-10-10). **GitHub CI passed for the first time** (run 37970550334, started manually), including the `containers` job:
+Working through `tasks/plan.md`. Phase 1 (code) is pushed (2026-10-11), and its 3 migrations are applied to the Supabase dev database. CI started by hand passed (run 38005527295), including the pinned images in the container job. **A push still starts no CI run**, and GitHub creates no check suite for the commit; check the repo's Actions settings. Until that's fixed, run `gh workflow run CI` before each release. Before that, all work was committed and pushed to `main` (2026-10-10). **GitHub CI passed for the first time** (run 37970550334, started manually), including the `containers` job:
 - The Docker images build.
 - The production stack starts and passes its proxy, readiness and PWA checks.
 
@@ -20,7 +20,7 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
   - T7: Docker images pinned (`node:24.21.0-alpine3.24`, `caddy:2.11.7-alpine`); CI on `ubuntu-24.04` with v7 actions. These are untested until CI runs, since there's no Docker here.
   - **Checks:** the full local CI run passes (62 unit, 108 e2e, 21 web tests, build, audit). The visual review passes, and its screenshots led to fixing the privacy page rendering inside the app shell.
   - **Not browser-tested yet:** the forced two-step setup redirect, the owner on/off switch, and the export and erase buttons. Their API and guard logic are covered by tests; check them in the staging run (B4).
-  - **New migrations, not applied to the Supabase dev database:** `20261011090000_login_failures`, `20261011100000_owner_mfa_requirement`, `20261011110000_tenant_erasure`. Run `npm run db:deploy --workspace api` before using the dev database with this code.
+  - **New migrations, applied to the Supabase dev database on 2026-10-11:** `20261011090000_login_failures`, `20261011100000_owner_mfa_requirement`, `20261011110000_tenant_erasure`.
 
 - **2026-10-10: Pre-ship review.** The full local CI run is green: lint, typecheck, 59 unit tests, 98 e2e tests, 19 web tests, the build, and `npm audit` with 0 issues.
   - **Code:** no Critical findings.

@@ -12,15 +12,18 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
   - **Recovery:** 10 one-time recovery codes cover a lost phone. Using one emails the account owner.
   - **Storage:** secrets are encrypted with `MFA_ENCRYPTION_KEY`.
   - **Changes:** turning it off, or replacing recovery codes, needs the password and a code. Turning it on signs out the person's other devices.
-- **Rate limits.** 300 requests/minute per session or IP overall. Stricter per-IP limits apply to sign-in, registration, password reset, email verification, and invitation acceptance.
+- **Rate limits.** The default is 300 requests/minute per normalized client IP. Sign-in, registration, password reset, email verification, and invitation acceptance override this with stricter per-route/IP limits. Unverified cookies never select a rate-limit bucket.
 - **Financial integrity.**
   - Posted charges and payments are never edited or deleted. Corrections use adjustments (discount, waiver, credit note), voids, and reversals, and every one of these writes a ledger entry.
   - Money is `numeric(19,4)` and is validated to two decimals. The web app calculates in integer centavos.
-  - Payments, charges, deposits, and guided setup are idempotent. A retry with the same `Idempotency-Key` returns the original result.
+  - Payments, charges, deposits, and guided setup are idempotent. A retry with the same `Idempotency-Key` returns the original result. Keys are retained with their responses indefinitely, including after a browser tab has been closed for days.
+  - Unallocated posted payments are applied oldest-first to open charges in the same serializable transaction. New charges consume existing credit, with a `PAYMENT_CREDIT_APPLIED` audit event; no additional cash or ledger credit is posted. Reversing a payment removes all its allocations from balance calculations.
   - Rent is unique per lease and month, across manual and automatic billing.
 - **Uncertain payments.** An unconfirmed payment is saved in the browser tab's session storage before it is sent. Reopening Record payment in that tab offers a safe retry with the same key. It does not record a second payment.
 - **Personal data.** Audit logs record who changed what, but personal fields (names, emails, phones, document URLs) are redacted. Tokens in emailed links travel in the URL fragment and never reach server logs.
-- **Uploaded documents.** PDF, JPEG, PNG, and WebP only, identified by their content (a renamed HTML or SVG file is rejected), up to `UPLOAD_MAX_MB` each and `STORAGE_QUOTA_MB` per workspace. Files sit in private storage under server-generated names and are served only through the API after the same workspace and role checks as every other record, with `nosniff` and a sandboxing CSP; PDFs always download rather than render. Removing a document erases the file immediately; the record of who uploaded and removed it stays in the audit log.
+- **Uploaded documents.** PDF, JPEG, PNG, and WebP only, identified by their content (a renamed HTML or SVG file is rejected), up to `UPLOAD_MAX_MB` each and `STORAGE_QUOTA_MB` per workspace. Files sit in private storage under server-generated names and are served only through the API after workspace and role checks, with `nosniff` and a sandboxing CSP; PDFs always download rather than render. `StorageObject` reserves quota under a workspace lock before any write. Removing a document hides it immediately and attempts erasure; failures remain queued and count against quota until cleanup succeeds. Uploads abandoned for an hour are reclaimed, including local `.partial` files. Audit records remain. Old unrecorded files from releases before reservation tracking require a separate storage inventory; the migration can only backfill recorded documents.
+- **Transactional email.** Verification, password reset, invitations, MFA notices and payment-confirmation/rejection messages are written to `MailDelivery` in the same transaction as the corresponding token or business change. Bodies are AES-256-GCM encrypted using `MAIL_ENCRYPTION_KEY` and cleared after delivery or expiration. Workers claim messages across instances and retry transient errors with backoff, up to 8 attempts while the message remains valid. Expired, used or revoked links are not sent. SMTP delivery can duplicate if a server accepts a message before a crash; a stable Message-ID helps identify these, but is not an exactly-once guarantee.
+- **History pages.** Documents, maintenance and staff payment reports return arrays with an `x-next-cursor` response header; request `cursor` and `limit` (1–200, default 50) to continue. Portal payment history returns separate `paymentsNextCursor` and `noticesNextCursor` fields, accepted as `paymentsCursor` and `noticesCursor`. The web pages expose Load more controls. Timestamp ties use the record ID for stable ordering; maintenance retains status/priority ordering.
 
 ## Tenant portal
 
@@ -33,16 +36,18 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
   - A payment report goes to owners, managers, and collectors.
   - A repair request goes to owners, managers, and maintenance staff.
   - The alert is written to `OutboxEvent` in the same transaction as the report, so a retried request never alerts twice.
-  - It is sent right after the request. If sending fails, the background job retries with backoff, up to 5 attempts.
+  - It is sent right after the request. If sending fails, the background job retries with backoff, up to 5 attempts. Successful recipient addresses are saved so a partial failure retries only the remaining recipients. Exhausted events are visible to owners/managers at `/api/v1/notifications/failed`.
+  - Resend receives a stable idempotency key per event and recipient ([provider semantics](https://resend.com/docs/dashboard/emails/idempotency-keys)). SMTP has no universal exactly-once delivery guarantee: a crash after the mail server accepts a message but before the database records success can still cause a duplicate on retry.
 
 ## Background jobs
 
-When `ENABLE_JOBS=true` (the default outside tests), the job runs every 15 minutes, holding a database lease so only one instance runs it at a time. For each active organization, in its own time zone, it:
+When `ENABLE_JOBS=true` (the default outside tests), the job runs every 15 minutes, renewing its database lease while it works and preventing overlap in the same process. For each active organization, in its own time zone, it:
 
-1. Marks leases whose end date has passed as expired and frees the unit.
-2. Posts every due, not-yet-posted scheduled charge (catching up missed months).
+1. Posts due, not-yet-posted scheduled charges, bounded by each schedule and lease end date, including missed periods on already expired/terminated leases.
+2. Applies existing unallocated payment credit to open charges (including credit carried from older releases).
+3. Marks leases whose end date has passed as expired and frees the unit. Ended leases with an outstanding balance remain available in the payment picker.
 
-It also purges expired idempotency keys, used or expired tokens, and old sessions, and marks expired invitations. One organization's failure is logged and does not block the others.
+It also retries staff alerts, reclaims expired upload reservations, retries file deletions, purges expired security tokens and old sessions, and marks expired invitations. It retains idempotency keys. A separate email worker checks the durable mail queue on startup and every 30 seconds when jobs are enabled. One organization's failure is logged and does not block the others; acquisition/release failures are contained and reported.
 
 ## Rent rules
 

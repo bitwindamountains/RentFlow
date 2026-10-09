@@ -16,6 +16,7 @@
     "db:seed:test": "npm run db:seed:test --workspace api",
     "db:validate": "npm run db:validate --workspace api",
     "test:e2e": "npm run test:e2e --workspace api",
+    "test:restore": "npm run build --workspace api && node apps/api/scripts/restore-check.mjs",
     "typecheck": "npm run typecheck --workspace api"
   },
   "engines": {

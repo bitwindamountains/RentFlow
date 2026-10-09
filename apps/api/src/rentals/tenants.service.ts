@@ -97,6 +97,7 @@ export class TenantsService {
       email: tenant.email,
       phone: tenant.phone,
       status: tenant.status,
+      erasedAt: tenant.erasedAt?.toISOString() ?? null,
       createdAt: tenant.createdAt.toISOString(),
       balance: formatMoney(balances.get(id) ?? ZERO),
       leases: tenant.primaryLeases.map((lease) => ({

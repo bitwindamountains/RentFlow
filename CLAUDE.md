@@ -66,7 +66,10 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 - **Optional two-step sign-in (TOTP):**
   - The code is in `auth/mfa.ts` and `AuthService`.
   - With MFA on, `POST /auth/login` returns `{ mfaRequired, challenge }` and no session. `POST /auth/login/mfa` exchanges the challenge plus a code for a session.
-  - Secrets are encrypted with `MFA_ENCRYPTION_KEY`. In production, setup is refused if the key is missing.
+  - Secrets are encrypted with `MFA_ENCRYPTION_KEY`, which production requires.
+  - `Organization.requireOwnerMfa` (on for new workspaces): an owner without two-step sign-in gets `MFA_SETUP_REQUIRED` everywhere except routes marked `@AllowWithoutMfa()` (all of `AuthController`). The e2e `registerOwner` helper turns it off; tests that cover it register directly.
+- **Passwords:** versioned scrypt hashes (`s2$<log2 N>$<r>$<p>$salt$hash`) in `common/crypto.ts`. Older hashes are upgraded at the next successful sign-in.
+- **Sign-in backoff:** 10 failed passwords or codes per email in 15 minutes block that email across IPs (`LoginFailure` table, keyed by email hash).
 
 **Multi-tenancy.**
 - Every query is scoped by `organizationId` from the session. Load records with `findFirst({ where: { id, organizationId } })`; a cross-org ID must return 404.
@@ -85,7 +88,12 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 
 **Errors and audit.**
 - Throw `DomainError('CODE', status)` from [common/errors.ts](apps/api/src/common/errors.ts) and add the user-facing message to its `messages` map. The web client branches on `code`.
-- Write audit rows with `audit(tx, {...})` inside the same transaction. Personal fields are redacted at write time.
+- Write audit rows with `audit(tx, {...})` inside the same transaction. Personal fields are redacted at write time, and audit rows are never rewritten, so never put free text that can name a person (such as document names) in `before`/`after`.
+
+**Personal data (RA 10173).**
+- `rentals/tenant-privacy.service.ts` exports a tenant's data and erases a former tenant by anonymizing them; ledger records stay.
+- A new field or table that can hold a tenant's personal data must be covered by erasure. `test/privacy.e2e-spec.ts` searches every table for the erased tenant's name, email and phone.
+- The public notice is `/privacy`; production requires `PRIVACY_CONTACT_EMAIL`.
 
 **Modules.** Feature modules live under `src/`:
 - `rentals`: properties, units, tenants, leases, guided setup

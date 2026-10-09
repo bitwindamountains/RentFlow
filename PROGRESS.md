@@ -2,13 +2,35 @@
 
 ## Current task
 
-All work is committed and pushed to `main` (2026-10-10). **GitHub CI passed for the first time** (run 37970550334, started manually), including the `containers` job:
+Working through `tasks/plan.md`: Phase 1 (code) is committed on `main` but not pushed (2026-10-11). Before that, all work was committed and pushed to `main` (2026-10-10). **GitHub CI passed for the first time** (run 37970550334, started manually), including the `containers` job:
 - The Docker images build.
 - The production stack starts and passes its proxy, readiness and PWA checks.
 
 Pushes to `main` still do not start CI on their own. Start it with `gh workflow run CI`, and check the repo's Actions settings for push events. The remaining production blockers are listed under Next steps.
 
 ## Done (newest first)
+
+- **2026-10-11: Pre-ship Phase 1 (code) done**, following `tasks/plan.md` (decisions D1–D5 accepted as recommended). Committed locally, **not pushed**.
+  - T1: the dashboard trend subtracts adjustments, so it matches the Billed tile.
+  - T2: versioned scrypt hashes (N=2^14, r=8, p=5, about 180 ms), upgraded at the next sign-in.
+  - T3: per-account sign-in backoff (`LoginFailure`).
+  - T4: `Organization.requireOwnerMfa`, on for new workspaces and off for existing ones. `MFA_ENCRYPTION_KEY` is now required in production.
+  - T5: public `/privacy` notice. `PRIVACY_CONTACT_EMAIL` is required in production. **The text needs a lawyer or DPO review.**
+  - T6: tenant data export, and erasure that anonymizes the tenant. The test that searches every table for leftover personal data found document names in upload audit rows, which are no longer recorded.
+  - T7: Docker images pinned (`node:24.21.0-alpine3.24`, `caddy:2.11.7-alpine`); CI on `ubuntu-24.04` with v7 actions. These are untested until CI runs, since there's no Docker here.
+  - **Checks:** the full local CI run passes (62 unit, 108 e2e, 21 web tests, build, audit). The visual review passes, and its screenshots led to fixing the privacy page rendering inside the app shell.
+  - **Not browser-tested yet:** the forced two-step setup redirect, the owner on/off switch, and the export and erase buttons. Their API and guard logic are covered by tests; check them in the staging run (B4).
+  - **New migrations, not applied to the Supabase dev database:** `20261011090000_login_failures`, `20261011100000_owner_mfa_requirement`, `20261011110000_tenant_erasure`. Run `npm run db:deploy --workspace api` before using the dev database with this code.
+
+- **2026-10-10: Pre-ship review.** The full local CI run is green: lint, typecheck, 59 unit tests, 98 e2e tests, 19 web tests, the build, and `npm audit` with 0 issues.
+  - **Code:** no Critical findings.
+  - **Important:**
+    - scrypt uses Node's default cost N=16384, below OWASP's N=2^17. The hash format stores no parameters, so raising it needs a versioned format and rehash-on-login.
+    - Sign-in throttling is per IP only, and MFA is optional for owners.
+    - There is no privacy notice and no way to export or erase a tenant's data (RA 10173).
+  - **Suggestion:** the dashboard trend's `billed` does not subtract adjustments (`reports.service.ts:45`), while the tile does.
+  - **Verdict:** ready for staging, not yet for real tenants' data. The blockers are operational and are listed under Next steps, item 0a.
+  - `graphify-out/` (local knowledge graph) is now in `.gitignore`.
 
 - **2026-10-10: Premium UI and motion pass, plus review fixes.**
   - **Fixes:**
@@ -86,6 +108,14 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
 
 ## Next steps
 
+0. **Next in `tasks/todo.md`:** T8 (push with your OK, and confirm CI starts on push and passes the new image pins), then CP1 (you review the Phase 1 diff), then Phase 2. The production env now also needs `MFA_ENCRYPTION_KEY` and `PRIVACY_CONTACT_EMAIL`.
+0a. **Before real tenants' data (from the 2026-10-10 pre-ship review):**
+   - Production database with backups and point-in-time recovery: Supabase Pro, or the bundled Postgres with `deploy/backup.sh`.
+   - Generate `MAIL_ENCRYPTION_KEY` and `MFA_ENCRYPTION_KEY`, and back them up.
+   - Staging run on the real domain: smoke script, real email, and browser checks of sign-in, CSRF, MFA and PWA install/update.
+   - Restore drill on PostgreSQL 17 with the real backup locations.
+   - Privacy notice and a designated DPO.
+   - Start CI by hand (`gh workflow run CI`) before each release.
 0. **Supabase follow-ups:**
    - Back up off-site regularly with `npm run db:backup`, because the free tier has no backups.
    - Keep each app's role connection limit within the shared budget of about 60 connections.

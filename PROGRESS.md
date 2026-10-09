@@ -3,9 +3,30 @@
 ## Current task
 
 The deployment-review work and the Supabase setup are committed and pushed to `main` (2026-10-10). The next gate is the GitHub CI `containers` job, which is the first real Docker build. Then come the production blockers under Next steps.
-- **GitHub Actions has never run on this repo.** The API reports 0 runs in total, even though Actions is enabled and the `CI` workflow is registered. The push of `abee1fb` started nothing. The user needs to check the repo's Actions tab and the account's billing or verification status.
+- **GitHub Actions has never run on this repo.** The API reports 0 runs in total, even though Actions is enabled and the `CI` workflow is registered. The push of `abee1fb` started nothing. The user needs to check the repo's Actions tab and the account's billing or verification status. A run can also be started with `gh workflow run CI`.
 
 ## Done (newest first)
+
+- **2026-10-10: Premium UI and motion pass, plus review fixes.**
+  - **Fixes:**
+    - The dashboard "Still to collect" amount contradicted the collection rate. It used all cash received this month, including payments applied to arrears. The API now returns `remainingThisMonth` on the same basis as the rate, with an e2e regression test. The badge now reads "X% of this month paid".
+    - Migration `20261010090000_advisor_fixes` pins the trigger function's `search_path` and adds 4 indexes on foreign keys. Applied to Supabase; the security advisor is clean and there is no schema drift.
+    - `npm audit` reports 0 issues (a dev-only `source-map-js` advisory was fixed).
+    - CI gained a `workflow_dispatch` trigger. The production env example now has Supabase connection and Storage guidance.
+  - **UI:**
+    - Inter Variable typeface.
+    - Layered shadows with an inner highlight, a canvas glow and faint grain.
+    - Lit gradient primary buttons with a sheen on hover.
+    - A sidebar with depth and a glowing active item.
+    - SVG mask icons in place of text glyphs on 6 pages.
+    - The sign-in hero has an aurora, a dot grid, gradient headline text and a floating glass preview card.
+    - The dashboard has a hero sparkline and count-up money figures.
+  - **Motion:**
+    - Page sections and table rows enter in sequence, and icons land with a slight spring.
+    - Cards get a cursor spotlight, and overdue status dots pulse.
+    - The top bar lifts on scroll, and theme switches cross-fade.
+    - Dialogs blur what is behind them.
+  - Visual review passed on all pages at all widths, in light and dark.
 
 - **2026-10-10: Committed and pushed the deployment-review work.** A full local CI run passed:
   - `npm audit` and Prisma validation passed. Lint, typecheck and build were clean.

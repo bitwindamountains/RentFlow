@@ -5,6 +5,7 @@ import type { Observable } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { DayPipe, LabelPipe, MoneyPipe } from '../core/format';
 import type { StaffPaymentNotice } from '../core/models';
+import { appendPage } from '../core/pagination';
 
 /**
  * Payments page: payments that tenants reported in the portal, waiting for staff.
@@ -14,11 +15,12 @@ import type { StaffPaymentNotice } from '../core/models';
   selector: 'app-payment-notices',
   imports: [FormsModule, RouterLink, MoneyPipe, DayPipe, LabelPipe],
   template: `
+@if (error()) { <p class="auth-error" role="alert">{{ error() }}</p> }
 @if (notices().length) {
   <section class="panel notices" aria-labelledby="notices-title">
     <div class="panel-title">
       <div>
-        <h2 id="notices-title">Reported by tenants <span class="status warning">{{ notices().length }} to review</span></h2>
+        <h2 id="notices-title">Reported by tenants <span class="status warning">{{ notices().length }}{{ nextCursor() ? '+' : '' }} to review</span></h2>
         <p>Check each against your GCash, Maya, or bank records before confirming. Confirming records the payment and issues a receipt.</p>
       </div>
     </div>
@@ -58,7 +60,7 @@ import type { StaffPaymentNotice } from '../core/models';
         </div>
       }
     </div>
-    @if (error()) { <p class="auth-error" role="alert">{{ error() }}</p> }
+    @if (nextCursor()) { <button class="secondary" type="button" (click)="load(true)" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more reports' }}</button> }
   </section>
 }`,
   styles: `
@@ -90,6 +92,9 @@ export class PaymentNoticesComponent implements OnInit {
   protected readonly api = inject(ApiClient);
   readonly changed = output<string>();
   protected readonly notices = signal<StaffPaymentNotice[]>([]);
+  protected readonly nextCursor = signal<string | null>(null);
+  protected readonly loading = signal(false);
+  private loadVersion = 0;
   protected readonly rejecting = signal('');
   protected readonly busy = signal(false);
   protected readonly error = signal('');
@@ -100,10 +105,24 @@ export class PaymentNoticesComponent implements OnInit {
     this.load();
   }
 
-  load(): void {
-    this.api.get<StaffPaymentNotice[]>('/payment-notices').subscribe({
-      next: (rows) => this.notices.set(rows),
-      error: (error: ApiError) => this.error.set(error.message),
+  load(more = false): void {
+    if (more && (this.loading() || !this.nextCursor())) return;
+    const version = ++this.loadVersion;
+    const cursor = more ? this.nextCursor() : null;
+    if (!more) this.nextCursor.set(null);
+    this.loading.set(true);
+    this.api.getList<StaffPaymentNotice>('/payment-notices', { cursor }).subscribe({
+      next: (page) => {
+        if (version !== this.loadVersion) return;
+        this.notices.update(rows => more ? appendPage(rows, page.items) : page.items);
+        this.nextCursor.set(page.nextCursor);
+        this.loading.set(false);
+      },
+      error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
+        this.error.set(error.message);
+        this.loading.set(false);
+      },
     });
   }
 

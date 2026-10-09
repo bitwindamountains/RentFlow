@@ -105,6 +105,7 @@ export interface Payment {
 }
 export interface CollectionOption {
   leaseId: string;
+  leaseStatus: string;
   tenantId: string;
   tenantName: string;
   unitNumber: string;

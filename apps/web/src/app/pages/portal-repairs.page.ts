@@ -4,6 +4,7 @@ import { forkJoin } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { LabelPipe, MomentPipe } from '../core/format';
 import type { PortalHome, PortalRepair } from '../core/models';
+import { appendPage } from '../core/pagination';
 
 @Component({
   selector: 'app-portal-repairs-page',
@@ -71,6 +72,7 @@ import type { PortalHome, PortalRepair } from '../core/models';
       }
     </div>
   </section>
+  @if (nextCursor()) { <button class="secondary" type="button" (click)="loadMore()" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more repairs' }}</button> }
 </div>`,
   styles: `
     fieldset.field { border: 0; padding: 0; }
@@ -81,6 +83,8 @@ export class PortalRepairsPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly home = signal<PortalHome | null>(null);
   protected readonly repairs = signal<PortalRepair[]>([]);
+  protected readonly nextCursor = signal<string | null>(null);
+  private loadVersion = 0;
   protected readonly leases = computed(() => (this.home()?.leases ?? []).filter((l) => l.status === 'ACTIVE'));
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
@@ -100,16 +104,43 @@ export class PortalRepairsPage implements OnInit {
   }
 
   private load(): void {
+    const version = ++this.loadVersion;
+    this.loading.set(true);
+    this.nextCursor.set(null);
     forkJoin({
       home: this.api.get<PortalHome>('/portal/home'),
-      repairs: this.api.get<PortalRepair[]>('/portal/maintenance'),
+      repairs: this.api.getList<PortalRepair>('/portal/maintenance'),
     }).subscribe({
       next: ({ home, repairs }) => {
+        if (version !== this.loadVersion) return;
         this.home.set(home);
-        this.repairs.set(repairs);
+        this.repairs.set(repairs.items);
+        this.nextCursor.set(repairs.nextCursor);
         this.loading.set(false);
       },
       error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
+        this.error.set(error.message);
+        this.loading.set(false);
+      },
+    });
+  }
+
+  protected loadMore(): void {
+    const cursor = this.nextCursor();
+    if (!cursor || this.loading()) return;
+    const version = this.loadVersion;
+    this.loading.set(true);
+    this.error.set('');
+    this.api.getList<PortalRepair>('/portal/maintenance', { cursor }).subscribe({
+      next: page => {
+        if (version !== this.loadVersion) return;
+        this.repairs.update(rows => appendPage(rows, page.items));
+        this.nextCursor.set(page.nextCursor);
+        this.loading.set(false);
+      },
+      error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
         this.error.set(error.message);
         this.loading.set(false);
       },

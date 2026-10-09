@@ -177,13 +177,13 @@
                 @if (paymentLoading()) {
                   <p role="status">Loading tenants and balances…</p>
                 }
-                <div class="attention-list" role="radiogroup" aria-label="Active leases">
+                <div class="attention-list" role="radiogroup" aria-label="Leases available for payment">
                   @for (option of filteredOptions(); track option.leaseId) {
                     <label class="attention-item">
                       <input type="radio" name="lease" [value]="option.leaseId" [checked]="option.leaseId === selectedLeaseId" (change)="selectLease(option.leaseId)" />
                       <span
                         ><strong>{{ option.tenantName }}</strong
-                        ><small>{{ option.propertyName }} · Unit {{ option.unitNumber }}</small></span
+                        ><small>{{ option.propertyName }} · Unit {{ option.unitNumber }} · {{ option.leaseStatus | label }}</small></span
                       >
                       <strong [class.danger-text]="option.outstanding !== '0.00'">{{ option.outstanding | money }}</strong>
                     </label>

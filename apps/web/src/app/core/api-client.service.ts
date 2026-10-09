@@ -1,8 +1,8 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { Observable, Subject, catchError, tap, throwError } from 'rxjs';
-import type { MfaChallenge, Profile } from './models';
+import { Observable, Subject, catchError, map, tap, throwError } from 'rxjs';
+import type { MfaChallenge, Page, Profile } from './models';
 import { todayIn } from './dates';
 
 export type { Profile } from './models';
@@ -77,6 +77,13 @@ export class ApiClient {
     return this.http
       .get<T>(`${this.baseUrl}${path}`, { withCredentials: true, params: params(query) })
       .pipe(catchError((error) => this.fail(error)));
+  }
+
+  getList<T>(path: string, query?: Query): Observable<Page<T>> {
+    return this.http.get<T[]>(`${this.baseUrl}${path}`, { withCredentials: true, params: params(query), observe: 'response' }).pipe(
+      map(response => ({ items: response.body ?? [], nextCursor: response.headers.get('x-next-cursor') || null })),
+      catchError(error => this.fail(error)),
+    );
   }
 
   post<T>(path: string, body: unknown, idempotencyKey?: string): Observable<T> {

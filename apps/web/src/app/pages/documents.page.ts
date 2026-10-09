@@ -6,6 +6,7 @@ import { ApiClient, type ApiError } from '../core/api-client.service';
 import { MomentPipe } from '../core/format';
 import { ACCEPTED_FILE_TYPES as ACCEPTED, describeFile } from '../core/files';
 import type { DocumentRecord, Property, TenantSummary } from '../core/models';
+import { appendPage } from '../core/pagination';
 const MAX_BYTES = 10 * 1_048_576;
 
 @Component({
@@ -86,6 +87,7 @@ const MAX_BYTES = 10 * 1_048_576;
       </tbody>
     </table>
   </section>
+  @if (nextCursor()) { <button class="secondary" type="button" (click)="loadMore()" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more documents' }}</button> }
 </div>`,
   styles: `
     .segmented { margin-bottom: var(--space-5); }
@@ -110,6 +112,8 @@ export class DocumentsPage implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
   protected readonly documents = signal<DocumentRecord[]>([]);
+  protected readonly nextCursor = signal<string | null>(null);
+  private loadVersion = 0;
   protected readonly tenants = signal<TenantSummary[]>([]);
   protected readonly properties = signal<Property[]>([]);
   protected readonly loading = signal(false);
@@ -189,19 +193,45 @@ export class DocumentsPage implements OnInit {
   }
 
   private load(): void {
+    const version = ++this.loadVersion;
     this.loading.set(true);
+    this.nextCursor.set(null);
     forkJoin({
-      documents: this.api.get<DocumentRecord[]>('/documents'),
+      documents: this.api.getList<DocumentRecord>('/documents'),
       tenants: this.api.get<TenantSummary[]>('/tenants'),
       properties: this.api.get<Property[]>('/properties'),
     }).subscribe({
       next: ({ documents, tenants, properties }) => {
-        this.documents.set(documents);
+        if (version !== this.loadVersion) return;
+        this.documents.set(documents.items);
+        this.nextCursor.set(documents.nextCursor);
         this.tenants.set(tenants);
         this.properties.set(properties);
         this.loading.set(false);
       },
       error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
+        this.error.set(error.message);
+        this.loading.set(false);
+      },
+    });
+  }
+
+  protected loadMore(): void {
+    const cursor = this.nextCursor();
+    if (!cursor || this.loading()) return;
+    const version = this.loadVersion;
+    this.loading.set(true);
+    this.error.set('');
+    this.api.getList<DocumentRecord>('/documents', { cursor }).subscribe({
+      next: page => {
+        if (version !== this.loadVersion) return;
+        this.documents.update(rows => appendPage(rows, page.items));
+        this.nextCursor.set(page.nextCursor);
+        this.loading.set(false);
+      },
+      error: (error: ApiError) => {
+        if (version !== this.loadVersion) return;
         this.error.set(error.message);
         this.loading.set(false);
       },
@@ -241,7 +271,7 @@ export class DocumentsPage implements OnInit {
   protected remove(d: DocumentRecord): void {
     const message =
       d.kind === 'file'
-        ? `Delete "${d.name}"? The file is permanently erased.`
+        ? `Delete "${d.name}"? This permanently removes access to the file.`
         : `Remove the link to "${d.name}"? The file in your storage is not deleted.`;
     if (!confirm(message)) return;
     this.api.delete(`/documents/${d.id}`).subscribe({

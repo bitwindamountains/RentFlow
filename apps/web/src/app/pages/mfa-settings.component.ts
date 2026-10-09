@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import type { Observable } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 
-type Step = 'idle' | 'password' | 'scan' | 'codes' | 'disable' | 'regenerate';
+type Step = 'idle' | 'password' | 'scan' | 'codes' | 'disable' | 'regenerate' | 'requirement';
 
 interface Setup {
   secret: string;
@@ -37,6 +37,18 @@ interface Setup {
       }
     }
   </div>
+  @if (setupRequired()) {
+    <div class="inline-notice" role="alert">This workspace requires owners to use two-step sign-in. Turn it on to continue; the other pages open once it’s on.</div>
+  }
+  @if (owner() && enabled() && step() === 'idle') {
+    <div class="mfa-requirement">
+      <p>
+        <strong>Require for owners of {{ workspace() }}</strong>
+        <span class="status" [class.success]="ownerRequirement()">{{ ownerRequirement() ? 'On' : 'Off' }}</span>
+      </p>
+      <button class="text-button" type="button" (click)="open('requirement')">{{ ownerRequirement() ? 'Stop requiring' : 'Require it' }}</button>
+    </div>
+  }
   @if (error()) { <div class="inline-notice" role="alert">{{ error() }}</div> }
   @if (notice()) { <div class="inline-notice" role="status">{{ notice() }}</div> }
 
@@ -93,6 +105,12 @@ interface Setup {
         <ng-container *ngTemplateOutlet="confirm" />
       </form>
     }
+    @case ('requirement') {
+      <form class="operations-form" (ngSubmit)="change('requirement')">
+        <p>{{ ownerRequirement() ? 'Owners will be able to use this workspace with a password alone.' : 'Owners without two-step sign-in will have to turn it on before they can use this workspace.' }}</p>
+        <ng-container *ngTemplateOutlet="confirm" />
+      </form>
+    }
     @case ('regenerate') {
       <form class="operations-form" (ngSubmit)="change('regenerate')">
         <p>Your old recovery codes stop working.</p>
@@ -108,7 +126,7 @@ interface Setup {
     <div class="modal-actions">
       <button class="secondary" type="button" (click)="close()">Cancel</button>
       <button class="primary" type="submit" [disabled]="busy() || !password || !code">
-        {{ step() === 'disable' ? 'Turn off' : 'Create new codes' }}
+        {{ step() === 'disable' ? 'Turn off' : step() === 'regenerate' ? 'Create new codes' : ownerRequirement() ? 'Stop requiring' : 'Require it' }}
       </button>
     </div>
   </ng-template>
@@ -122,11 +140,17 @@ interface Setup {
     .mfa-key { font-size: var(--text-md); letter-spacing: 0.06em; word-break: break-all; }
     .mfa-codes ul { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: var(--space-2) var(--space-6); margin: var(--space-4) 0 var(--space-5); padding: 0; list-style: none; }
     .mfa-codes code { font-size: var(--text-md); }
+    .mfa-requirement { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; padding-top: var(--space-4); border-top: 1px solid var(--border); }
+    .mfa-requirement p { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: 0; }
   `,
 })
 export class MfaSettingsComponent {
   private readonly api = inject(ApiClient);
   protected readonly enabled = computed(() => Boolean(this.api.profile()?.user.mfaEnabled));
+  protected readonly setupRequired = computed(() => Boolean(this.api.profile()?.mfaSetupRequired));
+  protected readonly owner = computed(() => this.api.profile()?.role === 'OWNER');
+  protected readonly ownerRequirement = computed(() => Boolean(this.api.profile()?.organization.requireOwnerMfa));
+  protected readonly workspace = computed(() => this.api.profile()?.organization.name ?? 'this workspace');
   protected readonly step = signal<Step>('idle');
   protected readonly setup = signal<Setup | null>(null);
   protected readonly recoveryCodes = signal<string[]>([]);
@@ -175,9 +199,16 @@ export class MfaSettingsComponent {
     });
   }
 
-  protected change(kind: 'disable' | 'regenerate'): void {
+  protected change(kind: 'disable' | 'regenerate' | 'requirement'): void {
     const body = { password: this.password, code: this.code };
-    if (kind === 'disable')
+    if (kind === 'requirement') {
+      const required = !this.ownerRequirement();
+      this.run(this.api.post<void>('/auth/mfa/owner-requirement', { ...body, required }), () => {
+        this.close();
+        this.notice.set(required ? 'Owners of this workspace now need two-step sign-in.' : 'Owners no longer need two-step sign-in.');
+        this.api.me().subscribe();
+      });
+    } else if (kind === 'disable')
       this.run(this.api.post<void>('/auth/mfa/disable', body), () => {
         this.close();
         this.notice.set('Two-step sign-in is off.');

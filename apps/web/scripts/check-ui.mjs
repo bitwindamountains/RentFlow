@@ -149,6 +149,11 @@ async function seed(request) {
   });
   assert.equal(registered.status(), 201, await registered.text());
   const csrf = (await registered.json()).csrfToken;
+  // New workspaces require owner two-step sign-in; the review covers pages, not that setup.
+  const db = postgres.getPgClient('rentflow');
+  await db.connect();
+  await db.query('UPDATE "Organization" SET "requireOwnerMfa" = false');
+  await db.end();
   const call = async (method, path, data, headers = {}) => {
     const response = await request.fetch(`${API}${path}`, { method, data, headers: { 'x-csrf-token': csrf, ...headers } });
     if (!response.ok()) throw new Error(`${method} ${path} ${response.status()} ${await response.text()}`);

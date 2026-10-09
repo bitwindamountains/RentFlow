@@ -1,6 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { timeStep, totpCode } from '../src/auth/mfa.js';
+import { sha256 } from '../src/common/crypto.js';
 import { MailerService } from '../src/mail/mailer.service.js';
 import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp } from './helpers.js';
 
@@ -102,6 +103,21 @@ describe('two-step sign-in (TOTP)', () => {
 
     const second = await signIn();
     expect((await second.client.post('/auth/login/mfa', { challenge: second.response.body.challenge, code: recoveryCodes[0] })).body.code).toBe('INVALID_MFA_CODE');
+  });
+
+  it('counts wrong codes against the account across challenges, then refuses sign-in', async () => {
+    const failures = { emailHash: sha256(email) };
+    await prismaOf(app).loginFailure.deleteMany({ where: failures });
+    try {
+      for (let round = 0; round < 2; round += 1) {
+        const { client, response } = await signIn();
+        for (let i = 0; i < 5; i += 1)
+          expect((await client.post('/auth/login/mfa', { challenge: response.body.challenge, code: '123456' })).body.code).toBe('INVALID_MFA_CODE');
+      }
+      expect((await signIn()).response.body.code).toBe('INVALID_CREDENTIALS');
+    } finally {
+      await prismaOf(app).loginFailure.deleteMany({ where: failures });
+    }
   });
 
   it('replaces recovery codes and turns off only with the password and a code', async () => {

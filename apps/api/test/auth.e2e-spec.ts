@@ -1,4 +1,5 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { randomBytes, scryptSync } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp, tokenIn, unique } from './helpers.js';
 
@@ -57,6 +58,22 @@ describe('authentication', () => {
     expect(wrong.status).toBe(401);
     expect(unknown.status).toBe(401);
     expect(wrong.body).toEqual(unknown.body);
+  });
+
+  it('upgrades a password hash from before versioning at the next sign-in', async () => {
+    const { email } = await registerOwner(app);
+    const salt = randomBytes(16);
+    const legacy = `${salt.toString('hex')}:${scryptSync(PASSWORD, salt, 64).toString('hex')}`;
+    const users = prismaOf(app).user;
+    await users.update({ where: { email }, data: { passwordHash: legacy } });
+
+    expect((await new Client(app).post('/auth/login', { email, password: 'not the password at all' })).status).toBe(401);
+    expect((await users.findUniqueOrThrow({ where: { email } })).passwordHash).toBe(legacy);
+
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD })).status).toBe(200);
+    const upgraded = (await users.findUniqueOrThrow({ where: { email } })).passwordHash;
+    expect(upgraded).toMatch(/^s2\$14\$8\$5\$/);
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD })).status).toBe(200);
   });
 
   it('requires the session CSRF token on state-changing requests', async () => {

@@ -16,6 +16,7 @@
             class="nav-item"
             [routerLink]="item.route"
             routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: item.route === '/portal' }"
             ariaCurrentWhenActive="page"
             (click)="closeMenu()"
             ><span class="nav-icon" aria-hidden="true"
@@ -29,7 +30,7 @@
           <div class="upgrade-card">
             <strong>New rental?</strong>
             <p>Property, unit, tenant, and lease in one step.</p>
-            <a routerLink="/setup" (click)="closeMenu()">Guided setup &rarr;</a>
+            <a routerLink="/setup" (click)="closeMenu()">Guided setup <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6" /></svg></a>
           </div>
         }
         <a class="profile" routerLink="/account" (click)="closeMenu()">
@@ -82,9 +83,9 @@
             /><kbd>⌘ K</kbd></label
           >
           @if (navigationQuery().trim()) {
-            <div class="navigation-results" aria-label="Matching pages" animate.enter="enter">
+            <div class="navigation-results" aria-label="Matching pages">
               @for (item of navigationMatches(); track item.route) {
-                <a [routerLink]="item.route"><span>{{ item.label }}</span><span aria-hidden="true">&rarr;</span></a>
+                <a [routerLink]="item.route"><span>{{ item.label }}</span><svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6" /></svg></a>
               } @empty {
                 <p role="status">No pages found. Try “Payments” or “Tenants”.</p>
               }
@@ -102,18 +103,18 @@
         }
       </header>
       @if (!online()) {
-        <div class="app-banner" role="status" animate.enter="enter">
+        <div class="app-banner" role="status" animate.enter="enter" animate.leave="leave">
           You’re offline. Records and payments need a connection; nothing is saved on this device.
         </div>
       }
       @if (update.available()) {
-        <div class="app-banner" role="status" animate.enter="enter">
+        <div class="app-banner" role="status" animate.enter="enter" animate.leave="leave">
           A new version of RentFlow is ready.
           <button class="text-button" type="button" (click)="update.apply()">Reload now</button>
         </div>
       }
       @if (profile() && !profile()!.user.emailVerified) {
-        <div class="app-banner" role="status" animate.enter="enter">
+        <div class="app-banner" role="status" animate.enter="enter" animate.leave="leave">
           Confirm your email so you can reset your password if you forget it.
           <button class="text-button" type="button" (click)="resendVerification()">Resend link</button>
         </div>
@@ -123,7 +124,8 @@
 
     <nav class="mobile-nav" aria-label="Mobile navigation">
       @for (item of mobileNav(); track item.route) {
-        <a [routerLink]="item.route" routerLinkActive="active" ariaCurrentWhenActive="page"
+        <a [routerLink]="item.route" routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: item.route === '/portal' }" ariaCurrentWhenActive="page"
           ><span aria-hidden="true"
             ><svg class="ui-icon" viewBox="0 0 24 24"><path [attr.d]="navigationIcons[item.route]" /></svg></span
           ><small>{{ item.label }}</small></a
@@ -136,7 +138,7 @@
 
     @if (paymentOpen()) {
       <div class="modal-layer" role="presentation" (click)="closePayment()" animate.enter="enter" animate.leave="leave">
-        <section class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-title" (click)="$event.stopPropagation()">
+        <section class="payment-modal" [class.going-back]="paymentBack()" role="dialog" aria-modal="true" aria-labelledby="payment-title" (click)="$event.stopPropagation()">
           <button class="modal-close" type="button" aria-label="Close payment form" (click)="closePayment()"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18" /></svg></button>
           @if (paymentComplete(); as done) {
             <div class="success-state" animate.enter="enter">
@@ -271,7 +273,7 @@
     }
 
     @if (toast()) {
-      <div class="toast" role="status" animate.enter="enter" animate.leave="leave"><span aria-hidden="true">✓</span>{{ toast() }}</div>
+      <div class="toast" role="status" animate.enter="enter" animate.leave="leave"><span aria-hidden="true"><svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>{{ toast() }}</div>
     }
   </div>
 }

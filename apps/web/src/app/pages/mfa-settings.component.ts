@@ -93,7 +93,7 @@ interface Setup {
         <p><strong>Save these recovery codes now.</strong> Each one signs you in once if you lose your phone. They won’t be shown again.</p>
         <ul>@for (c of recoveryCodes(); track c) { <li><code>{{ c }}</code></li> }</ul>
         <div class="modal-actions">
-          <button class="secondary" type="button" (click)="copy()">{{ copied() ? 'Copied' : 'Copy' }}</button>
+          <button class="secondary" type="button" (click)="copy()">@if (copied()) { <span class="swap" animate.enter="enter">Copied</span> } @else { Copy }</button>
           <a class="secondary button-link" [href]="download()" download="rentflow-recovery-codes.txt">Download</a>
           <button class="primary" type="button" (click)="close()">I’ve saved them</button>
         </div>

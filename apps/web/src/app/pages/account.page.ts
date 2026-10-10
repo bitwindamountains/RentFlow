@@ -22,7 +22,7 @@ interface SessionRow {
   template: `
 <div class="page operations-page">
   <section class="page-heading">
-    <div><p class="eyebrow">ACCOUNT</p><h1>Account & security</h1><p>{{ api.profile()?.user?.email }}</p></div>
+    <div><h1>Account & security</h1><p>{{ api.profile()?.user?.email }}</p></div>
   </section>
   @if (error()) { <div class="auth-error" role="alert">{{ error() }}</div> }
   @if (notice()) { <div class="inline-notice" role="status">{{ notice() }}</div> }

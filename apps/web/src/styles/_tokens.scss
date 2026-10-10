@@ -168,15 +168,18 @@
   --radius-xl: 20px;
   --radius-pill: 999px;
 
-  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
-  // Slight overshoot for things that "land" (icons, badges, toggles).
+  // Strong curves: built-in CSS easings are too weak to feel intentional.
+  // There is deliberately no ease-in: exits use ease-out too, just faster.
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  // iOS-like sheet/drawer curve (Ionic).
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  // Slight overshoot, kept for rare moments (payment success).
   --ease-spring: linear(0, 0.36 9%, 0.75 19%, 1.02 30%, 1.09 38%, 1.07 46%, 1 61%, 0.99 74%, 1);
-  --dur-instant: 90ms;
+  --dur-instant: 140ms;
   --dur-fast: 150ms;
-  --dur-base: 220ms;
-  --dur-slow: 420ms;
+  --dur-base: 200ms;
+  --dur-slow: 280ms;
 
   --sidebar-width: 248px;
   --content-max: 1440px;

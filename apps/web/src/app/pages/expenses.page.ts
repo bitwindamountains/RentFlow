@@ -23,7 +23,7 @@ interface Expense {
   template: `
 <div class="page operations-page">
   <section class="page-heading">
-    <div><p class="eyebrow">MONEY</p><h1>Expenses</h1><p>Property costs and vendors, for per-property profit and loss.</p></div>
+    <div><h1>Expenses</h1><p>Property costs and vendors, for per-property profit and loss.</p></div>
     @if (canWrite()) { <button class="primary" type="button" (click)="open()">Add expense</button> }
   </section>
   @if (notice()) { <div class="inline-notice" role="status">{{ notice() }}</div> }

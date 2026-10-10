@@ -33,7 +33,7 @@ const ROLE_HELP: Record<string, string> = {
   template: `
 <div class="page operations-page">
   <section class="page-heading">
-    <div><p class="eyebrow">ACCESS</p><h1>Staff & access</h1><p>Invite your team and remove access the moment someone leaves.</p></div>
+    <div><h1>Staff & access</h1><p>Invite your team and remove access the moment someone leaves.</p></div>
     <button class="primary" type="button" (click)="formOpen.set(!formOpen())">{{ formOpen() ? 'Close' : 'Invite staff' }}</button>
   </section>
   @if (error()) { <div class="auth-error" role="alert">{{ error() }}</div> }

@@ -1,7 +1,6 @@
 <div class="page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ organizationName() }}</p>
       <h1>Dashboard</h1>
       <p>
         @if (data(); as d) {
@@ -93,7 +92,7 @@
             <h2>Who owes you</h2>
             <p>Oldest overdue balances first</p>
           </div>
-          <a routerLink="/billing" [queryParams]="{ status: 'overdue' }" class="text-button">All arrears &rarr;</a>
+          <a routerLink="/billing" [queryParams]="{ status: 'overdue' }" class="text-button">All arrears <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6" /></svg></a>
         </div>
         <div class="attention-list">
           @for (row of d.topArrears; track row.leaseId) {
@@ -180,21 +179,21 @@
               {{ d.openMaintenance }} open {{ d.openMaintenance === 1 ? 'work order' : 'work orders' }}
             </p>
           </div>
-          <a routerLink="/reminders" class="text-button">All reminders &rarr;</a>
+          <a routerLink="/reminders" class="text-button">All reminders <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6" /></svg></a>
         </div>
         <div class="attention-list">
           @if (!d.totalUnits) {
             <a routerLink="/setup" class="attention-item">
               <span class="attention-icon blue" data-icon="plus" aria-hidden="true"></span>
               <span><strong>Set up your first rental</strong><small>Add a property, unit, tenant, and lease.</small></span>
-              <span aria-hidden="true">&rsaquo;</span>
+              <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
             </a>
           }
           @for (item of otherReminders(); track item.type + item.id) {
             <a [routerLink]="item.route" class="attention-item">
               <span [class]="'attention-icon ' + (item.severity === 'high' ? 'red' : 'orange')" data-icon="alert" aria-hidden="true"></span>
               <span><strong>{{ item.title }}</strong><small>{{ item.detail }}</small></span>
-              <span aria-hidden="true">&rsaquo;</span>
+              <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
             </a>
           } @empty {
             @if (d.totalUnits) {

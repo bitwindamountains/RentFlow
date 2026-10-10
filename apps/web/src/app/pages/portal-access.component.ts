@@ -39,7 +39,7 @@ import type { PortalAccess } from '../core/models';
     <div class="invite-link">
       <label class="field"><span>Invitation link <em>Also sent by email · valid 7 days</em></span>
         <input readonly [value]="link()" (focus)="$any($event.target).select()" /></label>
-      <button class="secondary" type="button" (click)="copy()">{{ copied() ? 'Copied' : 'Copy link' }}</button>
+      <button class="secondary" type="button" (click)="copy()">@if (copied()) { <span class="swap" animate.enter="enter">Copied</span> } @else { Copy link }</button>
     </div>
     <small>You can also send it by SMS or Messenger. Anyone with the link can claim the account, so send it only to the tenant.</small>
   }

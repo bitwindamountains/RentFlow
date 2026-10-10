@@ -23,7 +23,6 @@ interface DepositAccount {
 <div class="page operations-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">MONEY</p>
       <h1>Security deposits</h1>
       <p>Held separately from rent. Deposits never count as income.</p>
     </div>

@@ -13,7 +13,6 @@ import { appendPage } from '../core/pagination';
 <div class="page operations-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ home()?.organization?.name }}</p>
       <h1>Repairs</h1>
       <p>Report what needs fixing in your unit and follow its progress. For emergencies such as fire, flooding, or gas, call your landlord and the authorities first.</p>
     </div>

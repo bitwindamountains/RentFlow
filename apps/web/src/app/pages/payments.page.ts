@@ -15,7 +15,6 @@ import { PaymentNoticesComponent } from './payment-notices.component';
 <div class="page resource-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ api.profile()?.organization?.name }}</p>
       <h1>Payments</h1>
       <p>Every payment received, with its receipt.</p>
     </div>

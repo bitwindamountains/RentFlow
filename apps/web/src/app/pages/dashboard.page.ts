@@ -28,7 +28,6 @@ export class DashboardPage implements OnInit {
       .filter((item) => item.type !== 'OVERDUE_BALANCE')
       .slice(0, 4),
   );
-  protected readonly organizationName = computed(() => this.api.profile()?.organization.name ?? 'Your rental business');
   /** Top of the y-axis in centavos, rounded up to a clean tick (1, 2, 2.5 or 5 × 10ⁿ pesos). */
   protected readonly chartMax = computed(() => {
     const peak = Math.max(1, ...(this.data()?.trend ?? []).flatMap((m) => [toCents(m.billed), toCents(m.collected)])) / 100;

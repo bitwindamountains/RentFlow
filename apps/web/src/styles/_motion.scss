@@ -315,7 +315,7 @@
   .auth-story::before {
     animation: aurora 22s ease-in-out infinite alternate;
   }
-  .auth-story .auth-preview {
+  .auth-page > .auth-preview {
     animation:
       rise 700ms var(--ease-out) 300ms backwards,
       float 7s ease-in-out 1s infinite;

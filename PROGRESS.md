@@ -10,6 +10,30 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
 
 ## Done (newest first)
 
+- **2026-10-11: Polish pass (impeccable `polish`).** Uncommitted.
+  - **Bug:** in the portal, Home and the current page were both highlighted in the nav. `/portal` now matches exactly, in both the sidebar and the tab bar.
+  - **Sidebar:** the nav list was cut off on laptop screens, with Documents half visible and Reminders and Staff hidden. The "New rental?" prompt is now hidden below 1000 px of height (Guided setup is still on the dashboard). An overflowing list fades at the bottom until it's scrolled to the end, using a scroll-driven `--nav-fade`.
+  - Removed the small labels above page headings on staff and portal pages. They repeated the workspace name already in the top bar, or the nav section. They're kept where they carry information: setup step, tenant status, receipt issuer, and the public pages.
+  - Replaced typed `→`, `›` and `✓` characters with SVG icons (`.ui-icon.inline-icon` in `_base.scss`) in the dashboard, portal, sidebar, ⌘K results, toast and sign-in list.
+  - Removed the gradient text on the sign-in headline and the glow on the active nav indicator.
+  - Removed the floating "Sample collections" card from the sign-in page, along with its styles and motion.
+  - The visual review passes (all staff and portal pages, light and dark). Web build and the 21 tests pass. Detector findings left as they are: the dynamic QR `src` is a false positive, and the spring easing on the payment-success icon is intentional.
+
+- **2026-10-11: Motion redesign (Emil Kowalski's design-engineering rules).** Uncommitted. Styles only (`_tokens`, `_motion`, `_components`, `_pages`, `_shell`).
+  - Stronger custom curves (`--ease-out` 0.23,1,0.32,1; `--ease-in-out`; `--ease-drawer`). `--ease-in` and `--ease-emphasized` are gone, so exits are ease-out and faster than entrances. Animations stay at 280 ms or less, except the phone sheet (360 ms).
+  - Removed frequent decoration: page-section and table-row cascades, the icon spring, the button sheen and hover lift, the nav icon nudge, the card hover lift, the overdue dot pulse, and the floating sign-in card.
+  - Navigation is a 150 ms fade instead of a slide. The dashboard tile stagger went from 45 to 30 ms. The sparkline reveal went from 1.4 s to 0.6 s. The success icon starts at scale 0.8 instead of 0.4.
+  - Hover effects only apply on mouse devices (`hover: hover` and `pointer: fine`). `.menu-button` gets press feedback. The bento uses `backwards` fill, which fixes a CLAUDE.md violation (it used `both`).
+  - Reduced motion keeps short opacity and colour fades but removes all movement.
+  - **Added motion with a purpose:**
+    - Payment steps enter from the side they sit on: Back slides in from the left (`paymentBack` signal in `app.ts`).
+    - Step dots fill left to right.
+    - App banners fade out instead of vanishing.
+    - "Copied" on the copy buttons blurs in.
+    - `<details>` disclosures open smoothly where `::details-content` is supported.
+    - The Ctrl/⌘K results no longer animate, since that's a keyboard action.
+  - Web build and the 21 web tests pass. The visual review (`check-ui.mjs`) has not been run.
+
 - **2026-10-11: Pre-ship Phase 1 (code) done**, following `tasks/plan.md` (decisions D1–D5 accepted as recommended). Committed locally, **not pushed**.
   - T1: the dashboard trend subtracts adjustments, so it matches the Billed tile.
   - T2: versioned scrypt hashes (N=2^14, r=8, p=5, about 180 ms), upgraded at the next sign-in.

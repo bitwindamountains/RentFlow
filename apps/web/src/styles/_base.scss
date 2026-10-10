@@ -127,6 +127,15 @@ table.sr-only {
   stroke-linejoin: round;
 }
 
+// Small icon that sits in a line of text (link arrows, ticks).
+.ui-icon.inline-icon {
+  display: inline-block;
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.17em;
+  stroke-width: 2;
+}
+
 .danger-text {
   color: var(--danger-fg);
 }

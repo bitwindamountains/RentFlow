@@ -10,7 +10,7 @@ import { PaymentLauncher } from '../core/payment-launcher.service';
   template: `
 <div class="page operations-page">
   <section class="page-heading">
-    <div><p class="eyebrow">TODAY</p><h1>Reminders</h1><p>Overdue balances, leases ending within 30 days, and urgent repairs.</p></div>
+    <div><h1>Reminders</h1><p>Overdue balances, leases ending within 30 days, and urgent repairs.</p></div>
   </section>
   @if (error()) { <div class="auth-error" role="alert">{{ error() }}</div> }
   <section class="panel">

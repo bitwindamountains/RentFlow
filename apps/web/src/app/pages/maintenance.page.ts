@@ -30,7 +30,7 @@ interface PropertyOption {
   template: `
 <div class="page operations-page">
   <section class="page-heading">
-    <div><p class="eyebrow">OPERATIONS</p><h1>Maintenance</h1><p>Repairs and work orders, most urgent first.</p></div>
+    <div><h1>Maintenance</h1><p>Repairs and work orders, most urgent first.</p></div>
     @if (canWrite()) { <button class="primary" type="button" (click)="open()">New work order</button> }
   </section>
   @if (notice()) { <div class="inline-notice" role="status">{{ notice() }}</div> }

@@ -63,6 +63,35 @@
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: #446858 transparent;
+    // When the list overflows, its bottom edge fades so hidden items read as
+    // "scroll for more"; the fade clears once the end is reached.
+    mask-image: linear-gradient(#000 calc(100% - var(--nav-fade)), transparent);
+  }
+}
+@property --nav-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@supports (animation-timeline: scroll()) {
+  .sidebar > nav {
+    animation: nav-fade linear both;
+    animation-timeline: scroll(self);
+  }
+  @keyframes nav-fade {
+    0%,
+    85% {
+      --nav-fade: 40px;
+    }
+    100% {
+      --nav-fade: 0px;
+    }
+  }
+}
+// Short laptop screens: the setup prompt gives its room back to the navigation.
+@media (min-width: 1025px) and (max-height: 1000px) {
+  .upgrade-card {
+    display: none;
   }
 }
 .brand {
@@ -134,13 +163,9 @@
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--accent);
-  box-shadow: 0 0 12px 1px rgb(216 243 107 / 0.55);
 }
 .nav-item.active .nav-icon {
   color: var(--accent);
-}
-.nav-icon .ui-icon {
-  transition: transform var(--dur-base) var(--ease-spring);
 }
 .nav-icon .ui-icon {
   width: 19px;
@@ -507,14 +532,14 @@ kbd {
     transform: translateX(-100%);
     visibility: hidden;
     transition:
-      transform var(--dur-base) var(--ease-emphasized),
+      transform var(--dur-base) var(--ease-out),
       visibility 0s linear var(--dur-base);
   }
   .sidebar.open {
     transform: none;
     visibility: visible;
     transition:
-      transform var(--dur-base) var(--ease-emphasized),
+      transform 320ms var(--ease-drawer),
       visibility 0s;
   }
   .scrim {

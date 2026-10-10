@@ -12,7 +12,6 @@ import { appendPage } from '../core/pagination';
 <div class="page operations-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">MY RENTAL</p>
       <h1>Documents</h1>
       <p>Files your landlord has shared with you, such as your lease and house rules.</p>
     </div>

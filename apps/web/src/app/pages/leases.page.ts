@@ -31,7 +31,6 @@ interface LeaseDraft {
 <div class="page resource-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ api.profile()?.organization?.name }}</p>
       <h1>Leases</h1>
       <p>Agreements, rent terms, renewals, and move-outs.</p>
     </div>

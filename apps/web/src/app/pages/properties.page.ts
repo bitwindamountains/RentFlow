@@ -17,7 +17,6 @@ type Form =
 <div class="page resource-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ api.profile()?.organization?.name }}</p>
       <h1>Properties</h1>
       <p>Buildings, units, and who occupies them.</p>
     </div>

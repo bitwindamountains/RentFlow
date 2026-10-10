@@ -21,7 +21,6 @@ export interface TenantForm {
 <div class="page resource-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ api.profile()?.organization?.name }}</p>
       <h1>Tenants</h1>
       <p>People, balances, and where they rent.</p>
     </div>

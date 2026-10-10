@@ -15,7 +15,6 @@ import type { PortalHome } from '../core/models';
   @if (home(); as h) {
     <section class="page-heading">
       <div>
-        <p class="eyebrow">{{ h.organization.name }}</p>
         <h1>Hi, {{ h.tenant.firstName }}</h1>
         <p>Your rent, receipts, and repairs in one place.</p>
       </div>
@@ -90,14 +89,14 @@ import type { PortalHome } from '../core/models';
       <article class="tile portal-payments">
         <div class="panel-title">
           <div><h2>Recent payments</h2><p>Open a receipt to print or save it.</p></div>
-          <a class="text-button" routerLink="/portal/payments">All &rarr;</a>
+          <a class="text-button" routerLink="/portal/payments">All <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6" /></svg></a>
         </div>
         <div class="attention-list">
           @for (p of h.recentPayments; track p.id) {
             <a class="attention-item" [routerLink]="['/portal/receipts', p.id]">
               <span class="attention-icon green" data-icon="check" aria-hidden="true"></span>
               <span><strong>{{ p.amount | money }}</strong><small>{{ p.paidAt | moment: 'date' }} · {{ p.method | label }}@if (p.status === 'REVERSED') { · reversed }</small></span>
-              <span class="text-button">{{ p.receiptNumber ?? 'Receipt' }} &rsaquo;</span>
+              <span class="text-button">{{ p.receiptNumber ?? 'Receipt' }} <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></span>
             </a>
           } @empty {
             <p class="empty-cell">No payments recorded yet.</p>

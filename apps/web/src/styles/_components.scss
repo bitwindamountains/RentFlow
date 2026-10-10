@@ -93,7 +93,7 @@
 .button-link {
   text-decoration: none;
 }
-:is(.primary, .secondary, .filter-button, .icon-button):not(:disabled):active {
+:is(.primary, .secondary, .filter-button, .icon-button, .menu-button):not(:disabled):active {
   transform: scale(0.97);
 }
 
@@ -424,8 +424,10 @@ td:first-child {
 tbody tr {
   transition: background-color var(--dur-fast) var(--ease-out);
 }
-tbody tr:hover {
-  background: var(--surface-2);
+@media (hover: hover) and (pointer: fine) {
+  tbody tr:hover {
+    background: var(--surface-2);
+  }
 }
 td[colspan],
 .empty-cell {
@@ -538,6 +540,9 @@ div.empty-cell {
 
   &:first-child {
     border-top: 0;
+  }
+  > .inline-icon {
+    color: var(--text-subtle);
   }
   strong,
   small {

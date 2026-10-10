@@ -15,7 +15,7 @@ const MAX_BYTES = 10 * 1_048_576;
   template: `
 <div class="page operations-page">
   <section class="page-heading">
-    <div><p class="eyebrow">OPERATIONS</p><h1>Documents</h1>
+    <div><h1>Documents</h1>
       <p>Signed leases, IDs, and receipts. Uploaded files are stored privately and only people in this workspace can open them.</p></div>
     @if (canWrite()) { <button class="primary" type="button" (click)="formOpen.set(!formOpen())">{{ formOpen() ? 'Close' : 'Add document' }}</button> }
   </section>

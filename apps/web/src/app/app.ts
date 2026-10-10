@@ -128,6 +128,8 @@ export class App {
   // ----- Record payment sheet -----
   protected readonly paymentOpen = signal(false);
   protected readonly paymentStep = signal(1);
+  // Which way the last step change went, so Back slides in from the left.
+  protected readonly paymentBack = signal(false);
   protected readonly paymentComplete = signal<Payment | null>(null);
   protected readonly paymentLoading = signal(false);
   protected readonly paymentError = signal('');
@@ -271,6 +273,7 @@ export class App {
     this.paymentComplete.set(null);
     this.paymentError.set('');
     this.paymentStep.set(1);
+    this.paymentBack.set(false);
     this.optionQuery.set('');
     this.paymentMethod = 'GCASH';
     this.paymentReference = '';
@@ -336,12 +339,14 @@ export class App {
       }
     }
     this.paymentError.set('');
+    this.paymentBack.set(false);
     this.paymentStep.update((step) => Math.min(3, step + 1));
   }
 
   protected previousPaymentStep(): void {
     if (this.paymentLoading() || this.paymentRetryPending()) return;
     this.paymentError.set('');
+    this.paymentBack.set(true);
     this.paymentStep.update((step) => Math.max(1, step - 1));
   }
 

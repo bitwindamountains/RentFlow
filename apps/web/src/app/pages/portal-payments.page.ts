@@ -24,7 +24,6 @@ const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
 <div class="page operations-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ home()?.organization?.name }}</p>
       <h1>Payments</h1>
       <p>Paid by GCash, Maya, or bank transfer? Report it here and your landlord confirms it and issues a receipt.</p>
     </div>
@@ -107,7 +106,7 @@ const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
             <strong>{{ p.amount | money }}@if (p.status !== 'POSTED') { · reversed }</strong>
             <small>{{ p.paidAt | moment: 'date' }} · {{ p.method | label }}{{ p.referenceNumber ? ' · ' + p.referenceNumber : '' }}</small>
           </span>
-          <span class="text-button">{{ p.receiptNumber ?? 'Receipt' }} &rsaquo;</span>
+          <span class="text-button">{{ p.receiptNumber ?? 'Receipt' }} <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></span>
         </a>
       } @empty {
         <p class="empty-cell">{{ loading() ? 'Loading…' : 'No payments recorded yet.' }}</p>

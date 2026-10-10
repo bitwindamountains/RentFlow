@@ -23,7 +23,7 @@ interface FinancialReport {
   template: `
 <div class="page operations-page">
   <section class="page-heading">
-    <div><p class="eyebrow">MONEY</p><h1>Reports</h1><p>Income, expenses, and profit per property for any period.</p></div>
+    <div><h1>Reports</h1><p>Income, expenses, and profit per property for any period.</p></div>
   </section>
   @if (error()) { <div class="auth-error" role="alert">{{ error() }}</div> }
   <form class="resource-toolbar" (ngSubmit)="load()">

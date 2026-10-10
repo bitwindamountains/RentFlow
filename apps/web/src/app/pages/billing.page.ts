@@ -20,7 +20,6 @@ type Form =
 <div class="page resource-page">
   <section class="page-heading">
     <div>
-      <p class="eyebrow">{{ api.profile()?.organization?.name }}</p>
       <h1>Billing</h1>
       <p>Who owes what, and every charge on every lease.</p>
     </div>

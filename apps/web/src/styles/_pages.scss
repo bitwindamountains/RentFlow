@@ -98,11 +98,11 @@ main.auth-page {
   }
 }
 // Decorative product glimpse on the sign-in story (aria-hidden; sample figures).
+// In the column's flow, below the feature list, so it can never cover the text.
 .auth-story .auth-preview {
-  position: absolute;
-  right: clamp(24px, 5vw, 72px);
-  bottom: clamp(96px, 16vh, 160px);
+  position: relative;
   z-index: 1;
+  align-self: flex-start;
   width: 260px;
   padding: var(--space-4) var(--space-5);
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -117,6 +117,8 @@ main.auth-page {
 
   small {
     display: block;
+    // Room for the corner badge.
+    padding-right: 52px;
     color: #a9c2b6;
     font-size: var(--text-xs);
     font-weight: 600;
@@ -153,7 +155,8 @@ main.auth-page {
     font-weight: 700;
   }
 }
-@media (max-width: 1180px) {
+// Only where the column has room for it; shorter windows would have to scroll the sign-in page.
+@media (max-width: 1180px), (max-height: 860px) {
   .auth-story .auth-preview {
     display: none;
   }

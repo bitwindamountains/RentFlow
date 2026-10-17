@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Ip, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { FastifyReply } from 'fastify';
@@ -83,9 +83,10 @@ export class AuthController {
   async login(
     @Body() input: LoginDto,
     @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ip: string,
     @Res({ passthrough: true }) reply: CookieReply,
   ) {
-    const result = await this.auth.login({ ...input, userAgent });
+    const result = await this.auth.login({ ...input, userAgent, ip });
     // With two-step sign-in on, no session exists until the code is checked.
     if ('mfaRequired' in result) return result;
     return this.startSession(reply, result);
@@ -98,9 +99,10 @@ export class AuthController {
   async loginMfa(
     @Body() input: MfaLoginDto,
     @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ip: string,
     @Res({ passthrough: true }) reply: CookieReply,
   ) {
-    return this.startSession(reply, await this.auth.completeMfaLogin({ ...input, userAgent }));
+    return this.startSession(reply, await this.auth.completeMfaLogin({ ...input, userAgent, ip }));
   }
 
   @Roles(...ANY_MEMBER)

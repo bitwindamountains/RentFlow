@@ -1,7 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { LOGIN_FAILURE_LIMIT } from '../src/auth/auth.service.js';
+import { LOGIN_FAILURE_ACCOUNT_LIMIT, LOGIN_FAILURE_LIMIT } from '../src/auth/auth.service.js';
 import { sha256 } from '../src/common/crypto.js';
 import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp, tokenIn, unique } from './helpers.js';
 
@@ -62,27 +62,51 @@ describe('authentication', () => {
     expect(wrong.body).toEqual(unknown.body);
   });
 
-  it('refuses an account after ten failed passwords from any mix of IPs, without revealing it', async () => {
+  it('refuses a source after ten failed passwords, without revealing it or locking the owner out', async () => {
     const { email } = await registerOwner(app);
-    const from = (n: number) => ({ 'x-forwarded-for': `198.51.100.${n}` });
+    const attacker = { 'x-forwarded-for': '198.51.100.1' };
     for (let attempt = 1; attempt <= LOGIN_FAILURE_LIMIT; attempt += 1)
-      expect((await new Client(app).post('/auth/login', { email, password: 'not the password at all' }, from(attempt))).status).toBe(401);
+      expect((await new Client(app).post('/auth/login', { email, password: 'not the password at all' }, attacker)).status).toBe(401);
 
-    const blocked = await new Client(app).post('/auth/login', { email, password: PASSWORD }, from(200));
-    const unknown = await new Client(app).post('/auth/login', { email: `nobody-${unique()}@x.test`, password: PASSWORD }, from(201));
+    const blocked = await new Client(app).post('/auth/login', { email, password: PASSWORD }, attacker);
+    const unknown = await new Client(app).post('/auth/login', { email: `nobody-${unique()}@x.test`, password: PASSWORD }, attacker);
     expect(blocked.status).toBe(401);
     expect(blocked.body).toEqual(unknown.body);
     expect(blocked.headers['set-cookie']).toBeUndefined();
 
-    // Other accounts are unaffected.
-    const other = await registerOwner(app);
-    expect((await new Client(app).post('/auth/login', { email: other.email, password: PASSWORD }, from(202))).status).toBe(200);
+    // The owner, from their own device, still signs in, which clears the failures.
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, { 'x-forwarded-for': '203.0.113.7' })).status).toBe(200);
+    expect(await prismaOf(app).loginFailure.count({ where: { emailHash: sha256(email) } })).toBe(0);
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, attacker)).status).toBe(200);
+  });
 
-    // Once the failures age out of the window, the right password works and clears them.
+  it('under attack from many IPs, refuses every IP that has failed but not a clean one', async () => {
+    const { email } = await registerOwner(app);
     const failures = prismaOf(app).loginFailure;
+    await failures.createMany({
+      data: Array.from({ length: LOGIN_FAILURE_ACCOUNT_LIMIT - 1 }, (_, n) => ({ emailHash: sha256(email), ipHash: sha256(`192.0.2.${n + 1}`) })),
+    });
+    const tried = { 'x-forwarded-for': '192.0.2.1' };
+    expect((await new Client(app).post('/auth/login', { email, password: 'not the password at all' }, { 'x-forwarded-for': '192.0.2.250' })).status).toBe(401);
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, tried)).status).toBe(401);
+
+    // Once the failures age out of the window, the right password works from anywhere.
     await failures.updateMany({ where: { emailHash: sha256(email) }, data: { createdAt: new Date(Date.now() - 16 * 60 * 1000) } });
-    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, from(203))).status).toBe(200);
-    expect(await failures.count({ where: { emailHash: sha256(email) } })).toBe(0);
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, tried)).status).toBe(200);
+  });
+
+  it('a password reset lifts the block', async () => {
+    const { email } = await registerOwner(app);
+    const blockedIp = { 'x-forwarded-for': '198.51.100.9' };
+    for (let attempt = 1; attempt <= LOGIN_FAILURE_LIMIT; attempt += 1)
+      await new Client(app).post('/auth/login', { email, password: 'not the password at all' }, blockedIp);
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, blockedIp)).status).toBe(401);
+
+    await new Client(app).post('/auth/password/forgot', { email });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const token = tokenIn(lastEmail(app, email)?.text);
+    expect((await new Client(app).post('/auth/password/reset', { token, password: 'a brand new passphrase' })).status).toBe(200);
+    expect((await new Client(app).post('/auth/login', { email, password: 'a brand new passphrase' }, blockedIp)).status).toBe(200);
   });
 
   it('upgrades a password hash from before versioning at the next sign-in', async () => {

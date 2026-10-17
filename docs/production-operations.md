@@ -13,7 +13,13 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
   - **Storage:** secrets are encrypted with `MFA_ENCRYPTION_KEY`.
   - **Changes:** turning it off, or replacing recovery codes, needs the password and a code. Turning it on signs out the person's other devices.
 - **Rate limits.** The default is 300 requests/minute per normalized client IP. Sign-in, registration, password reset, email verification, and invitation acceptance override this with stricter per-route/IP limits. Unverified cookies never select a rate-limit bucket.
-- **Per-account sign-in backoff.** After 10 wrong passwords or two-step codes for one email within 15 minutes, from any mix of IPs, sign-in for that email is refused until older failures age out. The response is the same generic error as any failed sign-in, so it does not reveal whether the email exists. Failures are stored in the database (hashed email only), so the limit holds across API instances, and a successful sign-in clears them.
+- **Sign-in backoff.** Failures are counted per source, meaning one email from one IP, so a stranger cannot lock an owner out of their account.
+  - After 10 wrong passwords or two-step codes from one source within 15 minutes, that source is refused until older failures age out.
+  - Once an email has 50 failures in the window from any mix of IPs, every IP that has already failed against it is refused too. An IP with no failures, such as the owner's own device, can still sign in.
+  - The response is the same generic error as any failed sign-in, so it does not reveal whether the email exists.
+  - Failures are stored in the database as hashes of the email and IP, so the limits hold across API instances.
+  - A successful sign-in or a password reset clears them.
+  - The IP is the client address after `TRUST_PROXY` hops. Set it correctly behind Caddy, or every request appears to come from the proxy.
   - **Tradeoff:** someone who knows an email address can keep that person from signing in for 15 minutes at a time. Existing sessions are not affected. Owners should keep a signed-in device.
 - **Passwords** are hashed with scrypt (N=2^14, r=8, p=5) in a versioned format. Hashes from older releases are upgraded at the person's next successful sign-in.
 - **Financial integrity.**
@@ -30,7 +36,8 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
     - the tenant record becomes "Erased tenant …" with no email, phone or address;
     - portal access ends, and a portal login used for nothing else is anonymized and disabled;
     - unsent email to the tenant is cancelled;
-    - payment-report notes and repair-request descriptions are cleared;
+    - free text that can name the person is cleared: payment notes, payment-report notes and rejection reasons, and repair-request titles and descriptions;
+    - stored responses of retried money commands (idempotency records) that show the tenant's name or their payment reports are rewritten;
     - documents about the tenant, payment screenshots and repair photos are deleted from storage.
   - **Kept:** charges, payments, receipts, deposits, lease records and lease documents (signed contracts), now under the anonymized name, as tax and accounting rules require. Tokens in emailed links travel in the URL fragment and never reach server logs.
 - **Uploaded documents.** PDF, JPEG, PNG, and WebP only, identified by their content (a renamed HTML or SVG file is rejected), up to `UPLOAD_MAX_MB` each and `STORAGE_QUOTA_MB` per workspace. Files sit in private storage under server-generated names and are served only through the API after workspace and role checks, with `nosniff` and a sandboxing CSP; PDFs always download rather than render. `StorageObject` reserves quota under a workspace lock before any write. Removing a document hides it immediately and attempts erasure; failures remain queued and count against quota until cleanup succeeds. Uploads abandoned for an hour are reclaimed, including local `.partial` files. Audit records remain. Old unrecorded files from releases before reservation tracking require a separate storage inventory; the migration can only backfill recorded documents.

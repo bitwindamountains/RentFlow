@@ -10,6 +10,23 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-10-17: Ship review's recommended fixes and missing tests.** Uncommitted. Local CI passes: 65 unit tests, 121 e2e tests, the web tests, the build, and `npm audit` with 0 issues.
+  - **Security:**
+    - `POST /tenants/:id/erase` has `@RateLimit(10, '15 minutes')`.
+    - `RATE_LIMIT_MULTIPLIER` is validated (whole number 1–1000, through `rateLimitMultiplier()` in `environment.ts`) and refused in production. `production.e2e-spec` unsets it.
+    - Production requires `sslmode=require`, `verify-ca` or `verify-full` for a database outside the private Compose network. Loopback and single-label hosts like `postgres` are exempt.
+    - One password-reset email per account every 2 minutes (`RESET_EMAIL_COOLDOWN`), with the same response either way.
+  - **Robustness:**
+    - Erasure checks the balance inside a SERIALIZABLE transaction. `tenantBalances` takes an optional `tx`.
+    - Each sign-in attempt is recorded before the password or code is checked (`startSignInAttempt`) and deleted if correct. A burst test proves at most 1 of 5 parallel attempts gets through after 9 failures; the old code let all 5 through.
+  - **Tests:**
+    - `security.e2e-spec` now fails if any route with an id is neither in the cross-workspace sweep nor in `IDOR_EXEMPT` (with where it is proven instead). It reads the routes from controller metadata (`routesOf` in `test/helpers.ts`). 12 missing routes were added, plus 9 more list endpoints in the leak check.
+    - `portal.e2e-spec` checks every route not open to tenants for a 403 `FORBIDDEN` (more than 50 routes).
+    - `settlement.e2e-spec` covers oldest-first allocation of a short payment.
+    - `billing.e2e-spec` covers two reversals racing (exactly one, one ledger entry) and a void racing a payment.
+    - New `jobs.e2e-spec` tests the real `JobLock` SQL: one holder at a time, takeover of an expired lock, stopping on a lost lock, and one workspace's failure not blocking the others.
+  - **Still open from the test review:** idempotency replay and conflict tests for charges, adjustments and deposits, MFA challenge edge cases, upload edge cases, and a backup-script test.
+
 - **2026-10-17: Whole-app polish pass (impeccable `polish`).** Uncommitted. The visual review passed before and after: 23 routes at 1440, 768, 390 and 320 px, in light and dark.
   - **Bug:** reminder text showed raw amounts ("18000.00 overdue"), on both the Reminders page and the dashboard's "Coming up" list. A new `displayMoney()` in `common/money.ts` (₱18,000.00, exact from the decimal string, no JS number) now formats them. The staff payment-report alert email uses it too. Unit test added.
   - **Phones (≤520 px):** a trailing link or button in an `.attention-item` row now drops under the text. Before, the receipt number and the Collect buttons squeezed the text into a narrow column on Portal Payments, Reminders and the dashboard. Amount columns stay on the right.
@@ -31,13 +48,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
     - `privacy.e2e-spec.ts` now seeds all of these. Run against the old code, it finds the name left in 4 tables.
   - **Fixed: anyone could lock an owner out.** Backoff is now counted per email and IP. At 50 failures for an email, every IP that has failed against it is refused too, but clean IPs are not. A password reset clears the block.
     - New migration `20261017090000_login_failure_source` adds `ipHash` and empties the table. Applied to Supabase dev on 2026-10-17, with no schema drift.
-  - **Recommended before launch** (from the review, not done):
-    - add `@RateLimit` to `POST /tenants/:id/erase`;
-    - validate `RATE_LIMIT_MULTIPLIER` in `environment.ts` and refuse it in production;
-    - require `sslmode=require` on the production database URL;
-    - add a per-email cooldown on reset emails;
-    - move erasure's balance check inside a SERIALIZABLE transaction;
-    - count login failures atomically.
+  - **Recommended before launch:** done on 2026-10-17, see the entry above.
   - **Test gaps from the review:**
     - an automatic every-route IDOR sweep (about 10 routes have no cross-org check, including document sharing, staff edits and session deletion);
     - tenant-role 403 checks on staff writes;

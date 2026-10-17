@@ -45,8 +45,9 @@ The API validates its configuration at startup and exits with a clear message if
 | --- | --- |
 | `WEB_ORIGIN` | Exact public origin(s), comma-separated, `https://` only |
 | `APP_URL` | HTTPS origin for links in emails (defaults to the first `WEB_ORIGIN`) |
-| `DATABASE_URL` | Add `connection_limit=10` (or your pooler's limit) |
+| `DATABASE_URL` | Add `connection_limit=10` (or your pooler's limit). A database on another host needs `sslmode=require` (or `verify-ca`/`verify-full`), or the API refuses to start; the bundled `postgres` service and `localhost` are exempt. |
 | `TRUST_PROXY` | Number of reverse proxies in front of the API (`1` with the bundled Caddy). Rate limiting keys on the client IP this reveals. |
+| `RATE_LIMIT_MULTIPLIER` | Test suites only. Production refuses to start when it is set. |
 | `ENABLE_JOBS` | Billing, lease expiry, and file cleanup every 15 minutes; queued email every 30 seconds. Database leases/claims coordinate instances. Keep enabled for recovery after outages. |
 | `MAIL_ENCRYPTION_KEY` | Required in production: 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts queued email, including one-time links. Use the same stable key on every API instance and preserve it with encrypted backups. Do not replace it while messages are pending. |
 | `SESSION_ABSOLUTE_HOURS` / `SESSION_IDLE_MINUTES` | Default 12 h absolute, 120 min idle |

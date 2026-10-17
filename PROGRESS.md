@@ -10,6 +10,13 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-10-17: Whole-app polish pass (impeccable `polish`).** Uncommitted. The visual review passed before and after: 23 routes at 1440, 768, 390 and 320 px, in light and dark.
+  - **Bug:** reminder text showed raw amounts ("18000.00 overdue"), on both the Reminders page and the dashboard's "Coming up" list. A new `displayMoney()` in `common/money.ts` (₱18,000.00, exact from the decimal string, no JS number) now formats them. The staff payment-report alert email uses it too. Unit test added.
+  - **Phones (≤520 px):** a trailing link or button in an `.attention-item` row now drops under the text. Before, the receipt number and the Collect buttons squeezed the text into a narrow column on Portal Payments, Reminders and the dashboard. Amount columns stay on the right.
+  - **Dashboard occupancy:** the two values now line up when "Ending in 30 days" wraps.
+  - **Spacing:** a `.panel-title` that ends its panel no longer adds bottom margin (Tenant portal card).
+  - **Left as is:** the "Guided setup · Step 1 of 4" and "Tenant · Active" labels above headings carry real information. The sidebar ending partway down full-page screenshots is a screenshot artifact of the pinned sidebar.
+
 - **2026-10-17: Pre-ship review (`/ship`), and the 2 launch blockers fixed.** Committed (`26f02be`, `df04e24`) and pushed. GitHub CI run 39030985742, started by hand, passed both the verify and containers jobs. The push alone still started no run.
   - **Fixed: pushes started no CI run.** This was a problem on GitHub's side, for this repo only.
     - RentFlow had never had a push-triggered run, and GitHub Actions created no check suite for pushed commits. Push runs worked in other repos on this account.

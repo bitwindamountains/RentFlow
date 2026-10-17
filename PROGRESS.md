@@ -10,6 +10,32 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
 
 ## Done (newest first)
 
+- **2026-10-17: Pre-ship review (`/ship`), and the 2 launch blockers fixed.** Uncommitted.
+  - **Verdict:** NO-GO for real tenant data until Next steps 0a is done; GO for staging. There were no Critical or High findings. Local CI passes: 62 unit tests, 110 e2e tests, the web tests, the build, and `npm audit` with 0 issues.
+  - **Fixed: erasure left personal data behind.** Erasure now also:
+    - clears `Payment.notes`;
+    - replaces `PaymentNotice.rejectionReason` with neutral text (a CHECK constraint requires a reason on rejected reports);
+    - resets `MaintenanceRequest.title`;
+    - rewrites `IdempotencyKey.responseBody`, which kept `tenantName` and report notes forever.
+    - `privacy.e2e-spec.ts` now seeds all of these. Run against the old code, it finds the name left in 4 tables.
+  - **Fixed: anyone could lock an owner out.** Backoff is now counted per email and IP. At 50 failures for an email, every IP that has failed against it is refused too, but clean IPs are not. A password reset clears the block.
+    - New migration `20261017090000_login_failure_source` adds `ipHash` and empties the table. **It is not yet applied to Supabase dev.**
+  - **Recommended before launch** (from the review, not done):
+    - add `@RateLimit` to `POST /tenants/:id/erase`;
+    - validate `RATE_LIMIT_MULTIPLIER` in `environment.ts` and refuse it in production;
+    - require `sslmode=require` on the production database URL;
+    - add a per-email cooldown on reset emails;
+    - move erasure's balance check inside a SERIALIZABLE transaction;
+    - count login failures atomically.
+  - **Test gaps from the review:**
+    - an automatic every-route IDOR sweep (about 10 routes have no cross-org check, including document sharing, staff edits and session deletion);
+    - tenant-role 403 checks on staff writes;
+    - oldest-first allocation of a short payment;
+    - races between two reversals, and between a void and a payment;
+    - the job lock tested on a real database;
+    - idempotency tests for charges, adjustments and deposits.
+  - Accessibility (axe or Lighthouse) was not checked. Do it in the staging run.
+
 - **2026-10-11: Polish pass (impeccable `polish`).** Uncommitted.
   - **Bug:** in the portal, Home and the current page were both highlighted in the nav. `/portal` now matches exactly, in both the sidebar and the tab bar.
   - **Sidebar:** the nav list was cut off on laptop screens, with Documents half visible and Reminders and Staff hidden. The "New rental?" prompt is now hidden below 1000 px of height (Guided setup is still on the dashboard). An overflowing list fades at the bottom until it's scrolled to the end, using a scroll-driven `--nav-fade`.

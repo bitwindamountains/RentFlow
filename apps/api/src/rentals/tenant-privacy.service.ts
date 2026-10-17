@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { audit } from '../common/audit.js';
 import { verifyPassword } from '../common/crypto.js';
 import { DomainError, notFound } from '../common/errors.js';
@@ -116,8 +117,17 @@ export class TenantPrivacyService {
 
       const notices = await tx.paymentNotice.findMany({ where: { organizationId, tenantId: id }, select: { id: true } });
       const requests = await tx.maintenanceRequest.findMany({ where: { organizationId, tenantId: id }, select: { id: true } });
+      // Free text written by the tenant or by staff can name the person.
+      await tx.payment.updateMany({ where: { organizationId, tenantId: id }, data: { notes: null } });
       await tx.paymentNotice.updateMany({ where: { organizationId, tenantId: id }, data: { note: null } });
-      await tx.maintenanceRequest.updateMany({ where: { organizationId, tenantId: id }, data: { description: ERASED_NOTE } });
+      // A rejected report must keep a reason (CHECK constraint).
+      await tx.paymentNotice.updateMany({ where: { organizationId, tenantId: id, rejectionReason: { not: null } }, data: { rejectionReason: ERASED_NOTE } });
+      await tx.maintenanceRequest.updateMany({ where: { organizationId, tenantId: id }, data: { title: 'Repair request', description: ERASED_NOTE } });
+      await this.scrubStoredResponses(tx, organizationId, {
+        name: `${tenant.firstName} ${tenant.lastName}`,
+        erasedName: `Erased tenant ${id.slice(0, 8)}`,
+        noticeIds: new Set(notices.map((notice) => notice.id)),
+      });
 
       // Lease documents (signed contracts) stay with the lease records; files about the person go.
       const documents = await tx.documentRecord.findMany({
@@ -176,6 +186,28 @@ export class TenantPrivacyService {
       },
       data: { status: 'FAILED', encryptedBody: null, lastError: 'Cancelled: personal details erased' },
     });
+  }
+
+  /**
+   * Idempotency records keep each money command's response forever so retries stay safe.
+   * Responses that name this tenant or quote their payment reports are rewritten in place.
+   */
+  private async scrubStoredResponses(tx: Tx, organizationId: string, target: { name: string; erasedName: string; noticeIds: Set<string> }) {
+    const needles = [JSON.stringify(target.name).slice(1, -1), ...target.noticeIds];
+    const rows = await tx.$queryRaw<Array<{ id: string; responseBody: Prisma.JsonValue }>>`
+      SELECT "id", "responseBody" FROM "IdempotencyKey"
+      WHERE "organizationId" = ${organizationId}::uuid
+        AND EXISTS (SELECT 1 FROM unnest(${needles}::text[]) AS needle WHERE strpos("responseBody"::text, needle) > 0)`;
+    const scrub = (value: Prisma.JsonValue): Prisma.JsonValue => {
+      if (Array.isArray(value)) return value.map(scrub);
+      if (!value || typeof value !== 'object') return value;
+      const copy = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrub(item ?? null)]));
+      if (copy['tenantName'] === target.name) copy['tenantName'] = target.erasedName;
+      if (typeof copy['id'] === 'string' && target.noticeIds.has(copy['id'])) Object.assign(copy, { note: null, rejectionReason: copy['rejectionReason'] ? ERASED_NOTE : null });
+      return copy;
+    };
+    for (const row of rows)
+      await tx.idempotencyKey.update({ where: { id: row.id }, data: { responseBody: scrub(row.responseBody) as Prisma.InputJsonValue } });
   }
 
   private documentScope(tenantId: string, leaseIds: string[], notices: Array<{ id: string }>, requests: Array<{ id: string }>) {

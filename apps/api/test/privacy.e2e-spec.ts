@@ -26,7 +26,7 @@ describe('tenant data export and erasure', () => {
     expect(accepted.body).toMatchObject({ accepted: true, role: 'TENANT' });
     const portal = new Client(app);
     expect((await portal.post('/auth/login', { email: person.email, password: PASSWORD })).status).toBe(200);
-    expect((await portal.post('/portal/maintenance', { title: 'Leaking faucet', description: `Please call ${person.phone}, ${person.firstName} ${marker}`, priority: 'MEDIUM' })).status).toBe(201);
+    expect((await portal.post('/portal/maintenance', { title: `Leaking faucet at ${marker}'s`, description: `Please call ${person.phone}, ${person.firstName} ${marker}`, priority: 'MEDIUM' })).status).toBe(201);
 
     const document = await owner.request('POST', `/documents/files?name=ID%20of%20${marker}&category=ID&entityType=Tenant&entityId=${rental.tenant.id}`, pdf, { 'content-type': 'application/pdf' });
     expect(document.status).toBe(201);
@@ -78,6 +78,13 @@ describe('tenant data export and erasure', () => {
 
   it('erases personal details everywhere but keeps the financial records', async () => {
     const { rental, person, marker, portal, documentId } = await formerTenant();
+    // Staff free text and the stored response of an idempotent payment both carry the name.
+    const payment = await owner.post('/payments', { tenantId: rental.tenant.id, leaseId: rental.lease.id, amount: '100.00', method: 'CASH', paidAt: new Date().toISOString(), notes: `Handed over by ${marker}`, allocations: [] });
+    expect(payment.body.tenantName).toBe(`Liza ${marker}`);
+    expect((await owner.post(`/payments/${payment.body.id}/reverse`, { reason: 'Entered twice' })).status).toBe(201);
+    const notice = await portal.post('/portal/payment-notices', { leaseId: rental.lease.id, amount: '500.00', method: 'GCASH', referenceNumber: `GC${unique()}`, paidOn: today(), note: `Sent by ${marker}` }, { 'idempotency-key': `notice-${Date.now()}` });
+    expect(notice.status).toBe(201);
+    expect((await owner.post(`/payment-notices/${notice.body.id}/reject`, { reason: `No transfer from ${marker}` })).body.notice.status).toBe('REJECTED');
     expect((await owner.post(`/leases/${rental.lease.id}/terminate`, { endDate: today(), reason: 'Moved out' })).status).toBe(201);
     expect(await rowsContaining(marker)).not.toEqual([]);
 

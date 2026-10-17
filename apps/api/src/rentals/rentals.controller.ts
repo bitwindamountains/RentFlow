@@ -17,7 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, Roles } from '../auth/decorators.js';
+import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { requireIdempotencyKey } from '../common/idempotency.service.js';
 import { IsDateOnly, IsMoney } from '../common/validation.js';
@@ -173,6 +173,8 @@ export class RentalsController {
 
   /** Erases a former tenant's personal details; financial records stay, anonymized. */
   @Roles('OWNER')
+  // The owner's password is checked here, so guesses are limited like other password checks.
+  @RateLimit(10, '15 minutes')
   @Post('tenants/:id/erase')
   eraseTenant(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string, @Body() input: EraseTenantDto) {
     return this.privacy.erase(auth.organizationId, auth.userId, id, input.password);

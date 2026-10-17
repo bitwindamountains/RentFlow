@@ -1,4 +1,5 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   Client,
@@ -6,10 +7,22 @@ import {
   PASSWORD,
   prismaOf,
   registerOwner,
+  routesOf,
   startApp,
+  templateOf,
   today,
+  tokenIn,
   unique,
 } from './helpers.js';
+
+/** Routes with an id that the cross-workspace sweep does not call, and where each is proven instead. */
+const IDOR_EXEMPT: Record<string, string> = {
+  'DELETE /auth/sessions/:id': 'answers 204 either way; the IDOR test checks the owner stays signed in',
+  'GET /portal/payments/:id/receipt': 'scoped to the signed-in tenant; portal.e2e-spec "keeps each tenant inside their own records"',
+  'POST /portal/payment-notices/:id/withdraw': 'scoped to the signed-in tenant; portal.e2e-spec',
+  'POST /portal/payment-notices/:id/proof': 'scoped to the signed-in tenant; portal.e2e-spec',
+  'GET /portal/documents/:id/file': 'scoped to the signed-in tenant; shared-documents.e2e-spec',
+};
 
 describe('authorization and tenancy isolation', () => {
   let app: NestFastifyApplication;
@@ -21,6 +34,11 @@ describe('authorization and tenancy isolation', () => {
   let expenseId: string;
   let maintenanceId: string;
   let documentId: string;
+  let memberId: string;
+  let invitationId: string;
+  let ownerSessionId: string;
+  let noticeId: string;
+  let failedMailId: string;
 
   async function member(role: string) {
     const email = `${role.toLowerCase()}-${unique()}@rentflow.test`;
@@ -74,56 +92,109 @@ describe('authorization and tenancy isolation', () => {
         url: 'https://files.example.com/lease.pdf',
       })
     ).body.id;
+    const viewer = await member('VIEWER');
+    memberId = (await owner.get('/staff')).body.members.find((m: { email: string }) => m.email === viewer.email).id;
+    invitationId = (await owner.post('/staff/invitations', { email: `pending-${unique()}@rentflow.test`, role: 'VIEWER' })).body.id;
+    ownerSessionId = (await owner.get('/auth/sessions')).body[0].id;
+    // A tenant with portal access reports a payment, so staff review routes have a real id.
+    const portalInvite = await owner.post(`/tenants/${rental.tenant.id}/portal/invite`, {});
+    await new Client(app).post('/staff/invitations/accept', { token: tokenIn(portalInvite.body.link), name: 'Portal Tenant', password: PASSWORD });
+    const portal = new Client(app);
+    await portal.post('/auth/login', { email: rental.tenant.email, password: PASSWORD });
+    noticeId = (
+      await portal.post('/portal/payment-notices', { leaseId: rental.lease.id, amount: '50.00', method: 'GCASH', referenceNumber: `GC${unique()}`, paidOn: today() }, { 'idempotency-key': randomUUID() })
+    ).body.id;
+    const organizationId = (await prismaOf(app).lease.findUniqueOrThrow({ where: { id: rental.lease.id } })).organizationId;
+    failedMailId = (
+      await prismaOf(app).mailDelivery.create({
+        data: { organizationId, kind: 'STAFF_ALERT', status: 'FAILED', encryptedBody: 'v1:test', expiresAt: new Date(Date.now() + 86_400_000) },
+      })
+    ).id;
   });
   afterAll(async () => app.close());
 
+  // Requests an intruder from another workspace must be refused, using the victim's real ids.
+  const idorReads = () => [
+    `/tenants/${rental.tenant.id}`,
+    `/tenants/${rental.tenant.id}/export`,
+    `/tenants/${rental.tenant.id}/portal`,
+    `/documents/${documentId}/file`,
+    `/leases/${rental.lease.id}/ledger`,
+    `/leases/${rental.lease.id}/open-charges`,
+    `/payments/${paymentId}/receipt`,
+  ];
+  const idorWrites = (): Array<[string, 'POST' | 'PATCH' | 'DELETE', unknown]> => [
+    [`/properties/${rental.property.id}`, 'PATCH', { name: 'Hijacked', type: 'Apartment', address: 'Nowhere 1', city: 'X City' }],
+    [`/properties/${rental.property.id}/units`, 'POST', { number: 'Z9', type: 'Studio', monthlyRent: '1.00' }],
+    [`/units/${rental.unit.id}`, 'PATCH', { number: 'Z9', type: 'Studio', monthlyRent: '1.00' }],
+    [`/tenants/${rental.tenant.id}`, 'PATCH', { firstName: 'Hijacked', lastName: 'X' }],
+    [`/tenants/${rental.tenant.id}/archive`, 'POST', {}],
+    [`/leases/${rental.lease.id}/renew`, 'POST', { endDate: '2099-01-01' }],
+    [`/leases/${rental.lease.id}/rent-change`, 'POST', { effectiveFrom: '2099-01-01', monthlyRent: '1.00' }],
+    [`/leases/${rental.lease.id}/terminate`, 'POST', { endDate: today(), reason: 'Hijack' }],
+    [`/leases/${rental.lease.id}/deposits`, 'POST', { type: 'RECEIPT', amount: '1.00' }],
+    ['/charges', 'POST', { leaseId: rental.lease.id, type: 'OTHER', description: 'Fake', amount: '1.00', dueDate: today() }],
+    [`/charges/${chargeId}/adjustments`, 'POST', { type: 'WAIVER', amount: '1.00', reason: 'Hijack' }],
+    [`/charges/${chargeId}/void`, 'POST', { reason: 'Hijack' }],
+    ['/payments', 'POST', { tenantId: rental.tenant.id, leaseId: rental.lease.id, amount: '1.00', method: 'CASH', paidAt: new Date().toISOString(), allocations: [] }],
+    [`/payments/${paymentId}/reverse`, 'POST', { reason: 'Hijack' }],
+    ['/leases', 'POST', { unitId: rental.unit.id, tenantId: rental.tenant.id, startDate: today(), monthlyRent: '1.00', billingDay: 1, dueDay: 1 }],
+    ['/billing-schedules', 'POST', { leaseId: rental.lease.id, type: 'WATER', description: 'Water', amount: '1.00', billingDay: 1, dueDay: 1, startsOn: today() }],
+    ['/expenses', 'POST', { propertyId: rental.property.id, category: 'REPAIR', description: 'Fake', amount: '1.00', incurredOn: today() }],
+    [`/expenses/${expenseId}/void`, 'POST', { reason: 'Hijack' }],
+    ['/maintenance', 'POST', { propertyId: rental.property.id, title: 'Fake', description: 'Fake one', priority: 'LOW' }],
+    [`/maintenance/${maintenanceId}`, 'PATCH', { status: 'CANCELLED' }],
+    ['/documents', 'POST', { name: 'Fake', category: 'Lease', entityType: 'Tenant', entityId: rental.tenant.id, url: 'https://evil.example.com/x' }],
+    [`/documents/${documentId}`, 'DELETE', undefined],
+    [`/documents/${documentId}/sharing`, 'PATCH', { shared: true }],
+    [`/tenants/${rental.tenant.id}/erase`, 'POST', { password: PASSWORD }],
+    [`/tenants/${rental.tenant.id}/portal/invite`, 'POST', {}],
+    [`/tenants/${rental.tenant.id}/portal`, 'DELETE', undefined],
+    [`/payment-notices/${noticeId}/confirm`, 'POST', {}],
+    [`/payment-notices/${noticeId}/reject`, 'POST', { reason: 'Hijack' }],
+    [`/staff/${memberId}`, 'PATCH', { role: 'MANAGER' }],
+    [`/staff/${memberId}`, 'DELETE', undefined],
+    [`/staff/invitations/${invitationId}`, 'DELETE', undefined],
+    [`/notifications/mail/${failedMailId}/retry`, 'POST', undefined],
+  ];
+
   it('never exposes or mutates another organization’s records by id (IDOR)', async () => {
-    const reads = [
-      `/tenants/${rental.tenant.id}`,
-      `/leases/${rental.lease.id}/ledger`,
-      `/leases/${rental.lease.id}/open-charges`,
-      `/payments/${paymentId}/receipt`,
-    ];
-    for (const path of reads) {
+    for (const path of idorReads()) {
       const response = await intruder.get(path);
       expect([403, 404], path).toContain(response.status);
       expect(response.text, path).not.toContain(rental.tenant.lastName);
     }
-    const writes: Array<[string, 'POST' | 'PATCH' | 'DELETE', unknown]> = [
-      [`/properties/${rental.property.id}`, 'PATCH', { name: 'Hijacked', type: 'Apartment', address: 'Nowhere 1', city: 'X City' }],
-      [`/properties/${rental.property.id}/units`, 'POST', { number: 'Z9', type: 'Studio', monthlyRent: '1.00' }],
-      [`/units/${rental.unit.id}`, 'PATCH', { number: 'Z9', type: 'Studio', monthlyRent: '1.00' }],
-      [`/tenants/${rental.tenant.id}`, 'PATCH', { firstName: 'Hijacked', lastName: 'X' }],
-      [`/tenants/${rental.tenant.id}/archive`, 'POST', {}],
-      [`/leases/${rental.lease.id}/renew`, 'POST', { endDate: '2099-01-01' }],
-      [`/leases/${rental.lease.id}/rent-change`, 'POST', { effectiveFrom: '2099-01-01', monthlyRent: '1.00' }],
-      [`/leases/${rental.lease.id}/terminate`, 'POST', { endDate: today(), reason: 'Hijack' }],
-      [`/leases/${rental.lease.id}/deposits`, 'POST', { type: 'RECEIPT', amount: '1.00' }],
-      ['/charges', 'POST', { leaseId: rental.lease.id, type: 'OTHER', description: 'Fake', amount: '1.00', dueDate: today() }],
-      [`/charges/${chargeId}/adjustments`, 'POST', { type: 'WAIVER', amount: '1.00', reason: 'Hijack' }],
-      [`/charges/${chargeId}/void`, 'POST', { reason: 'Hijack' }],
-      ['/payments', 'POST', { tenantId: rental.tenant.id, leaseId: rental.lease.id, amount: '1.00', method: 'CASH', paidAt: new Date().toISOString(), allocations: [] }],
-      [`/payments/${paymentId}/reverse`, 'POST', { reason: 'Hijack' }],
-      ['/leases', 'POST', { unitId: rental.unit.id, tenantId: rental.tenant.id, startDate: today(), monthlyRent: '1.00', billingDay: 1, dueDay: 1 }],
-      ['/billing-schedules', 'POST', { leaseId: rental.lease.id, type: 'WATER', description: 'Water', amount: '1.00', billingDay: 1, dueDay: 1, startsOn: today() }],
-      ['/expenses', 'POST', { propertyId: rental.property.id, category: 'REPAIR', description: 'Fake', amount: '1.00', incurredOn: today() }],
-      [`/expenses/${expenseId}/void`, 'POST', { reason: 'Hijack' }],
-      ['/maintenance', 'POST', { propertyId: rental.property.id, title: 'Fake', description: 'Fake one', priority: 'LOW' }],
-      [`/maintenance/${maintenanceId}`, 'PATCH', { status: 'CANCELLED' }],
-      ['/documents', 'POST', { name: 'Fake', category: 'Lease', entityType: 'Tenant', entityId: rental.tenant.id, url: 'https://evil.example.com/x' }],
-      [`/documents/${documentId}`, 'DELETE', undefined],
-    ];
-    for (const [path, method, body] of writes) {
+    for (const [path, method, body] of idorWrites()) {
       const response = await intruder.request(method, path, body);
       expect([403, 404], `${method} ${path} → ${response.status} ${response.text}`).toContain(response.status);
     }
+    // An upload cannot attach a file to another workspace's tenant.
+    const pdf = Buffer.concat([Buffer.from('%PDF-1.7 '), Buffer.alloc(64, 0x20), Buffer.from(' %%EOF')]);
+    const upload = await intruder.request('POST', `/documents/files?name=Fake&category=Lease&entityType=Tenant&entityId=${rental.tenant.id}`, pdf, { 'content-type': 'application/pdf' });
+    expect([403, 404], `upload → ${upload.status}`).toContain(upload.status);
+    // Revoking a session that is not yours changes nothing (the route answers 204 either way).
+    await intruder.request('DELETE', `/auth/sessions/${ownerSessionId}`);
+    expect((await owner.get('/auth/me')).status).toBe(200);
     // Nothing leaked into the intruder's own lists either.
-    for (const path of ['/tenants', '/leases', '/charges', '/payments', '/expenses', '/maintenance', '/documents', '/arrears'])
+    const lists = ['/tenants', '/leases', '/charges', '/payments', '/expenses', '/maintenance', '/documents', '/arrears', '/deposits', '/billing-schedules', '/payment-notices', '/audit-log', '/reports/transactions.csv', '/reminders', '/collections/options', '/notifications/failed', '/staff'];
+    for (const path of lists)
       expect((await intruder.get(path)).text, path).not.toContain(rental.tenant.id);
     // The owner's data is unchanged.
     const tenant = (await owner.get(`/tenants/${rental.tenant.id}`)).body;
     expect(tenant.firstName).toBe('Tenant');
     expect(tenant.leases[0].status).toBe('ACTIVE');
+  });
+
+  it('sweeps every route that takes an id, so a new one cannot be skipped by accident', () => {
+    const routes = routesOf(app);
+    const swept = new Set([
+      ...idorReads().map((path) => templateOf(routes, 'GET', path)),
+      ...idorWrites().map(([path, method]) => templateOf(routes, method, path)),
+    ]);
+    const unswept = routes
+      .filter((route) => !route.isPublic && route.path.includes(':') && !swept.has(route.key) && !(route.key in IDOR_EXEMPT))
+      .map((route) => route.key);
+    expect(unswept).toEqual([]);
   });
 
   it('rejects malformed ids with 400 instead of a server error', async () => {

@@ -166,6 +166,28 @@ describe('billing, payments, and balances', () => {
     expect((await owner.post(`/payments/${payment.body.id}/reverse`, { reason: 'Twice' })).status).toBe(404);
   });
 
+  it('reverses a payment exactly once when two reversals race', async () => {
+    const rental = await createRental(owner, { rent: '3000.00' });
+    const [charge] = await openCharges(rental.lease.id);
+    const payment = await pay(rental, '3000.00', [{ chargeId: charge.id, amount: '3000.00' }]);
+    const results = await Promise.all([1, 2].map(() => owner.post(`/payments/${payment.body.id}/reverse`, { reason: 'Bounced transfer' })));
+    expect(results.map((r) => r.status).sort()).toEqual([201, 404]);
+    expect(await prismaOf(app).ledgerEntry.count({ where: { paymentId: payment.body.id, type: 'PAYMENT_REVERSAL' } })).toBe(1);
+    expect((await openCharges(rental.lease.id))[0].outstanding).toBe('3000.00');
+  });
+
+  it('never leaves a payment allocated to a voided charge when a void and a payment race', async () => {
+    const rental = await createRental(owner, { rent: '1000.00' });
+    const extra = await owner.post('/charges', { leaseId: rental.lease.id, type: 'WATER', description: 'Water', amount: '350.00', dueDate: today() });
+    const [voided, paid] = await Promise.all([
+      owner.post(`/charges/${extra.body.id}/void`, { reason: 'Entered twice' }),
+      pay(rental, '350.00', [{ chargeId: extra.body.id, amount: '350.00' }]),
+    ]);
+    expect([voided.status, paid.status].filter((status) => status === 201)).toHaveLength(1);
+    const charge = await prismaOf(app).charge.findUniqueOrThrow({ where: { id: extra.body.id }, include: { allocations: { where: { payment: { status: 'POSTED' } } } } });
+    expect(charge.status === 'VOIDED' ? charge.allocations : []).toEqual([]);
+  });
+
   it('corrects charges with waivers and voids, keeping the ledger balanced', async () => {
     const rental = await createRental(owner, { rent: '8000.00' });
     const [charge] = await openCharges(rental.lease.id);

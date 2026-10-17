@@ -278,6 +278,9 @@ summary {
   gap: var(--space-3) var(--space-4);
   margin-bottom: var(--space-3);
 
+  &:last-child {
+    margin-bottom: 0;
+  }
   h2 {
     font-size: var(--text-lg);
   }
@@ -564,6 +567,19 @@ div.empty-cell {
   }
   a:hover strong {
     text-decoration: underline;
+  }
+}
+// On phones a trailing action or receipt link sits under the text, so the text keeps the row's width.
+// Amount columns stay on the right.
+@media (max-width: 520px) {
+  .attention-item:not(label):has(> :nth-child(3):is(a, button, .text-button)) {
+    grid-template-columns: 36px minmax(0, 1fr);
+    row-gap: var(--space-2);
+
+    > :nth-child(3) {
+      grid-column: 2;
+      justify-self: start;
+    }
   }
 }
 a.attention-item:hover,

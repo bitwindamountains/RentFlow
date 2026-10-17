@@ -10,7 +10,7 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
 
 ## Done (newest first)
 
-- **2026-10-17: Pre-ship review (`/ship`), and the 2 launch blockers fixed.** Uncommitted.
+- **2026-10-17: Pre-ship review (`/ship`), and the 2 launch blockers fixed.** Committed (`26f02be`, `df04e24`), not pushed.
   - **Verdict:** NO-GO for real tenant data until Next steps 0a is done; GO for staging. There were no Critical or High findings. Local CI passes: 62 unit tests, 110 e2e tests, the web tests, the build, and `npm audit` with 0 issues.
   - **Fixed: erasure left personal data behind.** Erasure now also:
     - clears `Payment.notes`;
@@ -19,7 +19,7 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
     - rewrites `IdempotencyKey.responseBody`, which kept `tenantName` and report notes forever.
     - `privacy.e2e-spec.ts` now seeds all of these. Run against the old code, it finds the name left in 4 tables.
   - **Fixed: anyone could lock an owner out.** Backoff is now counted per email and IP. At 50 failures for an email, every IP that has failed against it is refused too, but clean IPs are not. A password reset clears the block.
-    - New migration `20261017090000_login_failure_source` adds `ipHash` and empties the table. **It is not yet applied to Supabase dev.**
+    - New migration `20261017090000_login_failure_source` adds `ipHash` and empties the table. Applied to Supabase dev on 2026-10-17, with no schema drift.
   - **Recommended before launch** (from the review, not done):
     - add `@RateLimit` to `POST /tenants/:id/erase`;
     - validate `RATE_LIMIT_MULTIPLIER` in `environment.ts` and refuse it in production;

@@ -1,5 +1,6 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { RESET_EMAIL_COOLDOWN } from '../src/auth/auth.service.js';
 import { MailerService } from '../src/mail/mailer.service.js';
 import { Client, prismaOf, registerOwner, startApp, unique } from './helpers.js';
 
@@ -44,8 +45,12 @@ describe('durable transactional email', () => {
     const db = prismaOf(app);
     const mailer = app.get(MailerService);
     const send = vi.spyOn(mailer, 'send').mockRejectedValue(new Error('provider unavailable'));
+    // Each request must fall outside the per-account cooldown of the one before.
+    const ageResetTokens = () => db.userToken.updateMany({ where: { userId: owner.profile.user.id, type: 'PASSWORD_RESET' }, data: { createdAt: new Date(Date.now() - RESET_EMAIL_COOLDOWN) } });
     try {
+      await ageResetTokens();
       await new Client(app).post('/auth/password/forgot', { email: owner.email });
+      await ageResetTokens();
       await new Client(app).post('/auth/password/forgot', { email: owner.email });
     } finally { send.mockRestore(); }
     const rows = await db.mailDelivery.findMany({ where: { kind: 'PASSWORD_RESET', status: 'PENDING', userId: owner.profile.user.id }, orderBy: { createdAt: 'asc' } });

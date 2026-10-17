@@ -11,6 +11,7 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
 ## Done (newest first)
 
 - **2026-10-17: Pre-ship review (`/ship`), and the 2 launch blockers fixed.** Committed (`26f02be`, `df04e24`) and pushed. GitHub CI run 39030985742, started by hand, passed both the verify and containers jobs. The push alone still started no run.
+  - **The push trigger is broken on GitHub's side, for this repo only.** RentFlow has never had a push-triggered run, while push runs work in other repos on this account (latest on 2026-10-13). The workflow, Actions settings, branch filter and commit messages are all fine, and GitHub Actions never creates a check suite for pushed commits here. Two attempts on 2026-10-17 didn't fix it: editing the workflow (`concurrency` added) and turning repo Actions off and back on.
   - **Verdict:** NO-GO for real tenant data until Next steps 0a is done; GO for staging. There were no Critical or High findings. Local CI passes: 62 unit tests, 110 e2e tests, the web tests, the build, and `npm audit` with 0 issues.
   - **Fixed: erasure left personal data behind.** Erasure now also:
     - clears `Payment.notes`;

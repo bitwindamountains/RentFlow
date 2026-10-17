@@ -2,16 +2,19 @@
 
 ## Current task
 
-Working through `tasks/plan.md`. Phase 1 (code) is pushed (2026-10-11), and its 3 migrations are applied to the Supabase dev database. CI started by hand passed (run 38005527295), including the pinned images in the container job. **A push still starts no CI run**, and GitHub creates no check suite for the commit; check the repo's Actions settings. Until that's fixed, run `gh workflow run CI` before each release. Before that, all work was committed and pushed to `main` (2026-10-10). **GitHub CI passed for the first time** (run 37970550334, started manually), including the `containers` job:
+Working through `tasks/plan.md`. Phase 1 (code) is pushed (2026-10-11), and its 3 migrations are applied to the Supabase dev database. CI started by hand passed (run 38005527295), including the pinned images in the container job. Before that, all work was committed and pushed to `main` (2026-10-10). **GitHub CI passed for the first time** (run 37970550334, started manually), including the `containers` job:
 - The Docker images build.
 - The production stack starts and passes its proxy, readiness and PWA checks.
 
-Pushes to `main` still do not start CI on their own. Start it with `gh workflow run CI`, and check the repo's Actions settings for push events. The remaining production blockers are listed under Next steps.
+Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blockers are listed under Next steps.
 
 ## Done (newest first)
 
 - **2026-10-17: Pre-ship review (`/ship`), and the 2 launch blockers fixed.** Committed (`26f02be`, `df04e24`) and pushed. GitHub CI run 39030985742, started by hand, passed both the verify and containers jobs. The push alone still started no run.
-  - **The push trigger is broken on GitHub's side, for this repo only.** RentFlow has never had a push-triggered run, while push runs work in other repos on this account (latest on 2026-10-13). The workflow, Actions settings, branch filter and commit messages are all fine, and GitHub Actions never creates a check suite for pushed commits here. Two attempts on 2026-10-17 didn't fix it: editing the workflow (`concurrency` added) and turning repo Actions off and back on.
+  - **Fixed: pushes started no CI run.** This was a problem on GitHub's side, for this repo only.
+    - RentFlow had never had a push-triggered run, and GitHub Actions created no check suite for pushed commits. Push runs worked in other repos on this account.
+    - The workflow, Actions settings, branch filter and commit messages were all fine. Editing the workflow (adding `concurrency`) did not help.
+    - Turning repo Actions off and back on fixed it: `gh api -X PUT repos/{owner}/{repo}/actions/permissions -F enabled=false`, then the same with `enabled=true -f allowed_actions=all`. The next push started run 39031566084. Do the same if it happens again.
   - **Verdict:** NO-GO for real tenant data until Next steps 0a is done; GO for staging. There were no Critical or High findings. Local CI passes: 62 unit tests, 110 e2e tests, the web tests, the build, and `npm audit` with 0 issues.
   - **Fixed: erasure left personal data behind.** Erasure now also:
     - clears `Payment.notes`;
@@ -166,7 +169,7 @@ Pushes to `main` still do not start CI on their own. Start it with `gh workflow 
    - Staging run on the real domain: smoke script, real email, and browser checks of sign-in, CSRF, MFA and PWA install/update.
    - Restore drill on PostgreSQL 17 with the real backup locations.
    - Privacy notice and a designated DPO.
-   - Start CI by hand (`gh workflow run CI`) before each release.
+   - Check that CI passed on the release commit.
 0. **Supabase follow-ups:**
    - Back up off-site regularly with `npm run db:backup`, because the free tier has no backups.
    - Keep each app's role connection limit within the shared budget of about 60 connections.

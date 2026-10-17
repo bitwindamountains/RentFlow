@@ -50,6 +50,24 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ ...base, NODE_ENV: 'development', DATABASE_URL: '' })).toThrow('DATABASE_URL');
   });
 
+  it('requires TLS in production for a database outside the private network', () => {
+    const remote = 'postgresql://u:p@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres?schema=rentflow';
+    expect(() => validateEnvironment({ ...base, DATABASE_URL: remote })).toThrow('sslmode=require');
+    expect(() => validateEnvironment({ ...base, DATABASE_URL: `${remote}&sslmode=prefer` })).toThrow('sslmode=require');
+    expect(() => validateEnvironment({ ...base, DATABASE_URL: 'postgresql://u:p@10.0.0.5:5432/rentflow' })).toThrow('sslmode=require');
+    expect(validateEnvironment({ ...base, DATABASE_URL: `${remote}&sslmode=require` }).DATABASE_URL).toContain('sslmode=require');
+    for (const host of ['postgres', 'db', 'localhost', '127.0.0.1', '[::1]'])
+      expect(() => validateEnvironment({ ...base, DATABASE_URL: `postgresql://u:p@${host}:5432/rentflow` }), host).not.toThrow();
+    expect(() => validateEnvironment({ ...base, NODE_ENV: 'development', DATABASE_URL: remote })).not.toThrow();
+  });
+
+  it('accepts a rate-limit multiplier only outside production, as a whole number up to 1000', () => {
+    expect(() => validateEnvironment({ ...base, RATE_LIMIT_MULTIPLIER: '1' })).toThrow('RATE_LIMIT_MULTIPLIER');
+    expect(() => validateEnvironment({ ...base, NODE_ENV: 'test', RATE_LIMIT_MULTIPLIER: '1000' })).not.toThrow();
+    for (const bad of ['0', 'abc', '2.5', '5000'])
+      expect(() => validateEnvironment({ ...base, NODE_ENV: 'test', RATE_LIMIT_MULTIPLIER: bad }), bad).toThrow('RATE_LIMIT_MULTIPLIER');
+  });
+
   it('rejects the removed in-memory store', () => {
     expect(() => validateEnvironment({ ...base, USE_IN_MEMORY_STORE: 'true' })).toThrow('removed');
   });

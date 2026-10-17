@@ -1,6 +1,7 @@
 import { createParamDecorator, type ExecutionContext, SetMetadata } from '@nestjs/common';
 import { RouteConfig } from '@nestjs/platform-fastify';
 import type { MembershipRole } from '@prisma/client';
+import { rateLimitMultiplier } from '../config/environment.js';
 import type { AuthenticatedRequest, SessionContext } from './session.types.js';
 
 export const IS_PUBLIC = 'rentflow:isPublic';
@@ -28,7 +29,7 @@ export const COLLECTORS: MembershipRole[] = ['OWNER', 'MANAGER', 'COLLECTOR'];
 export const RateLimit = (max: number, timeWindow: string) =>
   RouteConfig({
     rateLimit: {
-      max: () => max * Number(process.env['RATE_LIMIT_MULTIPLIER'] ?? 1),
+      max: () => max * rateLimitMultiplier(),
       timeWindow,
     },
   });

@@ -28,6 +28,31 @@ it('catches up rent through expiry and allows staff to collect the ended lease',
   expect(await prismaOf(app).charge.count({ where: { leaseId: rental.lease.id } })).toBe(expected);
 });
 
+it('settles a short payment against the oldest charges first', async () => {
+  const { client } = await registerOwner(app);
+  const rental = await createRental(client, { startDate: monthStart(-2), rent: '10000.00' });
+  await app.get(JobsService).runAll();
+  const before: Array<{ id: string; outstanding: string }> = (await client.get(`/leases/${rental.lease.id}/open-charges`)).body;
+  expect(before.length).toBeGreaterThanOrEqual(3);
+  const paid = await client.post('/payments', { leaseId: rental.lease.id, tenantId: rental.tenant.id, amount: '15000.00',
+    method: 'CASH', paidAt: new Date().toISOString(), allocations: [] });
+  expect(paid.body.unallocated).toBe('0.00');
+
+  // Walk the charges oldest first with the same 15,000: what is left is what each should still owe.
+  let remaining = 1_500_000;
+  const expected = before
+    .map((charge) => {
+      const owed = Math.round(Number(charge.outstanding) * 100);
+      const settled = Math.min(owed, remaining);
+      remaining -= settled;
+      return [charge.id, ((owed - settled) / 100).toFixed(2)];
+    })
+    .filter(([, left]) => left !== '0.00');
+  const after = (await client.get(`/leases/${rental.lease.id}/open-charges`)).body.map((c: { id: string; outstanding: string }) => [c.id, c.outstanding]);
+  expect(after).toEqual(expected);
+  expect(after[0]).not.toEqual([before[0]!.id, before[0]!.outstanding]);
+});
+
 it('recovers missed rent on an already terminated lease without billing beyond its end', async () => {
   const { client } = await registerOwner(app);
   const rental = await createRental(client, { startDate: monthStart(-3), rent: '1000.00' });

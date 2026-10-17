@@ -1,4 +1,8 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
+import { ModulesContainer } from '@nestjs/core';
+import { IS_PUBLIC, ROLES } from '../src/auth/decorators.js';
 import { randomUUID } from 'node:crypto';
 import { inject } from 'vitest';
 import { PrismaService } from '../src/common/prisma.service.js';
@@ -30,6 +34,41 @@ export async function startApp(): Promise<NestFastifyApplication> {
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;
+}
+
+export interface RouteInfo {
+  /** For example `POST /tenants/:id/erase`, relative to /api/v1. */
+  key: string;
+  method: string;
+  path: string;
+  isPublic: boolean;
+  roles: string[];
+}
+
+/** Every route the API serves, read from the controllers' own metadata, so a sweep can prove it covered them all. */
+export function routesOf(app: NestFastifyApplication): RouteInfo[] {
+  const routes: RouteInfo[] = [];
+  for (const module of app.get(ModulesContainer).values())
+    for (const wrapper of module.controllers.values()) {
+      const controller = wrapper.metatype as (new (...args: never[]) => object) | null;
+      if (!controller) continue;
+      const base = String(Reflect.getMetadata(PATH_METADATA, controller) ?? '');
+      for (const name of Object.getOwnPropertyNames(controller.prototype)) {
+        const handler = (controller.prototype as Record<string, unknown>)[name];
+        if (name === 'constructor' || typeof handler !== 'function' || Reflect.getMetadata(PATH_METADATA, handler) === undefined) continue;
+        const method = RequestMethod[Reflect.getMetadata(METHOD_METADATA, handler) as RequestMethod];
+        const path = `/${[base, String(Reflect.getMetadata(PATH_METADATA, handler))].filter((part) => part && part !== '/').join('/')}`.replace(/\/+/g, '/');
+        const meta = (key: string) => Reflect.getMetadata(key, handler) ?? Reflect.getMetadata(key, controller);
+        routes.push({ key: `${method} ${path}`, method, path, isPublic: meta(IS_PUBLIC) === true, roles: meta(ROLES) ?? [] });
+      }
+    }
+  return routes;
+}
+
+/** The route template a concrete request path was served by, such as `/tenants/:id` for `/tenants/1a2b…`. */
+export function templateOf(routes: RouteInfo[], method: string, concrete: string): string | undefined {
+  const path = concrete.split('?')[0]!;
+  return routes.find((route) => route.method === method && new RegExp(`^${route.path.replace(/:[^/]+/g, '[^/]+')}$`).test(path))?.key;
 }
 
 export interface Result {

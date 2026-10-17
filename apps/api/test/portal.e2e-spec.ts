@@ -9,6 +9,7 @@ import {
   PASSWORD,
   prismaOf,
   registerOwner,
+  routesOf,
   startApp,
   today,
   tokenIn,
@@ -78,6 +79,17 @@ describe('tenant portal', () => {
     for (const [path, body] of writes) expect([path, (await tenantA.post(path, body)).status]).toEqual([path, 403]);
     // And staff cannot use the tenant routes.
     expect((await owner.get('/portal/home')).status).toBe(403);
+  });
+
+  it('refuses a tenant on every route not open to tenants, including ones added later', async () => {
+    const staffOnly = routesOf(app).filter((route) => !route.isPublic && !route.roles.includes('TENANT'));
+    expect(staffOnly.length).toBeGreaterThan(50);
+    for (const route of staffOnly) {
+      // The role check runs before any id lookup or body validation, so placeholder values are enough.
+      const path = route.path.replace(/:[^/]+/g, randomUUID());
+      const response = await tenantA.request(route.method as 'GET' | 'POST' | 'PATCH' | 'DELETE', path, route.method === 'GET' || route.method === 'DELETE' ? undefined : {});
+      expect([route.key, response.status, response.body?.code]).toEqual([route.key, 403, 'FORBIDDEN']);
+    }
   });
 
   it('keeps tenants of the same landlord apart', async () => {

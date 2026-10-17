@@ -82,12 +82,13 @@ export class TenantPrivacyService {
     const existing = await this.prisma.tenant.findFirst({ where: { id, organizationId }, select: { erasedAt: true } });
     if (!existing) throw notFound();
     if (existing.erasedAt) return { erased: true };
-    const balance = (await this.balances.tenantBalances(organizationId, [id])).get(id) ?? ZERO;
-    if (!balance.isZero()) throw new DomainError('TENANT_ERASE_BALANCE', 409);
 
-    const storageKeys = await this.prisma.$transaction(async (tx) => {
+    // Serializable, so a payment or reversal committing meanwhile cannot leave an erased tenant owing money.
+    const storageKeys = await this.prisma.serializable(async (tx) => {
       const tenant = await tx.tenant.findFirst({ where: { id, organizationId, erasedAt: null } });
       if (!tenant) return [];
+      const balance = (await this.balances.tenantBalances(organizationId, [id], tx)).get(id) ?? ZERO;
+      if (!balance.isZero()) throw new DomainError('TENANT_ERASE_BALANCE', 409);
       const leases = await tx.lease.findMany({
         where: { organizationId, OR: [{ primaryTenantId: id }, { occupants: { some: { tenantId: id } } }] },
         select: { id: true, status: true, depositAccount: { select: { transactions: { select: { type: true, amount: true } } } } },

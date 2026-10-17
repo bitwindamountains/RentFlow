@@ -95,8 +95,8 @@ export class BalancesService {
   }
 
   /** Ledger balance per tenant (charges − payments − credits + reversals). */
-  async tenantBalances(organizationId: string, tenantIds?: string[]): Promise<Map<string, Prisma.Decimal>> {
-    const rows = await this.prisma.$queryRaw<Array<{ tenantId: string; balance: Prisma.Decimal }>>`
+  async tenantBalances(organizationId: string, tenantIds?: string[], db: Tx | PrismaService = this.prisma): Promise<Map<string, Prisma.Decimal>> {
+    const rows = await db.$queryRaw<Array<{ tenantId: string; balance: Prisma.Decimal }>>`
       SELECT l."primaryTenantId" AS "tenantId", SUM(e.debit - e.credit) AS balance
       FROM "LedgerEntry" e JOIN "Lease" l ON l.id = e."leaseId"
       WHERE e."organizationId" = ${organizationId}::uuid

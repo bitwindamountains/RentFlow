@@ -12,15 +12,17 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
   - **Recovery:** 10 one-time recovery codes cover a lost phone. Using one emails the account owner.
   - **Storage:** secrets are encrypted with `MFA_ENCRYPTION_KEY`.
   - **Changes:** turning it off, or replacing recovery codes, needs the password and a code. Turning it on signs out the person's other devices.
-- **Rate limits.** The default is 300 requests/minute per normalized client IP. Sign-in, registration, password reset, email verification, and invitation acceptance override this with stricter per-route/IP limits. Unverified cookies never select a rate-limit bucket.
+- **Rate limits.** The default is 300 requests/minute per normalized client IP. Sign-in, registration, password reset, email verification, invitation acceptance, and tenant erasure (it checks the owner's password) override this with stricter per-route/IP limits. Unverified cookies never select a rate-limit bucket.
+- **Password-reset email.** At most one per account every 2 minutes, however many IPs ask. The response is the same either way.
 - **Sign-in backoff.** Failures are counted per source, meaning one email from one IP, so a stranger cannot lock an owner out of their account.
   - After 10 wrong passwords or two-step codes from one source within 15 minutes, that source is refused until older failures age out.
   - Once an email has 50 failures in the window from any mix of IPs, every IP that has already failed against it is refused too. An IP with no failures, such as the owner's own device, can still sign in.
   - The response is the same generic error as any failed sign-in, so it does not reveal whether the email exists.
   - Failures are stored in the database as hashes of the email and IP, so the limits hold across API instances.
+  - Each attempt is recorded before the password or code is checked, and removed if it was right, so a burst of parallel guesses cannot slip past the limit.
   - A successful sign-in or a password reset clears them.
   - The IP is the client address after `TRUST_PROXY` hops. Set it correctly behind Caddy, or every request appears to come from the proxy.
-  - **Tradeoff:** someone who knows an email address can keep that person from signing in for 15 minutes at a time. Existing sessions are not affected. Owners should keep a signed-in device.
+  - **Tradeoff:** during a wide attack on one account, a legitimate person who mistypes once from an IP is refused there for up to 15 minutes. A password reset lifts it.
 - **Passwords** are hashed with scrypt (N=2^14, r=8, p=5) in a versioned format. Hashes from older releases are upgraded at the person's next successful sign-in.
 - **Financial integrity.**
   - Posted charges and payments are never edited or deleted. Corrections use adjustments (discount, waiver, credit note), voids, and reversals, and every one of these writes a ledger entry.

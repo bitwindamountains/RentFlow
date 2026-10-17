@@ -74,7 +74,7 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 **Multi-tenancy.**
 - Every query is scoped by `organizationId` from the session. Load records with `findFirst({ where: { id, organizationId } })`; a cross-org ID must return 404.
 - `rentflow_same_organization` triggers in the migrations reject cross-org foreign keys as a backstop. Add one for each new foreign key to an organization-owned table.
-- Portal queries are additionally scoped to the session's `tenantId`. `test/security.e2e-spec.ts` and `test/portal.e2e-spec.ts` hold the IDOR and role sweeps; extend them when you add endpoints.
+- Portal queries are additionally scoped to the session's `tenantId`. `test/security.e2e-spec.ts` and `test/portal.e2e-spec.ts` hold the IDOR and role sweeps. They read every route from controller metadata (`routesOf`), so a new route with an id fails the suite until it gets a row in the IDOR sweep, or an `IDOR_EXEMPT` entry naming where it is proven.
 
 **Money and ledger.**
 - Amounts cross the API as decimal strings and are parsed with `parseMoney` and formatted with `formatMoney` from [common/money.ts](apps/api/src/common/money.ts). Never use JS numbers.

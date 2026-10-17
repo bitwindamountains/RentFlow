@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { MembershipRole } from '@prisma/client';
 import { sha256 } from '../common/crypto.js';
 import { formatDateOnly } from '../common/dates.js';
-import { formatMoney } from '../common/money.js';
+import { displayMoney } from '../common/money.js';
 import { PrismaService, type Tx } from '../common/prisma.service.js';
 import { MailerService, type MailMessage } from '../mail/mailer.service.js';
 
@@ -132,7 +132,7 @@ export class NotificationsService {
     });
     if (!notice || notice.status !== 'SUBMITTED') return null;
     const name = `${notice.tenant.firstName} ${notice.tenant.lastName}`;
-    const amount = new Intl.NumberFormat('en-PH', { style: 'currency', currency: notice.organization.currency }).format(Number(formatMoney(notice.amount)));
+    const amount = displayMoney(notice.amount, notice.organization.currency);
     const method = notice.method.replace('_', ' ').toLowerCase();
     return {
       subject: `${name} reported a payment of ${amount}`,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney, parseMoney, sumMoney } from './money.js';
+import { displayMoney, formatMoney, parseMoney, sumMoney } from './money.js';
 
 describe('money', () => {
   it('accepts up to two decimals and rejects everything else', () => {
@@ -15,5 +15,10 @@ describe('money', () => {
   it('adds exactly without binary floating-point error', () => {
     expect(formatMoney(sumMoney(['0.10', '0.20', '0.30']))).toBe('0.60');
     expect(formatMoney(sumMoney(Array.from({ length: 1000 }, () => '0.01')))).toBe('10.00');
+  });
+
+  it('displays amounts with the currency sign and separators, without losing centavos', () => {
+    expect(displayMoney('18000', 'PHP')).toBe('₱18,000.00');
+    expect(displayMoney('9007199254740993.01', 'PHP')).toBe('₱9,007,199,254,740,993.01');
   });
 });

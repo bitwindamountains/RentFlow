@@ -15,6 +15,8 @@ describe('production configuration over local services', () => {
   beforeAll(async () => {
     smtp = await smtpSink();
     vi.stubEnv('NODE_ENV', 'production');
+    // Production refuses the test-only multiplier, so this suite runs with the real limits.
+    vi.stubEnv('RATE_LIMIT_MULTIPLIER', undefined);
     vi.stubEnv('WEB_ORIGIN', origin);
     vi.stubEnv('APP_URL', origin);
     vi.stubEnv('MAIL_PROVIDER', 'smtp');

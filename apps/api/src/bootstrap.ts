@@ -7,7 +7,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { randomUUID } from 'node:crypto';
 import { AppModule } from './app.module.js';
-import { environment, sessionCookieName } from './config/environment.js';
+import { environment, rateLimitMultiplier, sessionCookieName } from './config/environment.js';
 import { UPLOAD_TYPES } from './storage/file-store.service.js';
 
 const levels: LogLevel[] = ['fatal', 'error', 'warn', 'log', 'debug', 'verbose'];
@@ -44,7 +44,7 @@ export async function createApp(options: { logger?: false } = {}): Promise<NestF
   });
   await app.register(rateLimit, {
     global: true,
-    max: () => 300 * Number(process.env['RATE_LIMIT_MULTIPLIER'] ?? 1),
+    max: () => 300 * rateLimitMultiplier(),
     timeWindow: '1 minute',
     // Use the plugin's normalized IP key, including on public auth routes.
     // A caller-supplied cookie is not proof of an authenticated identity.

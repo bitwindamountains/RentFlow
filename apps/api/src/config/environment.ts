@@ -48,6 +48,24 @@ function integer(input: Record<string, unknown>, name: string, fallback: number,
   return value;
 }
 
+/** Loopback and single-label hosts (a Compose service such as `postgres`) stay on the private network. */
+function databaseTlsOk(databaseUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
+  } catch {
+    throw new Error('DATABASE_URL must be a PostgreSQL connection string');
+  }
+  const host = url.hostname;
+  const local = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || !(host.includes('.') || host.includes(':'));
+  return local || ['require', 'verify-ca', 'verify-full'].includes(url.searchParams.get('sslmode') ?? '');
+}
+
+/** Loosens every rate limit, for test suites only. Read per request, so a test can restore real limits. */
+export function rateLimitMultiplier(input: Record<string, unknown> = process.env): number {
+  return integer(input, 'RATE_LIMIT_MULTIPLIER', 1, 1, 1000);
+}
+
 function origin(value: string, name: string): string {
   try {
     const url = new URL(value.trim());
@@ -74,6 +92,10 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     throw new Error('DATABASE_URL must be a PostgreSQL connection string');
   if ('USE_IN_MEMORY_STORE' in input)
     throw new Error('USE_IN_MEMORY_STORE has been removed; use PostgreSQL');
+  if (production && !databaseTlsOk(databaseUrl))
+    throw new Error('DATABASE_URL must set sslmode=require (or verify-ca/verify-full) for a database outside the private Compose network');
+  if (production && 'RATE_LIMIT_MULTIPLIER' in input) throw new Error('RATE_LIMIT_MULTIPLIER is for tests only and is refused in production');
+  rateLimitMultiplier(input);
 
   const origins = String(input['WEB_ORIGIN'] ?? (production ? '' : 'http://localhost:4200'))
     .split(',')

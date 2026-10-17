@@ -1,7 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { LOGIN_FAILURE_ACCOUNT_LIMIT, LOGIN_FAILURE_LIMIT } from '../src/auth/auth.service.js';
+import { LOGIN_FAILURE_ACCOUNT_LIMIT, LOGIN_FAILURE_LIMIT, RESET_EMAIL_COOLDOWN } from '../src/auth/auth.service.js';
 import { sha256 } from '../src/common/crypto.js';
 import { Client, lastEmail, PASSWORD, prismaOf, registerOwner, startApp, tokenIn, unique } from './helpers.js';
 
@@ -95,6 +95,16 @@ describe('authentication', () => {
     expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, tried)).status).toBe(200);
   });
 
+  it('counts parallel attempts before checking any password, so a burst cannot slip past the limit', async () => {
+    const { email } = await registerOwner(app);
+    const source = { 'x-forwarded-for': '198.51.100.40' };
+    await prismaOf(app).loginFailure.createMany({
+      data: Array.from({ length: LOGIN_FAILURE_LIMIT - 1 }, () => ({ emailHash: sha256(email), ipHash: sha256('198.51.100.40') })),
+    });
+    const burst = await Promise.all(Array.from({ length: 5 }, () => new Client(app).post('/auth/login', { email, password: PASSWORD }, source)));
+    expect(burst.filter((response) => response.status === 200).length).toBeLessThanOrEqual(1);
+  });
+
   it('a password reset lifts the block', async () => {
     const { email } = await registerOwner(app);
     const blockedIp = { 'x-forwarded-for': '198.51.100.9' };
@@ -173,6 +183,20 @@ describe('authentication', () => {
     const login = await new Client(app).post('/auth/login', { email, password: 'a brand new passphrase' });
     expect(login.status).toBe(200);
     expect(login.body.user.emailVerified).toBe(true);
+  });
+
+  it('sends one reset email per account per cooldown, with the same response either way', async () => {
+    const { email, profile } = await registerOwner(app);
+    const resetMails = () => prismaOf(app).mailDelivery.count({ where: { kind: 'PASSWORD_RESET', userId: profile.user.id } });
+    const first = await new Client(app).post('/auth/password/forgot', { email }, { 'x-forwarded-for': '198.51.100.21' });
+    const repeat = await new Client(app).post('/auth/password/forgot', { email }, { 'x-forwarded-for': '198.51.100.22' });
+    expect(repeat.status).toBe(202);
+    expect(repeat.body).toEqual(first.body);
+    expect(await resetMails()).toBe(1);
+
+    await prismaOf(app).userToken.updateMany({ where: { userId: profile.user.id, type: 'PASSWORD_RESET' }, data: { createdAt: new Date(Date.now() - RESET_EMAIL_COOLDOWN) } });
+    await new Client(app).post('/auth/password/forgot', { email });
+    expect(await resetMails()).toBe(2);
   });
 
   it('changes the password with the current one and signs out other devices', async () => {

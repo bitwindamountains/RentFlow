@@ -29,6 +29,8 @@ import type { SessionContext } from './session.types.js';
 
 const touchInterval = 5 * 60 * 1000;
 const resetLifetime = 30 * 60 * 1000;
+// One reset email per account in this window, however many IPs ask for it.
+export const RESET_EMAIL_COOLDOWN = 2 * 60 * 1000;
 const verificationLifetime = 48 * 60 * 60 * 1000;
 const mfaChallengeLifetime = 5 * 60 * 1000;
 const mfaChallengeAttempts = 5;
@@ -130,14 +132,12 @@ export class AuthService {
   }): Promise<IssuedSession | MfaChallenge> {
     const email = normalizeEmail(input.email);
     const user = await this.prisma.user.findUnique({ where: { email } });
-    const blocked = await this.loginBlocked(email, input.ip);
+    const attempt = await this.startSignInAttempt(email, input.ip);
     // Always run scrypt so the response time does not reveal registered emails or a block.
     const valid = await verifyPassword(input.password, user?.passwordHash);
-    if (blocked) throw new DomainError('INVALID_CREDENTIALS', 401);
-    if (!user || !valid || user.disabledAt) {
-      await this.recordLoginFailure(email, input.ip);
-      throw new DomainError('INVALID_CREDENTIALS', 401);
-    }
+    // A refused or wrong attempt stays recorded as a failure.
+    if (attempt.blocked || !user || !valid || user.disabledAt) throw new DomainError('INVALID_CREDENTIALS', 401);
+    await this.prisma.loginFailure.delete({ where: { id: attempt.id } });
     const membership = await this.loginMembership(user.id, input.workspace);
     if (!membership) throw new DomainError('INVALID_CREDENTIALS', 401);
     // Only a verified password can upgrade its own hash; the old hash stays valid until then.
@@ -171,12 +171,11 @@ export class AuthService {
     if (!record || record.type !== 'MFA_CHALLENGE' || record.usedAt || record.expiresAt <= new Date() || record.attempts >= mfaChallengeAttempts)
       throw new DomainError('MFA_CHALLENGE_INVALID', 401);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
-    if (user.disabledAt || !user.mfaEnabledAt || (await this.loginBlocked(user.email, input.ip)))
-      throw new DomainError('MFA_CHALLENGE_INVALID', 401);
+    if (user.disabledAt || !user.mfaEnabledAt) throw new DomainError('MFA_CHALLENGE_INVALID', 401);
+    if ((await this.startSignInAttempt(user.email, input.ip)).blocked) throw new DomainError('MFA_CHALLENGE_INVALID', 401);
     const factor = await this.checkSecondFactor(user, input.code);
     if (!factor) {
       await this.prisma.userToken.updateMany({ where: { id: record.id, attempts: { lt: mfaChallengeAttempts } }, data: { attempts: { increment: 1 } } });
-      await this.recordLoginFailure(user.email, input.ip);
       throw new DomainError('INVALID_MFA_CODE', 401);
     }
     const claimed = await this.prisma.userToken.updateMany({ where: { id: record.id, usedAt: null }, data: { usedAt: new Date() } });
@@ -191,15 +190,18 @@ export class AuthService {
   }
 
   // ------------------------------------------------------------ sign-in backoff
-  private async loginBlocked(email: string, ip: string): Promise<boolean> {
+  /**
+   * Records the attempt as a failure before the password or code is checked, so parallel
+   * guesses all count against the limits; a correct one deletes or clears it afterwards.
+   * Earlier attempts are everything recorded except this one.
+   */
+  private async startSignInAttempt(email: string, ip: string): Promise<{ id: string; blocked: boolean }> {
     const recent = { emailHash: sha256(email), createdAt: { gt: new Date(Date.now() - loginFailureWindow) } };
-    const fromSource = await this.prisma.loginFailure.count({ where: { ...recent, ipHash: sha256(ip) } });
-    if (fromSource >= LOGIN_FAILURE_LIMIT) return true;
-    return fromSource > 0 && (await this.prisma.loginFailure.count({ where: recent })) >= LOGIN_FAILURE_ACCOUNT_LIMIT;
-  }
-
-  private async recordLoginFailure(email: string, ip: string): Promise<void> {
-    await this.prisma.loginFailure.create({ data: { emailHash: sha256(email), ipHash: sha256(ip) } });
+    const { id } = await this.prisma.loginFailure.create({ data: { emailHash: recent.emailHash, ipHash: sha256(ip) }, select: { id: true } });
+    const fromSource = (await this.prisma.loginFailure.count({ where: { ...recent, ipHash: sha256(ip) } })) - 1;
+    if (fromSource >= LOGIN_FAILURE_LIMIT) return { id, blocked: true };
+    const blocked = fromSource > 0 && (await this.prisma.loginFailure.count({ where: recent })) - 1 >= LOGIN_FAILURE_ACCOUNT_LIMIT;
+    return { id, blocked };
   }
 
   private async clearLoginFailures(email: string, db: Tx | PrismaService = this.prisma): Promise<void> {
@@ -471,6 +473,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || user.disabledAt) return;
     await this.prisma.$transaction(async (tx) => {
+      const recent = await tx.userToken.count({
+        where: { userId: user.id, type: 'PASSWORD_RESET', createdAt: { gt: new Date(Date.now() - RESET_EMAIL_COOLDOWN) } },
+      });
+      // The response stays the same, so a repeat request reveals nothing.
+      if (recent) return;
       const { token, record } = await this.createToken(tx, user.id, 'PASSWORD_RESET', resetLifetime);
       await this.mailer.enqueue(tx,
         {

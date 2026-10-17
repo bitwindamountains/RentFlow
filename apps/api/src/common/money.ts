@@ -20,6 +20,12 @@ export function formatMoney(value: Prisma.Decimal.Value | null | undefined): str
   return new Prisma.Decimal(value ?? 0).toFixed(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
+/** Money as people read it in text the server writes (₱18,000.00); never parse it back. */
+export function displayMoney(value: Prisma.Decimal.Value, currency: string): string {
+  // The decimal string keeps full precision; Intl accepts it without going through a JS number.
+  return new Intl.NumberFormat('en-PH', { style: 'currency', currency }).format(formatMoney(value) as Intl.StringNumericLiteral);
+}
+
 export function sumMoney(values: Iterable<Prisma.Decimal.Value>): Money {
   let total = ZERO;
   for (const value of values) total = total.plus(value);

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { addDays, dateOf, formatDateOnly, parseDateOnly, todayInZone } from '../common/dates.js';
 import { DomainError } from '../common/errors.js';
-import { formatMoney, ZERO } from '../common/money.js';
+import { displayMoney, formatMoney, ZERO } from '../common/money.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { BalancesService } from '../billing/balances.service.js';
 
@@ -149,7 +149,7 @@ export class ReportsService {
         id: notice.id,
         type: 'PAYMENT_NOTICE',
         title: `${notice.tenant.firstName} ${notice.tenant.lastName} reported a payment`,
-        detail: `${formatMoney(notice.amount)} · ${notice.method.replace('_', ' ').toLowerCase()} · paid ${formatDateOnly(notice.paidOn)}`,
+        detail: `${displayMoney(notice.amount, org.currency)} · ${notice.method.replace('_', ' ').toLowerCase()} · paid ${formatDateOnly(notice.paidOn)}`,
         route: '/payments',
         severity: 'high',
         tenantId: notice.tenantId,
@@ -159,7 +159,7 @@ export class ReportsService {
         id: row.leaseId,
         type: 'OVERDUE_BALANCE',
         title: row.tenantName,
-        detail: `${row.overdue} overdue · ${row.daysOverdue} days · Unit ${row.unitNumber}`,
+        detail: `${displayMoney(row.overdue, org.currency)} overdue · ${row.daysOverdue} days · Unit ${row.unitNumber}`,
         route: `/tenants/${row.tenantId}`,
         severity: row.daysOverdue > 30 ? 'high' : 'medium',
         leaseId: row.leaseId,

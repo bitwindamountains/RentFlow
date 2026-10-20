@@ -69,6 +69,19 @@ describe('landlord operations', () => {
     expect(Number(report.collected)).toBe(0);
   });
 
+  it('replays a retried deposit instead of recording it twice', async () => {
+    const rental = await createRental(owner, { depositRequired: '10000.00' });
+    const path = `/leases/${rental.lease.id}/deposits`;
+    const key = randomUUID();
+    const first = await owner.request('POST', path, { type: 'RECEIPT', amount: '10000.00' }, { 'idempotency-key': key });
+    const retry = await owner.request('POST', path, { type: 'RECEIPT', amount: '10000.00' }, { 'idempotency-key': key });
+    expect(retry.status).toBe(201);
+    expect(retry.body).toEqual(first.body);
+    expect((await owner.request('POST', path, { type: 'RECEIPT', amount: '5000.00' }, { 'idempotency-key': key })).body.code).toBe('IDEMPOTENCY_CONFLICT');
+    const deposit = (await owner.get('/deposits')).body.find((d: { leaseId: string }) => d.leaseId === rental.lease.id);
+    expect(deposit.balance).toBe('10000.00');
+  });
+
   it('voids expenses entered in error and excludes them from reports', async () => {
     const rental = await createRental(owner);
     const expense = await owner.post('/expenses', {

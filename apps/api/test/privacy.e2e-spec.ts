@@ -76,6 +76,31 @@ describe('tenant data export and erasure', () => {
     expect((await manager.post(`/tenants/${rental.tenant.id}/erase`, { password: PASSWORD })).status).toBe(403);
   });
 
+  it('refuses after the lease ends while money is owed, a deposit is held, or a payment report is pending', async () => {
+    const erase = async (tenantId: string) => (await owner.post(`/tenants/${tenantId}/erase`, { password: PASSWORD })).body.code;
+    const end = (leaseId: string) => owner.post(`/leases/${leaseId}/terminate`, { endDate: today(), reason: 'Moved out' });
+    const untouched = async (tenantId: string) => expect((await owner.get(`/tenants/${tenantId}`)).body.firstName).not.toBe('Erased');
+
+    const owing = await createRental(owner, { rent: '8000.00', firstMonth: 'FULL' });
+    expect((await end(owing.lease.id)).status).toBe(201);
+    expect((await owner.get(`/tenants/${owing.tenant.id}`)).body.balance).not.toBe('0.00');
+    expect(await erase(owing.tenant.id)).toBe('TENANT_ERASE_BALANCE');
+    await untouched(owing.tenant.id);
+
+    const deposit = await createRental(owner, { firstMonth: 'NONE', depositRequired: '5000.00' });
+    expect((await owner.post(`/leases/${deposit.lease.id}/deposits`, { type: 'RECEIPT', amount: '5000.00' })).status).toBe(201);
+    expect((await end(deposit.lease.id)).status).toBe(201);
+    expect(await erase(deposit.tenant.id)).toBe('TENANT_ERASE_DEPOSIT_HELD');
+    await untouched(deposit.tenant.id);
+
+    const { rental, portal } = await formerTenant();
+    const notice = await portal.post('/portal/payment-notices', { leaseId: rental.lease.id, amount: '500.00', method: 'GCASH', referenceNumber: `GC${unique()}`, paidOn: today() }, { 'idempotency-key': `notice-${unique()}` });
+    expect(notice.status).toBe(201);
+    expect((await end(rental.lease.id)).status).toBe(201);
+    expect(await erase(rental.tenant.id)).toBe('TENANT_ERASE_PENDING_REPORTS');
+    await untouched(rental.tenant.id);
+  });
+
   it('erases personal details everywhere but keeps the financial records', async () => {
     const { rental, person, marker, portal, documentId } = await formerTenant();
     // Staff free text and the stored response of an idempotent payment both carry the name.

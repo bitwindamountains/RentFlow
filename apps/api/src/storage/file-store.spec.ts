@@ -18,6 +18,11 @@ describe('sniffType', () => {
     expect(sniffType(text('RIFF\u0000\u0000\u0000\u0000WAVEfmt '))).toBeNull();
     expect(sniffType(text('PK\u0003\u0004 docx'))).toBeNull();
     expect(sniffType(bytes())).toBeNull();
+    // Truncated signatures.
+    expect(sniffType(text('%PDF'))).toBeNull();
+    expect(sniffType(bytes(0xff, 0xd8))).toBeNull();
+    expect(sniffType(bytes(0x89, 0x50, 0x4e, 0x47))).toBeNull();
+    expect(sniffType(text('RIFF\u0000\u0000\u0000\u0000WEB'))).toBeNull();
   });
 });
 

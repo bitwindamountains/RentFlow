@@ -105,6 +105,36 @@ describe('two-step sign-in (TOTP)', () => {
     expect((await second.client.post('/auth/login/mfa', { challenge: second.response.body.challenge, code: recoveryCodes[0] })).body.code).toBe('INVALID_MFA_CODE');
   });
 
+  it('refuses an expired challenge, or one whose user was disabled meanwhile, even with a right code', async () => {
+    const expired = await signIn();
+    await prismaOf(app).userToken.update({ where: { tokenHash: sha256(expired.response.body.challenge) }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    expect((await expired.client.post('/auth/login/mfa', { challenge: expired.response.body.challenge, code: await freshCode() })).body.code).toBe('MFA_CHALLENGE_INVALID');
+
+    const disabled = await signIn();
+    await prismaOf(app).user.update({ where: { email }, data: { disabledAt: new Date() } });
+    try {
+      const response = await disabled.client.post('/auth/login/mfa', { challenge: disabled.response.body.challenge, code: await freshCode() });
+      expect(response.body.code).toBe('MFA_CHALLENGE_INVALID');
+      expect(response.headers['set-cookie']).toBeUndefined();
+    } finally {
+      await prismaOf(app).user.update({ where: { email }, data: { disabledAt: null } });
+    }
+  });
+
+  it('lets only one of two simultaneous completions of a challenge sign in', async () => {
+    const { response } = await signIn();
+    const challenge = response.body.challenge;
+    const sessions = () => prismaOf(app).session.count({ where: { user: { email } } });
+    const before = await sessions();
+    // Two different valid factors, so only the one-time claim on the challenge can stop the second.
+    const [totp, recovery] = await Promise.all([
+      new Client(app).post('/auth/login/mfa', { challenge, code: await freshCode() }),
+      new Client(app).post('/auth/login/mfa', { challenge, code: recoveryCodes[1] }),
+    ]);
+    expect([totp.status, recovery.status].filter((status) => status === 200)).toHaveLength(1);
+    expect(await sessions()).toBe(before + 1);
+  });
+
   it('counts wrong codes against the account across challenges, then refuses sign-in', async () => {
     const failures = { emailHash: sha256(email) };
     await prismaOf(app).loginFailure.deleteMany({ where: failures });

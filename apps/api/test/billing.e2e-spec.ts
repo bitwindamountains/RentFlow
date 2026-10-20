@@ -188,6 +188,36 @@ describe('billing, payments, and balances', () => {
     expect(charge.status === 'VOIDED' ? charge.allocations : []).toEqual([]);
   });
 
+  it('replays a retried charge or adjustment instead of posting it twice', async () => {
+    const rental = await createRental(owner, { rent: '8000.00' });
+    const send = (path: string, body: unknown, key: string) => owner.request('POST', path, body, { 'idempotency-key': key });
+    const ledgerCount = () => prismaOf(app).ledgerEntry.count({ where: { leaseId: rental.lease.id } });
+
+    const chargeKey = randomUUID();
+    const water = { leaseId: rental.lease.id, type: 'WATER', description: 'Water', amount: '350.00', dueDate: today() };
+    const first = await send('/charges', water, chargeKey);
+    const entries = await ledgerCount();
+    const retry = await send('/charges', water, chargeKey);
+    expect(retry.status).toBe(201);
+    expect(retry.body.id).toBe(first.body.id);
+    expect((await send('/charges', { ...water, amount: '400.00' }, chargeKey)).body.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(await ledgerCount()).toBe(entries);
+
+    const [rent] = await openCharges(rental.lease.id);
+    const adjustKey = randomUUID();
+    const waiver = { type: 'WAIVER', amount: '1000.00', reason: 'Goodwill' };
+    const adjusted = await send(`/charges/${rent.id}/adjustments`, waiver, adjustKey);
+    expect(adjusted.body.outstanding).toBe('7000.00');
+    const again = await send(`/charges/${rent.id}/adjustments`, waiver, adjustKey);
+    expect(again.status).toBe(201);
+    expect(again.body.id).toBe(adjusted.body.id);
+    // The same key on another charge is a different command, not a replay.
+    expect((await send(`/charges/${first.body.id}/adjustments`, waiver, adjustKey)).body.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect((await send(`/charges/${rent.id}/adjustments`, waiver, '')).status).toBe(400);
+    expect(await prismaOf(app).chargeAdjustment.count({ where: { chargeId: rent.id } })).toBe(1);
+    expect((await openCharges(rental.lease.id)).find((c: { id: string }) => c.id === rent.id).outstanding).toBe('7000.00');
+  });
+
   it('corrects charges with waivers and voids, keeping the ledger balanced', async () => {
     const rental = await createRental(owner, { rent: '8000.00' });
     const [charge] = await openCharges(rental.lease.id);

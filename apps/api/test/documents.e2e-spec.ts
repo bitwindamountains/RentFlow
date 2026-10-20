@@ -74,6 +74,12 @@ describe('document uploads', () => {
     expect((await upload(owner, png, 'application/pdf')).status).toBe(415);
     expect((await upload(owner, html, 'text/html')).status).toBe(415);
     expect((await upload(owner, Buffer.from('<svg/>'), 'image/svg+xml')).status).toBe(415);
+    // Empty, or cut off before the signature is complete.
+    const storedBefore = await storedFiles();
+    expect((await upload(owner, Buffer.alloc(0), 'application/pdf')).status).toBe(400);
+    expect((await upload(owner, Buffer.from('%PD'), 'application/pdf')).body.code).toBe('FILE_TYPE_MISMATCH');
+    expect((await upload(owner, png.subarray(0, 4), 'image/png')).body.code).toBe('FILE_TYPE_MISMATCH');
+    expect(await storedFiles()).toEqual(storedBefore);
     // Too large for UPLOAD_MAX_MB=1 (set for the e2e run).
     const big = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(1_048_576 + 10)]);
     expect((await upload(owner, big, 'application/pdf')).status).toBe(413);

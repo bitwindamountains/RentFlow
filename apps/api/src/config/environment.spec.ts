@@ -81,6 +81,8 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ ...base, APP_URL: 'http://app.example.com' })).toThrow('APP_URL must use https');
     expect(() => validateEnvironment({ ...base, MAIL_PROVIDER: 'log' })).toThrow('MAIL_PROVIDER');
     expect(() => validateEnvironment({ ...base, MAIL_PROVIDER: 'smtp' })).toThrow('SMTP_URL');
+    expect(() => validateEnvironment({ ...base, MAIL_FROM: undefined })).toThrow('MAIL_FROM is required');
+    expect(() => validateEnvironment({ ...base, MAIL_FROM: '' })).toThrow('MAIL_FROM is required');
   });
 
   it('rejects malformed origins', () => {

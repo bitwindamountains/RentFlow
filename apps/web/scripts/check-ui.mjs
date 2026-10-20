@@ -11,7 +11,7 @@
 // Playwright in the local tool cache (see docs/ui-visual-review.md).
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,11 @@ const { default: EmbeddedPostgres } = await import(pathToFileURL(join(apiDir, 's
 
 const API = 'http://localhost:3000/api/v1';
 const WEB = 'http://localhost:4200';
+// The production Content-Security-Policy, so any violation (logged as a console error) fails the review.
+// The dev web server calls the API on :3000; in production it is same-origin behind Caddy.
+const CSP = readFileSync(join(root, 'deploy/Caddyfile'), 'utf8')
+  .match(/Content-Security-Policy "([^"]+)"/)[1]
+  .replace("connect-src 'self'", "connect-src 'self' http://localhost:3000");
 const PASSWORD = 'correct horse battery staple';
 const WIDTHS = [1440, 768, 390, 320];
 const DARK_WIDTHS = [1440, 390];
@@ -92,7 +97,8 @@ async function launchBrowser() {
   for (const executablePath of candidates) {
     if (executablePath && !existsSync(executablePath)) continue;
     try {
-      return await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+      // Pages re-served with the CSP header count as public to Chromium, which would then block localhost calls.
+      return await chromium.launch({ headless: true, args: ['--disable-features=LocalNetworkAccessChecks'], ...(executablePath ? { executablePath } : {}) });
     } catch {
       // try the next browser
     }
@@ -217,6 +223,11 @@ async function review(browser, storageState, label, routes) {
   for (const colorScheme of ['light', 'dark']) {
     for (const width of colorScheme === 'light' ? WIDTHS : DARK_WIDTHS) {
       const context = await browser.newContext({ viewport: { width, height: 960 }, colorScheme, storageState, reducedMotion: 'reduce' });
+      await context.route('**/*', async (route) => {
+        if (route.request().resourceType() !== 'document') return route.continue();
+        const response = await route.fetch();
+        await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': CSP } });
+      });
       const page = await context.newPage();
       page.on('pageerror', (error) => problems.push(`${label} ${width} ${colorScheme}: ${error.message}`));
       page.on('console', (message) => {

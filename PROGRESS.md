@@ -24,9 +24,11 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
     - all three erasure refusals: balance, deposit held, pending reports;
     - the strict-TLS environment cases;
     - `scripts/backup.test.mjs`, which CI runs.
-  - **Still open from the reviews:**
-    - MFA challenge expiry and two completions racing;
-    - empty upload bodies;
+  - **Test gaps closed afterwards (same day):** these tests are now in place:
+    - an expired MFA challenge, a user disabled during a challenge, and two simultaneous completions of one challenge (`mfa.e2e-spec`);
+    - empty and truncated uploads (`documents.e2e-spec`, `file-store.spec`);
+    - the production refusal when `MAIL_FROM` is missing.
+  - **Still open from the reviews (not test gaps):**
     - two reset requests racing can both send an email;
     - `postgres:17-alpine` is not pinned;
     - the CSP allows inline styles, which Angular needs.

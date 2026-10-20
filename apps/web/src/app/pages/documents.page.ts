@@ -89,24 +89,6 @@ const MAX_BYTES = 10 * 1_048_576;
   </section>
   @if (nextCursor()) { <button class="secondary" type="button" (click)="loadMore()" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more documents' }}</button> }
 </div>`,
-  styles: `
-    .segmented { margin-bottom: var(--space-5); }
-    .row-actions { white-space: nowrap; }
-    .row-actions .text-button + .text-button { margin-left: var(--space-3); }
-    td small.status { display: inline-flex; margin-left: var(--space-2); }
-    input[type='file'] { padding: 9px 12px; cursor: pointer; }
-    input[type='file']::file-selector-button {
-      margin-right: var(--space-3);
-      padding: 6px 12px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
-      color: var(--text);
-      font: inherit;
-      font-weight: 650;
-      cursor: pointer;
-    }
-  `,
 })
 export class DocumentsPage implements OnInit {
   private readonly api = inject(ApiClient);

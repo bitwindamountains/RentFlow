@@ -63,30 +63,6 @@ import { appendPage } from '../core/pagination';
     @if (nextCursor()) { <button class="secondary" type="button" (click)="load(true)" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more reports' }}</button> }
   </section>
 }`,
-  styles: `
-    .notices { margin-bottom: var(--space-6); border-color: var(--warning-border); }
-    .notices h2 .status { margin-left: var(--space-2); vertical-align: middle; }
-    .notice-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: var(--space-3) var(--space-4);
-      padding: var(--space-4) 0;
-      border-top: 1px solid var(--border);
-    }
-    .notice-row:first-child { border-top: 0; }
-    .notice-row strong, .notice-row small { display: block; }
-    .notice-row small { margin-top: 2px; color: var(--text-muted); font-size: var(--text-sm); }
-    .notice-row .note { font-style: italic; }
-    .notice-row a.text-button { margin: var(--space-1) var(--space-2) 0 -10px; }
-    .actions { display: flex; gap: var(--space-2); }
-    .reject-form { grid-column: 1 / -1; }
-    .reject-form .modal-actions { margin-top: 0; }
-    @media (max-width: 640px) {
-      .notice-row { grid-template-columns: 1fr; }
-      .actions > * { flex: 1; }
-    }
-  `,
 })
 export class PaymentNoticesComponent implements OnInit {
   protected readonly api = inject(ApiClient);

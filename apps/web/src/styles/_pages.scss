@@ -736,3 +736,139 @@ a.metric-card {
     box-shadow: none;
   }
 }
+
+/* Page and component styles. They are global, scoped by host tag, so the CSP needs no 'unsafe-inline' for styles. */
+
+app-payment-notices {
+  .notices { margin-bottom: var(--space-6); border-color: var(--warning-border); }
+  .notices h2 .status { margin-left: var(--space-2); vertical-align: middle; }
+  .notice-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3) var(--space-4);
+    padding: var(--space-4) 0;
+    border-top: 1px solid var(--border);
+  }
+  .notice-row:first-child { border-top: 0; }
+  .notice-row strong, .notice-row small { display: block; }
+  .notice-row small { margin-top: 2px; color: var(--text-muted); font-size: var(--text-sm); }
+  .notice-row .note { font-style: italic; }
+  .notice-row a.text-button { margin: var(--space-1) var(--space-2) 0 -10px; }
+  .actions { display: flex; gap: var(--space-2); }
+  .reject-form { grid-column: 1 / -1; }
+  .reject-form .modal-actions { margin-top: 0; }
+  @media (max-width: 640px) {
+    .notice-row { grid-template-columns: 1fr; }
+    .actions > * { flex: 1; }
+  }
+}
+
+app-mfa-settings {
+  .mfa-actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+  .mfa-scan ol { margin: 0 0 var(--space-5); padding-left: 1.2em; color: var(--text-muted); line-height: 1.8; }
+  .mfa-qr { display: flex; gap: var(--space-5); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-5); }
+  .mfa-qr img { border-radius: 12px; background: #fff; padding: 8px; border: 1px solid var(--border); }
+  .mfa-qr div { display: grid; gap: var(--space-2); min-width: 0; }
+  .mfa-key { font-size: var(--text-md); letter-spacing: 0.06em; word-break: break-all; }
+  .mfa-codes ul { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: var(--space-2) var(--space-6); margin: var(--space-4) 0 var(--space-5); padding: 0; list-style: none; }
+  .mfa-codes code { font-size: var(--text-md); }
+  .mfa-requirement { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; padding-top: var(--space-4); border-top: 1px solid var(--border); }
+  .mfa-requirement p { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: 0; }
+}
+
+app-documents-page {
+  .segmented { margin-bottom: var(--space-5); }
+  .row-actions { white-space: nowrap; }
+  .row-actions .text-button + .text-button { margin-left: var(--space-3); }
+  td small.status { display: inline-flex; margin-left: var(--space-2); }
+  input[type='file'] { padding: 9px 12px; cursor: pointer; }
+  input[type='file']::file-selector-button {
+    margin-right: var(--space-3);
+    padding: 6px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+  }
+}
+
+app-receipt-page {
+  .receipt { max-width: 640px; margin: 0 auto; }
+  .receipt dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+  .receipt dt { color: var(--text-muted); }
+  .receipt td:first-child { white-space: normal; }
+  .receipt table { width: 100%; min-width: 0; table-layout: fixed; }
+  .receipt .total { font-size: 1.25rem; }
+  .voided { border: 2px solid var(--danger-fg); color: var(--danger-fg); padding: 8px 12px; border-radius: var(--radius-sm); font-weight: 700; }
+  @media print {
+    .no-print { display: none !important; }
+    .receipt { box-shadow: none; border: 0; }
+  }
+}
+
+app-portal-home-page {
+  .portal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+  /* Reuses the dashboard hero look, but not its bento grid-area. */
+  .portal-balance { grid-area: auto; grid-column: 1 / -1; }
+  .portal-balance.is-clear .tile-value { color: var(--success-fg); }
+  .portal-balance .status { align-self: flex-start; margin-top: var(--space-3); font-size: var(--text-sm); }
+  .pending-note {
+    margin: var(--space-4) 0 0;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--warning-fg);
+    font-size: var(--text-sm);
+  }
+  .portal-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .charge-amount { display: grid; justify-items: end; gap: 4px; text-align: right; }
+  .portal-lease h2 { margin-top: var(--space-2); font-size: var(--text-lg); }
+  .lease-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin: var(--space-4) 0 0;
+  }
+  .lease-facts div { padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-2); }
+  .lease-facts dt { color: var(--text-muted); font-size: var(--text-xs); }
+  .lease-facts dd { margin: 2px 0 0; font-weight: 650; }
+  .repairs-title { display: block; margin-top: var(--space-2); font-size: var(--text-xl); }
+  .attention-list .empty-cell { padding: var(--space-6); border: 0; }
+  @media (max-width: 760px) {
+    .portal-grid { grid-template-columns: 1fr; }
+    .portal-actions > * { flex: 1; }
+  }
+}
+
+app-privacy-page {
+  .privacy-page { min-height: 100dvh; padding: var(--space-6) var(--space-4); background: var(--canvas); }
+  .privacy-page article { max-width: 46rem; margin: 0 auto; padding: var(--space-6); line-height: 1.65; }
+  .privacy-page h1 { margin: var(--space-2) 0 var(--space-4); font-size: var(--text-2xl); line-height: 1.25; }
+  .privacy-page h2 { margin: var(--space-6) 0 var(--space-2); font-size: var(--text-lg); }
+  /* Body text, not the small subtitle style panels give a paragraph right after a heading. */
+  .privacy-page article p { margin: 0 0 var(--space-3); color: inherit; font-size: var(--text-md); }
+  .privacy-page ul { padding-left: 1.2em; }
+  .privacy-page li + li { margin-top: var(--space-2); }
+  .privacy-page .auth-brand { display: inline-flex; margin-bottom: var(--space-5); }
+  .privacy-back { margin-top: var(--space-6); }
+}
+
+app-portal-access {
+  .portal-access { margin: var(--space-4) 0; }
+  .invite-link { display: flex; align-items: end; gap: var(--space-2); }
+  .invite-link .field { flex: 1; margin-bottom: 0; }
+  .portal-access > small { display: block; margin-top: var(--space-2); color: var(--text-muted); font-size: var(--text-xs); }
+}
+
+app-portal-repairs-page {
+  fieldset.field { border: 0; padding: 0; }
+  legend { margin-bottom: 6px; font-weight: 600; font-size: var(--text-base); }
+}

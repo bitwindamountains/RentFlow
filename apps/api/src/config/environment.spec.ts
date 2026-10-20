@@ -50,12 +50,16 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ ...base, NODE_ENV: 'development', DATABASE_URL: '' })).toThrow('DATABASE_URL');
   });
 
-  it('requires TLS in production for a database outside the private network', () => {
+  it('requires verified TLS in production for a database outside the private network', () => {
     const remote = 'postgresql://u:p@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres?schema=rentflow';
     expect(() => validateEnvironment({ ...base, DATABASE_URL: remote })).toThrow('sslmode=require');
     expect(() => validateEnvironment({ ...base, DATABASE_URL: `${remote}&sslmode=prefer` })).toThrow('sslmode=require');
     expect(() => validateEnvironment({ ...base, DATABASE_URL: 'postgresql://u:p@10.0.0.5:5432/rentflow' })).toThrow('sslmode=require');
-    expect(validateEnvironment({ ...base, DATABASE_URL: `${remote}&sslmode=require` }).DATABASE_URL).toContain('sslmode=require');
+    // Encrypted but unverified, or modes Prisma silently treats as `prefer`.
+    for (const tls of ['sslmode=require', 'sslmode=require&sslaccept=accept_invalid_certs', 'sslmode=verify-full', 'sslmode=verify-ca&sslaccept=strict'])
+      expect(() => validateEnvironment({ ...base, DATABASE_URL: `${remote}&${tls}` }), tls).toThrow('sslaccept=strict');
+    const strict = `${remote}&sslmode=require&sslaccept=strict&sslcert=/etc/rentflow/db-certs/ca.crt`;
+    expect(validateEnvironment({ ...base, DATABASE_URL: strict }).DATABASE_URL).toBe(strict);
     for (const host of ['postgres', 'db', 'localhost', '127.0.0.1', '[::1]'])
       expect(() => validateEnvironment({ ...base, DATABASE_URL: `postgresql://u:p@${host}:5432/rentflow` }), host).not.toThrow();
     expect(() => validateEnvironment({ ...base, NODE_ENV: 'development', DATABASE_URL: remote })).not.toThrow();

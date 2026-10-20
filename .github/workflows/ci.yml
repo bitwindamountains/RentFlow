@@ -53,7 +53,7 @@ jobs:
       - name: Backup and smoke script syntax
         run: sh -n deploy/backup.sh && sh -n deploy/smoke.sh
       - name: Backup failure handling and test process status
-        run: node --test deploy/backup.test.mjs apps/api/scripts/disposable-postgres.test.mjs
+        run: node --test deploy/backup.test.mjs apps/api/scripts/backup.test.mjs apps/api/scripts/disposable-postgres.test.mjs
 
   containers:
     runs-on: ubuntu-24.04

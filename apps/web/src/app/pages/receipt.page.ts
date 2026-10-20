@@ -7,19 +7,6 @@ import type { Receipt } from '../core/models';
 @Component({
   selector: 'app-receipt-page',
   imports: [RouterLink, MoneyPipe, MomentPipe, LabelPipe],
-  styles: `
-    .receipt { max-width: 640px; margin: 0 auto; }
-    .receipt dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
-    .receipt dt { color: var(--text-muted); }
-    .receipt td:first-child { white-space: normal; }
-    .receipt table { width: 100%; min-width: 0; table-layout: fixed; }
-    .receipt .total { font-size: 1.25rem; }
-    .voided { border: 2px solid var(--danger-fg); color: var(--danger-fg); padding: 8px 12px; border-radius: var(--radius-sm); font-weight: 700; }
-    @media print {
-      .no-print { display: none !important; }
-      .receipt { box-shadow: none; border: 0; }
-    }
-  `,
   template: `
 <div class="page">
   <p class="no-print"><a [routerLink]="portal ? '/portal/payments' : '/payments'" class="text-button">&larr; {{ portal ? 'My payments' : 'Payments' }}</a></p>

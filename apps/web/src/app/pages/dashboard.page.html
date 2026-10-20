@@ -210,9 +210,9 @@
     <section class="bento" aria-busy="true" aria-label="Loading your dashboard">
       @for (area of skeletonAreas; track area) {
         <div [class]="'tile is-skeleton tile-' + area" aria-hidden="true">
-          <span class="skeleton" style="width: 40%; height: 14px"></span>
-          <span class="skeleton" style="width: 70%; height: 28px"></span>
-          <span class="skeleton" style="width: 55%; height: 12px"></span>
+          <span class="skeleton" [style.width.%]="40" [style.height.px]="14"></span>
+          <span class="skeleton" [style.width.%]="70" [style.height.px]="28"></span>
+          <span class="skeleton" [style.width.%]="55" [style.height.px]="12"></span>
         </div>
       }
       <p class="sr-only" role="status">Loading your dashboard…</p>

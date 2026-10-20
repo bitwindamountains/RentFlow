@@ -45,12 +45,6 @@ import type { PortalAccess } from '../core/models';
   }
   @if (error()) { <p class="auth-error" role="alert">{{ error() }}</p> }
 </section>`,
-  styles: `
-    .portal-access { margin: var(--space-4) 0; }
-    .invite-link { display: flex; align-items: end; gap: var(--space-2); }
-    .invite-link .field { flex: 1; margin-bottom: 0; }
-    .portal-access > small { display: block; margin-top: var(--space-2); color: var(--text-muted); font-size: var(--text-xs); }
-  `,
 })
 export class PortalAccessComponent {
   private readonly api = inject(ApiClient);

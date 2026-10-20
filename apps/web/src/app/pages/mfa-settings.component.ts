@@ -131,18 +131,6 @@ interface Setup {
     </div>
   </ng-template>
 </section>`,
-  styles: `
-    .mfa-actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
-    .mfa-scan ol { margin: 0 0 var(--space-5); padding-left: 1.2em; color: var(--text-muted); line-height: 1.8; }
-    .mfa-qr { display: flex; gap: var(--space-5); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-5); }
-    .mfa-qr img { border-radius: 12px; background: #fff; padding: 8px; border: 1px solid var(--border); }
-    .mfa-qr div { display: grid; gap: var(--space-2); min-width: 0; }
-    .mfa-key { font-size: var(--text-md); letter-spacing: 0.06em; word-break: break-all; }
-    .mfa-codes ul { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: var(--space-2) var(--space-6); margin: var(--space-4) 0 var(--space-5); padding: 0; list-style: none; }
-    .mfa-codes code { font-size: var(--text-md); }
-    .mfa-requirement { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; padding-top: var(--space-4); border-top: 1px solid var(--border); }
-    .mfa-requirement p { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: 0; }
-  `,
 })
 export class MfaSettingsComponent {
   private readonly api = inject(ApiClient);

@@ -73,10 +73,6 @@ import { appendPage } from '../core/pagination';
   </section>
   @if (nextCursor()) { <button class="secondary" type="button" (click)="loadMore()" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Load more repairs' }}</button> }
 </div>`,
-  styles: `
-    fieldset.field { border: 0; padding: 0; }
-    legend { margin-bottom: 6px; font-weight: 600; font-size: var(--text-base); }
-  `,
 })
 export class PortalRepairsPage implements OnInit {
   private readonly api = inject(ApiClient);

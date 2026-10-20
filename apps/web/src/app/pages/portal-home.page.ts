@@ -112,49 +112,12 @@ import type { PortalHome } from '../core/models';
     </section>
   } @else if (loading()) {
     <section class="portal-grid" aria-busy="true">
-      <div class="tile tile-hero is-skeleton"><span class="skeleton" style="width: 30%; height: 14px"></span><span class="skeleton" style="width: 60%; height: 40px"></span></div>
-      <div class="tile is-skeleton"><span class="skeleton" style="width: 50%; height: 14px"></span><span class="skeleton" style="width: 80%; height: 14px"></span></div>
+      <div class="tile tile-hero is-skeleton"><span class="skeleton" [style.width.%]="30" [style.height.px]="14"></span><span class="skeleton" [style.width.%]="60" [style.height.px]="40"></span></div>
+      <div class="tile is-skeleton"><span class="skeleton" [style.width.%]="50" [style.height.px]="14"></span><span class="skeleton" [style.width.%]="80" [style.height.px]="14"></span></div>
       <p class="sr-only" role="status">Loading your rental…</p>
     </section>
   }
 </div>`,
-  styles: `
-    .portal-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--space-4);
-    }
-    /* Reuses the dashboard hero look, but not its bento grid-area. */
-    .portal-balance { grid-area: auto; grid-column: 1 / -1; }
-    .portal-balance.is-clear .tile-value { color: var(--success-fg); }
-    .portal-balance .status { align-self: flex-start; margin-top: var(--space-3); font-size: var(--text-sm); }
-    .pending-note {
-      margin: var(--space-4) 0 0;
-      padding: 10px 14px;
-      border-radius: var(--radius-md);
-      background: var(--warning-bg);
-      color: var(--warning-fg);
-      font-size: var(--text-sm);
-    }
-    .portal-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    .charge-amount { display: grid; justify-items: end; gap: 4px; text-align: right; }
-    .portal-lease h2 { margin-top: var(--space-2); font-size: var(--text-lg); }
-    .lease-facts {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--space-3);
-      margin: var(--space-4) 0 0;
-    }
-    .lease-facts div { padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-2); }
-    .lease-facts dt { color: var(--text-muted); font-size: var(--text-xs); }
-    .lease-facts dd { margin: 2px 0 0; font-weight: 650; }
-    .repairs-title { display: block; margin-top: var(--space-2); font-size: var(--text-xl); }
-    .attention-list .empty-cell { padding: var(--space-6); border: 0; }
-    @media (max-width: 760px) {
-      .portal-grid { grid-template-columns: 1fr; }
-      .portal-actions > * { flex: 1; }
-    }
-  `,
 })
 export class PortalHomePage implements OnInit {
   private readonly api = inject(ApiClient);

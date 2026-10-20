@@ -10,7 +10,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
-- **2026-10-20: Second `/ship` review, and its 3 fixes.** Uncommitted. Verdict: GO for staging, NO-GO for real tenants' data until Next steps 0a is done. There were no Critical or High findings. CI passed on `9e416db`.
+- **2026-10-20: Second `/ship` review, and its 3 fixes.** Committed (`ee23284`..`4f8ca03`) and pushed; GitHub CI run 39375687252 passed both jobs. Verdict: GO for staging, NO-GO for real tenants' data until Next steps 0a is done. There were no Critical or High findings. CI passed on `9e416db`.
   - **Database TLS is now verified.**
     - Prisma's built-in engine knows only `sslmode` disable, prefer and require. It treats `verify-ca` and `verify-full` as `prefer`. `require` alone accepts any certificate.
     - Production now requires `sslmode=require&sslaccept=strict` for a remote database. If the provider's CA is private, `sslcert=` must point at it by absolute path. For Supabase that is `prod-ca-2021.crt`, saved in `deploy/certs/`; `compose.managed.yaml` mounts it at `/etc/rentflow/db-certs`.

@@ -223,6 +223,7 @@ export class BillingPage implements OnInit {
   }
 
   protected adjust(charge: Charge): void {
+    this.chargeKey = crypto.randomUUID();
     this.form.set({ kind: 'adjust', charge, type: 'WAIVER', amount: charge.outstanding, reason: '' });
   }
 
@@ -262,7 +263,7 @@ export class BillingPage implements OnInit {
             this.chargeKey,
           )
         : f.kind === 'adjust'
-          ? this.api.post(`/charges/${f.charge.id}/adjustments`, { type: f.type, amount: f.amount, reason: f.reason })
+          ? this.api.post(`/charges/${f.charge.id}/adjustments`, { type: f.type, amount: f.amount, reason: f.reason }, this.chargeKey)
           : this.api.post(`/charges/${f.charge.id}/void`, { reason: f.reason });
     this.saving.set(true);
     this.error.set('');

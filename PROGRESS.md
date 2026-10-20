@@ -10,6 +10,27 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-10-20: Second `/ship` review, and its 3 fixes.** Uncommitted. Verdict: GO for staging, NO-GO for real tenants' data until Next steps 0a is done. There were no Critical or High findings. CI passed on `9e416db`.
+  - **Database TLS is now verified.**
+    - Prisma's built-in engine knows only `sslmode` disable, prefer and require. It treats `verify-ca` and `verify-full` as `prefer`. `require` alone accepts any certificate.
+    - Production now requires `sslmode=require&sslaccept=strict` for a remote database. If the provider's CA is private, `sslcert=` must point at it by absolute path. For Supabase that is `prod-ca-2021.crt`, saved in `deploy/certs/`; `compose.managed.yaml` mounts it at `/etc/rentflow/db-certs`.
+    - `postgresConnection` (the backup helper) maps these to libpq: `sslmode=verify-full`, plus `sslrootcert` set to the file or `system`.
+    - The dev `.env` is not affected, since only production enforces this.
+    - **Not yet tested against the real Supabase pooler.** Do that in the staging run.
+  - **Retrying while blocked no longer extends the block.** A refused attempt is never checked, so `startSignInAttempt` removes its record. Test: `auth.e2e-spec` "retrying while blocked".
+  - **Charge adjustments are idempotent** (`ADJUST_CHARGE`, keyed per charge). The web app sends a key per form, and the test helper sends one too.
+  - **New tests:**
+    - replay and conflict for charges, adjustments and deposits;
+    - all three erasure refusals: balance, deposit held, pending reports;
+    - the strict-TLS environment cases;
+    - `scripts/backup.test.mjs`, which CI runs.
+  - **Still open from the reviews:**
+    - MFA challenge expiry and two completions racing;
+    - empty upload bodies;
+    - two reset requests racing can both send an email;
+    - `postgres:17-alpine` is not pinned;
+    - the CSP allows inline styles, which Angular needs.
+
 - **2026-10-17: Ship review's recommended fixes and missing tests.** Uncommitted. Local CI passes: 65 unit tests, 121 e2e tests, the web tests, the build, and `npm audit` with 0 issues.
   - **Security:**
     - `POST /tenants/:id/erase` has `@RateLimit(10, '15 minutes')`.
@@ -25,7 +46,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
     - `settlement.e2e-spec` covers oldest-first allocation of a short payment.
     - `billing.e2e-spec` covers two reversals racing (exactly one, one ledger entry) and a void racing a payment.
     - New `jobs.e2e-spec` tests the real `JobLock` SQL: one holder at a time, takeover of an expired lock, stopping on a lost lock, and one workspace's failure not blocking the others.
-  - **Still open from the test review:** idempotency replay and conflict tests for charges, adjustments and deposits, MFA challenge edge cases, upload edge cases, and a backup-script test.
+  - **Still open from the test review:** see the 2026-10-20 entry, which closed the idempotency, erasure and backup-script gaps.
 
 - **2026-10-17: Whole-app polish pass (impeccable `polish`).** Uncommitted. The visual review passed before and after: 23 routes at 1440, 768, 390 and 320 px, in light and dark.
   - **Bug:** reminder text showed raw amounts ("18000.00 overdue"), on both the Reminders page and the dashboard's "Coming up" list. A new `displayMoney()` in `common/money.ts` (₱18,000.00, exact from the decimal string, no JS number) now formats them. The staff payment-report alert email uses it too. Unit test added.
@@ -184,7 +205,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 0a. **Before real tenants' data (from the 2026-10-10 pre-ship review):**
    - Production database with backups and point-in-time recovery: Supabase Pro, or the bundled Postgres with `deploy/backup.sh`.
    - Generate `MAIL_ENCRYPTION_KEY` and `MFA_ENCRYPTION_KEY`, and back them up.
-   - Staging run on the real domain: smoke script, real email, and browser checks of sign-in, CSRF, MFA and PWA install/update.
+   - Staging run on the real domain: smoke script, real email, and browser checks of sign-in, CSRF, MFA and PWA install/update. Confirm the API and `prisma migrate` connect with `sslaccept=strict` and the Supabase CA, and run an accessibility check (axe or Lighthouse).
    - Restore drill on PostgreSQL 17 with the real backup locations.
    - Privacy notice and a designated DPO.
    - Check that CI passed on the release commit.

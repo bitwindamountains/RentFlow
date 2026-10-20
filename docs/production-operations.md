@@ -15,7 +15,7 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
 - **Rate limits.** The default is 300 requests/minute per normalized client IP. Sign-in, registration, password reset, email verification, invitation acceptance, and tenant erasure (it checks the owner's password) override this with stricter per-route/IP limits. Unverified cookies never select a rate-limit bucket.
 - **Password-reset email.** At most one per account every 2 minutes, however many IPs ask. The response is the same either way.
 - **Sign-in backoff.** Failures are counted per source, meaning one email from one IP, so a stranger cannot lock an owner out of their account.
-  - After 10 wrong passwords or two-step codes from one source within 15 minutes, that source is refused until older failures age out.
+  - After 10 wrong passwords or two-step codes from one source within 15 minutes, that source is refused until older failures age out. Refused attempts are not checked and do not count, so retrying while blocked does not extend the block.
   - Once an email has 50 failures in the window from any mix of IPs, every IP that has already failed against it is refused too. An IP with no failures, such as the owner's own device, can still sign in.
   - The response is the same generic error as any failed sign-in, so it does not reveal whether the email exists.
   - Failures are stored in the database as hashes of the email and IP, so the limits hold across API instances.
@@ -27,7 +27,7 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
 - **Financial integrity.**
   - Posted charges and payments are never edited or deleted. Corrections use adjustments (discount, waiver, credit note), voids, and reversals, and every one of these writes a ledger entry.
   - Money is `numeric(19,4)` and is validated to two decimals. The web app calculates in integer centavos.
-  - Payments, charges, deposits, and guided setup are idempotent. A retry with the same `Idempotency-Key` returns the original result. Keys are retained with their responses indefinitely, including after a browser tab has been closed for days.
+  - Payments, charges, charge adjustments (discounts, waivers, credit notes), deposits, and guided setup are idempotent. A retry with the same `Idempotency-Key` returns the original result. Keys are retained with their responses indefinitely, including after a browser tab has been closed for days.
   - Unallocated posted payments are applied oldest-first to open charges in the same serializable transaction. New charges consume existing credit, with a `PAYMENT_CREDIT_APPLIED` audit event; no additional cash or ledger credit is posted. Reversing a payment removes all its allocations from balance calculations.
   - Rent is unique per lease and month, across manual and automatic billing.
 - **Uncertain payments.** An unconfirmed payment is saved in the browser tab's session storage before it is sent. Reopening Record payment in that tab offers a safe retry with the same key. It does not record a second payment.

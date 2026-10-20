@@ -48,7 +48,11 @@ function integer(input: Record<string, unknown>, name: string, fallback: number,
   return value;
 }
 
-/** Loopback and single-label hosts (a Compose service such as `postgres`) stay on the private network. */
+/**
+ * Loopback and single-label hosts (a Compose service such as `postgres`) stay on the private network.
+ * Prisma knows only sslmode disable/prefer/require (anything else means prefer), and `require`
+ * accepts any certificate unless `sslaccept=strict`.
+ */
 function databaseTlsOk(databaseUrl: string): boolean {
   let url: URL;
   try {
@@ -58,7 +62,7 @@ function databaseTlsOk(databaseUrl: string): boolean {
   }
   const host = url.hostname;
   const local = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || !(host.includes('.') || host.includes(':'));
-  return local || ['require', 'verify-ca', 'verify-full'].includes(url.searchParams.get('sslmode') ?? '');
+  return local || (url.searchParams.get('sslmode') === 'require' && url.searchParams.get('sslaccept') === 'strict');
 }
 
 /** Loosens every rate limit, for test suites only. Read per request, so a test can restore real limits. */
@@ -93,7 +97,7 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   if ('USE_IN_MEMORY_STORE' in input)
     throw new Error('USE_IN_MEMORY_STORE has been removed; use PostgreSQL');
   if (production && !databaseTlsOk(databaseUrl))
-    throw new Error('DATABASE_URL must set sslmode=require (or verify-ca/verify-full) for a database outside the private Compose network');
+    throw new Error('DATABASE_URL must set sslmode=require&sslaccept=strict (plus sslcert=<CA file> if the provider uses its own CA) for a database outside the private Compose network');
   if (production && 'RATE_LIMIT_MULTIPLIER' in input) throw new Error('RATE_LIMIT_MULTIPLIER is for tests only and is refused in production');
   rateLimitMultiplier(input);
 

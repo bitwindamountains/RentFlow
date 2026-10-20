@@ -15,7 +15,7 @@ For a managed database, set `DATABASE_URL` to that service and add `-f compose.m
 **Supabase, or any database shared with other apps:**
 - **Own role and schema:** give RentFlow its own login role and its own schema, for example `rentflow`, never `public`.
   - Set `alter role rentflow set search_path = rentflow`, because raw SQL in the API uses unqualified table names.
-  - Add `?schema=rentflow&sslmode=require` to `DATABASE_URL`.
+  - Add `?schema=rentflow&sslmode=require&sslaccept=strict&sslcert=/etc/rentflow/db-certs/prod-ca-2021.crt` to `DATABASE_URL`. Download the CA from Dashboard > Database settings > SSL Configuration and save it as `deploy/certs/prod-ca-2021.crt`; `compose.managed.yaml` mounts that folder read-only.
 - **Connection:** connect through the Supavisor session pooler (`<role>.<project-ref>@aws-0-<region>.pooler.supabase.com:5432`). It serves both the API and `prisma migrate`. The direct `db.<ref>.supabase.co` host is IPv6-only.
 - **Connection budget:** set `connection_limit` so the API pool, plus one connection for migrations and one for `pg_dump`, stays under the role's connection limit.
 - **Statement timeout:** a role-level `statement_timeout` also applies to migrations. Raise it for a release whose migration backfills large tables.
@@ -45,7 +45,7 @@ The API validates its configuration at startup and exits with a clear message if
 | --- | --- |
 | `WEB_ORIGIN` | Exact public origin(s), comma-separated, `https://` only |
 | `APP_URL` | HTTPS origin for links in emails (defaults to the first `WEB_ORIGIN`) |
-| `DATABASE_URL` | Add `connection_limit=10` (or your pooler's limit). A database on another host needs `sslmode=require` (or `verify-ca`/`verify-full`), or the API refuses to start; the bundled `postgres` service and `localhost` are exempt. |
+| `DATABASE_URL` | Add `connection_limit=10` (or your pooler's limit). A database on another host needs `sslmode=require&sslaccept=strict`, or the API refuses to start. Prisma ignores `verify-ca`/`verify-full`, and `require` alone accepts any certificate. If the provider's CA is not a public one (Supabase, RDS), also set `sslcert=` to an absolute path such as `/etc/rentflow/db-certs/<file>` (from `deploy/certs/`); the bundled `postgres` service and `localhost` are exempt. |
 | `TRUST_PROXY` | Number of reverse proxies in front of the API (`1` with the bundled Caddy). Rate limiting keys on the client IP this reveals. |
 | `RATE_LIMIT_MULTIPLIER` | Test suites only. Production refuses to start when it is set. |
 | `ENABLE_JOBS` | Billing, lease expiry, and file cleanup every 15 minutes; queued email every 30 seconds. Database leases/claims coordinate instances. Keep enabled for recovery after outages. |

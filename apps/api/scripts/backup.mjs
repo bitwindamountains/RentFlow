@@ -14,7 +14,14 @@ export function postgresConnection(databaseUrl) {
   const password = url.password ? decodeURIComponent(url.password) : undefined;
   const schema = url.searchParams.get('schema') || 'public';
   url.password = '';
-  for (const option of ['schema', 'connection_limit', 'pool_timeout', 'pgbouncer', 'statement_cache_size', 'socket_timeout', 'sslaccept'])
+  // Prisma's sslcert is the server CA (libpq's sslrootcert); libpq's sslcert is a client certificate.
+  // Prisma's sslaccept=strict without sslcert trusts the system store; libpq 16+ spells that sslrootcert=system.
+  const rootCert = url.searchParams.get('sslcert');
+  if (url.searchParams.get('sslaccept') === 'strict') {
+    url.searchParams.set('sslmode', 'verify-full');
+    url.searchParams.set('sslrootcert', rootCert || 'system');
+  } else if (rootCert) url.searchParams.set('sslrootcert', rootCert);
+  for (const option of ['schema', 'connection_limit', 'pool_timeout', 'pgbouncer', 'statement_cache_size', 'socket_timeout', 'sslaccept', 'sslcert'])
     url.searchParams.delete(option);
   return { url: url.toString(), schema, env:{ ...process.env, ...(password !== undefined ? { PGPASSWORD: password } : {}) } };
 }

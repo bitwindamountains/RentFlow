@@ -135,7 +135,7 @@ export class AuthService {
     const attempt = await this.startSignInAttempt(email, input.ip);
     // Always run scrypt so the response time does not reveal registered emails or a block.
     const valid = await verifyPassword(input.password, user?.passwordHash);
-    // A refused or wrong attempt stays recorded as a failure.
+    // A wrong attempt stays recorded as a failure.
     if (attempt.blocked || !user || !valid || user.disabledAt) throw new DomainError('INVALID_CREDENTIALS', 401);
     await this.prisma.loginFailure.delete({ where: { id: attempt.id } });
     const membership = await this.loginMembership(user.id, input.workspace);
@@ -193,14 +193,18 @@ export class AuthService {
   /**
    * Records the attempt as a failure before the password or code is checked, so parallel
    * guesses all count against the limits; a correct one deletes or clears it afterwards.
-   * Earlier attempts are everything recorded except this one.
+   * Earlier attempts are everything recorded except this one. A blocked attempt is never
+   * checked, so it is not a guess: it is removed, and the block lifts 15 minutes after the
+   * last real failure even if the person keeps trying.
    */
   private async startSignInAttempt(email: string, ip: string): Promise<{ id: string; blocked: boolean }> {
     const recent = { emailHash: sha256(email), createdAt: { gt: new Date(Date.now() - loginFailureWindow) } };
     const { id } = await this.prisma.loginFailure.create({ data: { emailHash: recent.emailHash, ipHash: sha256(ip) }, select: { id: true } });
     const fromSource = (await this.prisma.loginFailure.count({ where: { ...recent, ipHash: sha256(ip) } })) - 1;
-    if (fromSource >= LOGIN_FAILURE_LIMIT) return { id, blocked: true };
-    const blocked = fromSource > 0 && (await this.prisma.loginFailure.count({ where: recent })) - 1 >= LOGIN_FAILURE_ACCOUNT_LIMIT;
+    const blocked =
+      fromSource >= LOGIN_FAILURE_LIMIT ||
+      (fromSource > 0 && (await this.prisma.loginFailure.count({ where: recent })) - 1 >= LOGIN_FAILURE_ACCOUNT_LIMIT);
+    if (blocked) await this.prisma.loginFailure.delete({ where: { id } });
     return { id, blocked };
   }
 

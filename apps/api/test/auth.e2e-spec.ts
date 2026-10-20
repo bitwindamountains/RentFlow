@@ -80,6 +80,21 @@ describe('authentication', () => {
     expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, attacker)).status).toBe(200);
   });
 
+  it('retrying while blocked does not extend the block', async () => {
+    const { email } = await registerOwner(app);
+    const source = { 'x-forwarded-for': '198.51.100.2' };
+    const failures = prismaOf(app).loginFailure;
+    for (let attempt = 1; attempt <= LOGIN_FAILURE_LIMIT; attempt += 1)
+      await new Client(app).post('/auth/login', { email, password: 'not the password at all' }, source);
+    for (let attempt = 1; attempt <= 3; attempt += 1)
+      expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, source)).status).toBe(401);
+    expect(await failures.count({ where: { emailHash: sha256(email) } })).toBe(LOGIN_FAILURE_LIMIT);
+
+    // The real failures age out; the refused retries left nothing behind to keep the block going.
+    await failures.updateMany({ where: { emailHash: sha256(email) }, data: { createdAt: new Date(Date.now() - 16 * 60 * 1000) } });
+    expect((await new Client(app).post('/auth/login', { email, password: PASSWORD }, source)).status).toBe(200);
+  });
+
   it('under attack from many IPs, refuses every IP that has failed but not a clean one', async () => {
     const { email } = await registerOwner(app);
     const failures = prismaOf(app).loginFailure;

@@ -214,6 +214,15 @@ describe('authentication', () => {
     expect(await resetMails()).toBe(2);
   });
 
+  it('sends one reset email when several requests arrive at once', async () => {
+    const { email, profile } = await registerOwner(app);
+    const burst = await Promise.all(
+      Array.from({ length: 5 }, (_, n) => new Client(app).post('/auth/password/forgot', { email }, { 'x-forwarded-for': `198.51.100.${30 + n}` })),
+    );
+    expect(burst.map((response) => response.status)).toEqual([202, 202, 202, 202, 202]);
+    expect(await prismaOf(app).mailDelivery.count({ where: { kind: 'PASSWORD_RESET', userId: profile.user.id } })).toBe(1);
+  });
+
   it('changes the password with the current one and signs out other devices', async () => {
     const { client, email } = await registerOwner(app);
     const laptop = new Client(app);

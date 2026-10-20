@@ -476,7 +476,8 @@ export class AuthService {
     const email = normalizeEmail(emailInput);
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || user.disabledAt) return;
-    await this.prisma.$transaction(async (tx) => {
+    // Serializable, so simultaneous requests cannot all see no recent token and each send an email.
+    await this.prisma.serializable(async (tx) => {
       const recent = await tx.userToken.count({
         where: { userId: user.id, type: 'PASSWORD_RESET', createdAt: { gt: new Date(Date.now() - RESET_EMAIL_COOLDOWN) } },
       });

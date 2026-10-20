@@ -100,8 +100,13 @@ export class BillingController {
 
   @Roles(...MANAGERS)
   @Post('charges/:id/adjustments')
-  adjust(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string, @Body() input: AdjustmentDto) {
-    return this.billing.adjustCharge(auth.organizationId, auth.userId, id, input);
+  adjust(
+    @Auth() auth: SessionContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body() input: AdjustmentDto,
+  ) {
+    return this.billing.adjustCharge(auth.organizationId, auth.userId, id, input, requireIdempotencyKey(key));
   }
 
   @Roles(...MANAGERS)

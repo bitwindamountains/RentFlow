@@ -79,7 +79,7 @@ export interface Result {
   headers: Record<string, string | string[] | number | undefined>;
 }
 
-const idempotentPaths = [/\/payments$/, /\/charges$/, /\/deposits$/, /\/rental-setup$/];
+const idempotentPaths = [/\/payments$/, /\/charges$/, /\/charges\/[^/]+\/adjustments$/, /\/deposits$/, /\/rental-setup$/];
 
 /** A browser-like client: keeps the session cookie and sends the CSRF token. */
 export class Client {

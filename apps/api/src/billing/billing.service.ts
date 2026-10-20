@@ -188,9 +188,10 @@ export class BillingService {
     actorUserId: string,
     chargeId: string,
     input: { type: Exclude<AdjustmentType, 'REVERSAL'>; amount: string; reason: string },
+    key: string,
   ) {
     const amount = parseMoney(input.amount);
-    return this.prisma.serializable(async (tx) => {
+    return this.idempotency.execute({ organizationId, key, operation: 'ADJUST_CHARGE' }, { chargeId, ...input }, async (tx) => {
       const [row] = await this.balances.charges(organizationId, { chargeIds: [chargeId] }, tx);
       if (!row) throw notFound();
       if (row.status !== 'POSTED' || !row.outstanding.greaterThan(0))

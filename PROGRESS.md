@@ -28,10 +28,16 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
     - an expired MFA challenge, a user disabled during a challenge, and two simultaneous completions of one challenge (`mfa.e2e-spec`);
     - empty and truncated uploads (`documents.e2e-spec`, `file-store.spec`);
     - the production refusal when `MAIL_FROM` is missing.
-  - **Still open from the reviews (not test gaps):**
-    - two reset requests racing can both send an email;
-    - `postgres:17-alpine` is not pinned;
-    - the CSP allows inline styles, which Angular needs.
+  - **The last review items, fixed the same day:**
+    - **Reset email race** (`a8a28f0`, pushed): `requestPasswordReset` runs in `prisma.serializable`. A burst of 5 requests sends one email; the old code sent 2. Test: `auth.e2e-spec` "several requests arrive at once".
+    - **Postgres pinned** (`262f557`, pushed): `postgres:17.11-alpine3.24` in `compose.yaml`, `compose.prod.yaml` and CI, the same pin style as Node and Caddy.
+    - **No inline styles in the web CSP:** pushed after the visual review passed (staff and portal pages at every width, light and dark, with no CSP violations).
+      - The Caddy CSP is now `style-src 'self'`.
+      - The 8 components with their own `styles` (payment notices, MFA settings, documents, receipt, portal home, privacy, portal access, portal repairs) now keep them in `_pages.scss`, each nested under its host tag. With no component styles, Angular injects no `<style>` tags.
+      - The skeleton `style="…"` attributes became `[style.x]` bindings, which go through the CSSOM and are allowed by CSP.
+      - Keep it this way: **don't add `styles:` to components**; put page styles in `_pages.scss` under the host tag.
+      - `check-ui.mjs` now applies the CSP from `deploy/Caddyfile` to every page, so a violation fails the review. Its Chromium runs with `LocalNetworkAccessChecks` off, because the re-served pages otherwise count as public and can't call localhost.
+      - The sandboxed CSP on served documents (`document-response.ts`) still allows inline styles. That is intended.
 
 - **2026-10-17: Ship review's recommended fixes and missing tests.** Uncommitted. Local CI passes: 65 unit tests, 121 e2e tests, the web tests, the build, and `npm audit` with 0 issues.
   - **Security:**

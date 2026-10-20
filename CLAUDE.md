@@ -137,6 +137,7 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 
 **Styles.**
 - There are no per-component stylesheets for shared UI. The global design system is SCSS partials in `src/styles/`: `_tokens`, `_base`, `_shell`, `_components`, `_pages`, `_motion`.
+- Components never declare `styles:`, and templates use no static `style="…"` attributes, because the CSP is `style-src 'self'`. Put page styles in `_pages.scss` nested under the component's host tag. Use `[style.x]` bindings for one-off values.
 - Colours are tokens with light and dark themes. `ThemeService` sets `data-theme`.
 - All motion must sit behind `prefers-reduced-motion: no-preference`, including view transitions and `animate.enter`/`animate.leave`.
   - The more often a motion is seen, the less it moves: navigation, tables and hovers barely animate, and decoration is only for rare moments. Use the `--ease-out`/`--ease-in-out`/`--ease-drawer` tokens (never ease-in). Exits are faster than entrances, UI motion stays at or under 300 ms, and hover effects sit behind `(hover: hover) and (pointer: fine)`.

@@ -740,6 +740,22 @@ a.metric-card {
   .bar-tip {
     min-width: 150px;
   }
+  /* On a phone a tip is nearly as wide as the plot, so one tied to its bar runs off the screen
+     (and, even hidden, widens the page). Center every tip over the whole plot instead. */
+  .bar-group {
+    position: static;
+  }
+  .bar-group .bar-tip,
+  .bar-group:is(:first-child, :last-child) .bar-tip {
+    left: 50%;
+    right: auto;
+    max-width: 100%;
+    transform: translate(-50%, 4px);
+  }
+  .bar-group:is(:hover, :focus-visible) .bar-tip,
+  .bar-group:is(:first-child, :last-child):is(:hover, :focus-visible) .bar-tip {
+    transform: translate(-50%, 0);
+  }
 }
 
 /* ---------- Print ---------- */

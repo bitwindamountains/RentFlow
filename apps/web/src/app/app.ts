@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   ViewChild,
@@ -60,11 +61,13 @@ export class App {
   // Applies the saved light/dark preference before the first page renders.
   private readonly theme = inject(ThemeService);
   protected readonly profile = this.api.profile;
+  /** Wall clock for the demo countdown, ticked once a minute (Date.now() alone is not reactive). */
+  private readonly now = signal(Date.now());
   /** Hours until a demo workspace is deleted, rounded up; null outside a demo. */
   protected readonly demoHoursLeft = computed(() => {
     const expiresAt = this.profile()?.organization.demoExpiresAt;
     if (!expiresAt) return null;
-    return Math.max(1, Math.ceil((Date.parse(expiresAt) - Date.now()) / 3_600_000));
+    return Math.max(1, Math.ceil((Date.parse(expiresAt) - this.now()) / 3_600_000));
   });
   protected readonly online = this.api.online;
   @ViewChild('globalSearch') private searchInput?: ElementRef<HTMLInputElement>;
@@ -160,6 +163,8 @@ export class App {
   protected readonly today = () => this.api.today();
 
   constructor() {
+    const clock = setInterval(() => this.now.set(Date.now()), 60_000);
+    inject(DestroyRef).onDestroy(() => clearInterval(clock));
     // Cursor spotlight on interactive cards: CSS reads --mx/--my (see _motion.scss).
     // A plain listener, so pointer moves never schedule change detection.
     document.addEventListener(

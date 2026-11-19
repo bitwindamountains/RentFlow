@@ -165,6 +165,21 @@ const demoProfile = (hoursLeft: number): Profile => {
     expect(banner?.textContent).toContain('Create your own workspace');
   });
 
+  it('the demo banner counts down while the tab stays open', () => {
+    vi.useFakeTimers();
+    try {
+      TestBed.inject(ApiClient).profile.set(demoProfile(5 + 10 / 60));
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      vi.advanceTimersByTime(2 * 3_600_000);
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('deleted in about 4 hours');
+      fixture.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('no demo banner for real workspaces', () => {
     TestBed.inject(ApiClient).profile.set(profile('OWNER'));
     const fixture = TestBed.createComponent(App);

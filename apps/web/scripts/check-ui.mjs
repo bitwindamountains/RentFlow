@@ -227,7 +227,7 @@ async function startDemo(browser) {
   await page.goto(`${WEB}/auth`);
   await page.getByRole('button', { name: 'Try the demo' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 30_000 });
-  await page.getByText('You’re in a demo').waitFor();
+  await page.locator('.demo-banner').waitFor();
   const state = await context.storageState();
   await context.close();
   return state;

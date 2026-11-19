@@ -10,7 +10,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
-- **2026-11-20: Demo mode** (branch `demo-mode`; design `docs/superpowers/specs/2026-11-20-demo-mode-design.md`, plan `docs/superpowers/plans/2026-11-20-demo-mode.md`).
+- **2026-11-20: Demo mode** (merged into `main` and pushed as `e01d3d1`; GitHub CI run 44622262416 passed both jobs, including `containers`; design `docs/superpowers/specs/2026-11-20-demo-mode-design.md`, plan `docs/superpowers/plans/2026-11-20-demo-mode.md`).
   - "Try the demo" on the sign-in page gives a stranger a private "Demo Rentals" workspace with sample data made through the real services. It is deleted after 24 hours by the background job. A banner links to registration. Landlord side only; the tenant portal is not part of the demo.
   - Off unless `DEMO_ENABLED=true`. `DEMO_MAX_ACTIVE` (default 25) caps live demos; 3 demos per IP per hour.
   - No email can leave a demo: `@DemoRestricted()` routes answer `DEMO_RESTRICTED`, and the mailer drops `.invalid` recipients and demo workspaces. `demo.e2e-spec` makes every signed-in route that changes data choose restricted or allowed.

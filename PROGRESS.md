@@ -10,6 +10,13 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-11-20: Demo mode** (branch `demo-mode`; design `docs/superpowers/specs/2026-11-20-demo-mode-design.md`, plan `docs/superpowers/plans/2026-11-20-demo-mode.md`).
+  - "Try the demo" on the sign-in page gives a stranger a private "Demo Rentals" workspace with sample data made through the real services. It is deleted after 24 hours by the background job. A banner links to registration. Landlord side only; the tenant portal is not part of the demo.
+  - Off unless `DEMO_ENABLED=true`. `DEMO_MAX_ACTIVE` (default 25) caps live demos; 3 demos per IP per hour.
+  - No email can leave a demo: `@DemoRestricted()` routes answer `DEMO_RESTRICTED`, and the mailer drops `.invalid` recipients and demo workspaces. `demo.e2e-spec` makes every signed-in route that changes data choose restricted or allowed.
+  - Found while testing: parallel demo seeds hit serialization failures (409 RETRY). Demos are now created one at a time in the API process.
+  - New migration `20261120090000_demo_mode` (`Organization.demoExpiresAt`). **Not applied to Supabase yet.**
+
 - **2026-11-20: Dependency security update before v1 deploy.** `npm audit` had found 9 new advisories (1 high: `zod`; moderate: `nodemailer` address parsing, `fast-uri`, `ip-address`, `glob`/`minimatch`, `vitest`; low: `fastify`). Now 0.
   - `npm audit fix`, then pin bumps: `fastify` 5.12.8, `@fastify/static` 10.1.12, `@nestjs/*` 12.5.1, `@nestjs/cli` 12.0.13, `vitest` ^4.1.12.
   - All `@angular/*` moved to 22.3.0 together. With only `@angular/build` on 22.3 the lockfile split the packages, and `ng build` failed with "Cannot find module '@angular/service-worker/config'". Keep the Angular packages on one version.

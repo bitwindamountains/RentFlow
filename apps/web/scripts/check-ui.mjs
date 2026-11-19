@@ -135,6 +135,7 @@ async function startStack() {
       DATABASE_URL: databaseUrl,
       MAIL_PROVIDER: 'log',
       ENABLE_JOBS: 'false',
+      DEMO_ENABLED: 'true',
       TRUST_PROXY: '0',
       LOG_LEVEL: 'error',
       RATE_LIMIT_MULTIPLIER: '100',
@@ -219,6 +220,19 @@ async function signIn(browser, email) {
   return state;
 }
 
+/** Opens a demo workspace the way a visitor does, from the sign-in page. */
+async function startDemo(browser) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+  const page = await context.newPage();
+  await page.goto(`${WEB}/auth`);
+  await page.getByRole('button', { name: 'Try the demo' }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 30_000 });
+  await page.getByText('You’re in a demo').waitFor();
+  const state = await context.storageState();
+  await context.close();
+  return state;
+}
+
 async function review(browser, storageState, label, routes) {
   for (const colorScheme of ['light', 'dark']) {
     for (const width of colorScheme === 'light' ? WIDTHS : DARK_WIDTHS) {
@@ -277,6 +291,8 @@ try {
     ]);
     const tenant = await signIn(browser, seeded.tenantEmail);
     await review(browser, tenant, 'portal', ['/portal', '/portal/payments', '/portal/repairs', '/portal/documents', '/account']);
+    const demo = await startDemo(browser);
+    await review(browser, demo, 'demo', ['/dashboard', '/tenants', '/payments']);
   } finally {
     await browser.close();
   }

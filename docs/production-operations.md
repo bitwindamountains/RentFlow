@@ -60,6 +60,16 @@ See [deployment.md](deployment.md) for installation, configuration, backups, and
   - It is sent right after the request. If sending fails, the background job retries with backoff, up to 5 attempts. Successful recipient addresses are saved so a partial failure retries only the remaining recipients. Exhausted events are visible to owners/managers at `/api/v1/notifications/failed`.
   - Resend receives a stable idempotency key per event and recipient ([provider semantics](https://resend.com/docs/dashboard/emails/idempotency-keys)). SMTP has no universal exactly-once delivery guarantee: a crash after the mail server accepts a message but before the database records success can still cause a duplicate on retry.
 
+## Demo mode
+
+With `DEMO_ENABLED=true`, the sign-in page offers **Try the demo**. Each click creates a private workspace ("Demo Rentals") filled with sample data through the normal services: 2 properties, 6 units (1 vacant), 5 tenants, about 5 months of rent and payments, one partly paid and one overdue tenant, a deposit, an expense and a repair request. The visitor is signed in as its owner; a banner says it is a demo and links to registration.
+
+- **Marked by** `Organization.demoExpiresAt` (24 hours after creation). Real workspaces have it null.
+- **Limits:** 3 demos per IP per hour, and at most `DEMO_MAX_ACTIVE` (default 25) live at once. Demos are created one at a time in the API process, which also keeps the cap exact.
+- **No email leaves a demo.** Routes marked `@DemoRestricted()` answer `DEMO_RESTRICTED` (403): staff and portal invitations, document uploads, mail retry, tenant export and erasure, and account security changes (password, two-step sign-in, email resend, switching workspace). The mailer also drops any message to a `.invalid` address (demo owners use one) or for a demo workspace.
+- **Clean-up:** the background job deletes demos whose time is up, every row of them, plus their demo owners. The delete refuses any workspace whose `demoExpiresAt` is null. When the cap is full, creating a demo first clears expired ones.
+- **Switching it off:** set `DEMO_ENABLED=false` and restart the API. The button disappears; existing demos are still deleted on schedule (jobs must stay on).
+
 ## Background jobs
 
 When `ENABLE_JOBS=true` (the default outside tests), the job runs every 15 minutes, renewing its database lease while it works and preventing overlap in the same process. For each active organization, in its own time zone, it:
@@ -68,7 +78,7 @@ When `ENABLE_JOBS=true` (the default outside tests), the job runs every 15 minut
 2. Applies existing unallocated payment credit to open charges (including credit carried from older releases).
 3. Marks leases whose end date has passed as expired and frees the unit. Ended leases with an outstanding balance remain available in the payment picker.
 
-It also retries staff alerts, reclaims expired upload reservations, retries file deletions, purges expired security tokens and old sessions, and marks expired invitations. It retains idempotency keys. A separate email worker checks the durable mail queue on startup and every 30 seconds when jobs are enabled. One organization's failure is logged and does not block the others; acquisition/release failures are contained and reported.
+It also deletes demo workspaces whose time is up, retries staff alerts, reclaims expired upload reservations, retries file deletions, purges expired security tokens and old sessions, and marks expired invitations. It retains idempotency keys. A separate email worker checks the durable mail queue on startup and every 30 seconds when jobs are enabled. One organization's failure is logged and does not block the others; acquisition/release failures are contained and reported.
 
 ## Rent rules
 

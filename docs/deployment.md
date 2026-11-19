@@ -48,6 +48,8 @@ The API validates its configuration at startup and exits with a clear message if
 | `DATABASE_URL` | Add `connection_limit=10` (or your pooler's limit). A database on another host needs `sslmode=require&sslaccept=strict`, or the API refuses to start. Prisma ignores `verify-ca`/`verify-full`, and `require` alone accepts any certificate. If the provider's CA is not a public one (Supabase, RDS), also set `sslcert=` to an absolute path such as `/etc/rentflow/db-certs/<file>` (from `deploy/certs/`); the bundled `postgres` service and `localhost` are exempt. |
 | `TRUST_PROXY` | Number of reverse proxies in front of the API (`1` with the bundled Caddy). Rate limiting keys on the client IP this reveals. |
 | `RATE_LIMIT_MULTIPLIER` | Test suites only. Production refuses to start when it is set. |
+| `DEMO_ENABLED` | `true` shows "Try the demo" on the sign-in page: each visitor gets a private sample workspace, deleted after 24 hours. Off by default. See "Demo mode" in `production-operations.md`. |
+| `DEMO_MAX_ACTIVE` | Live demo workspaces allowed at once (default 25, 1–200). Past it, visitors are told the demo is busy. |
 | `ENABLE_JOBS` | Billing, lease expiry, and file cleanup every 15 minutes; queued email every 30 seconds. Database leases/claims coordinate instances. Keep enabled for recovery after outages. |
 | `MAIL_ENCRYPTION_KEY` | Required in production: 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts queued email, including one-time links. Use the same stable key on every API instance and preserve it with encrypted backups. Do not replace it while messages are pending. |
 | `SESSION_ABSOLUTE_HOURS` / `SESSION_IDLE_MINUTES` | Default 12 h absolute, 120 min idle |

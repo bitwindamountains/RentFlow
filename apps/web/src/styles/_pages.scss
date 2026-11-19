@@ -152,6 +152,38 @@ main.auth-page {
 .auth-submit:disabled {
   cursor: progress;
 }
+.auth-demo {
+  margin-top: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  text-align: center;
+
+  small {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid var(--border);
+  }
+}
+.auth-demo-button {
+  width: 100%;
+  min-height: 48px;
+}
+.auth-demo-button:disabled {
+  cursor: progress;
+}
 .auth-switch {
   margin-top: var(--space-6);
   color: var(--text-muted);

@@ -60,6 +60,12 @@ export class App {
   // Applies the saved light/dark preference before the first page renders.
   private readonly theme = inject(ThemeService);
   protected readonly profile = this.api.profile;
+  /** Hours until a demo workspace is deleted, rounded up; null outside a demo. */
+  protected readonly demoHoursLeft = computed(() => {
+    const expiresAt = this.profile()?.organization.demoExpiresAt;
+    if (!expiresAt) return null;
+    return Math.max(1, Math.ceil((Date.parse(expiresAt) - Date.now()) / 3_600_000));
+  });
   protected readonly online = this.api.online;
   @ViewChild('globalSearch') private searchInput?: ElementRef<HTMLInputElement>;
 
@@ -466,6 +472,12 @@ export class App {
       next: () => this.showToast('Verification email sent.'),
       error: (error: ApiError) => this.showToast(error.message),
     });
+  }
+
+  /** Leaves the demo and opens registration for a real workspace. */
+  protected createOwnWorkspace(): void {
+    const toRegister = () => void this.router.navigateByUrl('/auth?register=1');
+    this.api.logout().subscribe({ next: toRegister, error: toRegister });
   }
 
   protected signOut(): void {

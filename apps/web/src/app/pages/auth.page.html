@@ -139,6 +139,15 @@
           </button>
         </div>
       }
+      @if (mode() === 'login' && demoEnabled()) {
+        <div class="auth-demo">
+          <span class="auth-divider" aria-hidden="true">or</span>
+          <button class="secondary auth-demo-button" type="button" (click)="startDemo()" [disabled]="demoBusy() || busy()" [attr.aria-busy]="demoBusy()">
+            {{ demoBusy() ? 'Setting up your demo…' : 'Try the demo' }}
+          </button>
+          <small>No sign-up. A private sample workspace, deleted after 24 hours.</small>
+        </div>
+      }
       @if (mode() === 'login') {
         <div class="auth-switch">
           <button type="button" (click)="switchMode('forgot')">Forgot your password?</button>

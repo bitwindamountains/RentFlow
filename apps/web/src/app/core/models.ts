@@ -9,7 +9,16 @@ export function homeFor(role: Role | null | undefined): string {
 
 export interface Profile {
   user: { id: string; email: string; name: string; emailVerified: boolean; mfaEnabled?: boolean };
-  organization: { id: string; name: string; slug: string; currency: string; timezone: string; requireOwnerMfa?: boolean };
+  organization: {
+    id: string;
+    name: string;
+    slug: string;
+    currency: string;
+    timezone: string;
+    requireOwnerMfa?: boolean;
+    /** Set for a demo workspace from "Try the demo": when it is deleted. */
+    demoExpiresAt?: string | null;
+  };
   role: Role;
   /** An owner who must turn on two-step sign-in before using this workspace. */
   mfaSetupRequired?: boolean;

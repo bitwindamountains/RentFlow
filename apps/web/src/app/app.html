@@ -113,6 +113,12 @@
           <button class="text-button" type="button" (click)="update.apply()">Reload now</button>
         </div>
       }
+      @if (demoHoursLeft(); as hours) {
+        <div class="app-banner demo-banner" role="status" animate.enter="enter" animate.leave="leave">
+          You’re in a demo. The data is made up and is deleted in about {{ hours }} {{ hours === 1 ? 'hour' : 'hours' }}.
+          <button class="text-button" type="button" (click)="createOwnWorkspace()">Create your own workspace</button>
+        </div>
+      }
       @if (profile() && !profile()!.user.emailVerified) {
         <div class="app-banner" role="status" animate.enter="enter" animate.leave="leave">
           Confirm your email so you can reset your password if you forget it.

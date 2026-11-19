@@ -151,4 +151,38 @@ describe('App shell', () => {
     expect(app.paymentStep()).toBe(2);
     expect(app.paymentError()).toContain('future');
   });
+const demoProfile = (hoursLeft: number): Profile => {
+    const base = profile('OWNER');
+    return { ...base, organization: { ...base.organization, demoExpiresAt: new Date(Date.now() + hoursLeft * 3_600_000).toISOString() } };
+  };
+
+  it('shows the demo banner with hours left', () => {
+    TestBed.inject(ApiClient).profile.set(demoProfile(5 + 10 / 60));
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const banner = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.app-banner')].find((item) => item.textContent?.includes('demo'));
+    expect(banner?.textContent).toContain('You’re in a demo. The data is made up and is deleted in about 6 hours.');
+    expect(banner?.textContent).toContain('Create your own workspace');
+  });
+
+  it('no demo banner for real workspaces', () => {
+    TestBed.inject(ApiClient).profile.set(profile('OWNER'));
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('You’re in a demo');
+  });
+
+  it('Create your own workspace signs out and opens registration', () => {
+    const api = TestBed.inject(ApiClient);
+    api.profile.set(demoProfile(1));
+    const logout = vi.spyOn(api, 'logout').mockReturnValue(of(undefined));
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.app-banner button')].find((item) => item.textContent?.includes('Create your own workspace')) as HTMLButtonElement;
+    button.click();
+    expect(logout).toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith('/auth?register=1');
+  });
 });
+

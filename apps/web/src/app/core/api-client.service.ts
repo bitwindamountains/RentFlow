@@ -60,6 +60,13 @@ export class ApiClient {
       );
   }
 
+  /** Public reads that must not redirect to sign-in on 401. */
+  publicGet<T>(path: string): Observable<T> {
+    return this.http
+      .get<T>(`${this.baseUrl}${path}`, { withCredentials: true })
+      .pipe(catchError((error) => throwError(() => toApiError(error))));
+  }
+
   /** Public calls that must not redirect to sign-in on 401 (invitation, reset). */
   publicPost<T>(path: string, body: unknown): Observable<T> {
     return this.http

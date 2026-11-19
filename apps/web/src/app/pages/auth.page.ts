@@ -23,12 +23,20 @@ export class AuthPage {
   protected code = '';
   /** Typing a recovery code instead of an app code. */
   protected readonly useRecovery = signal(false);
+  /** "Try the demo" is offered only when the server has demo mode on. */
+  protected readonly demoEnabled = signal(false);
+  protected readonly demoBusy = signal(false);
   private challenge = '';
 
   constructor() {
     const query = inject(ActivatedRoute).snapshot.queryParamMap;
     this.email = query.get('email') ?? '';
     this.workspace = query.get('workspace') ?? '';
+    if (query.get('register') === '1') this.mode.set('register');
+    this.api.publicGet<{ enabled: boolean }>('/demo').subscribe({
+      next: (status) => this.demoEnabled.set(status.enabled === true),
+      error: () => this.demoEnabled.set(false),
+    });
     if (query.get('invited') === '1') this.notice.set('Invitation accepted. Sign in below to open your new workspace.');
     else if (query.get('reset') === '1') this.notice.set('Password updated. Sign in with your new password.');
     else if (query.get('expired') === '1') this.notice.set('Your session ended. Sign in again to continue.');
@@ -40,6 +48,24 @@ export class AuthPage {
     this.notice.set('');
     this.code = '';
     this.useRecovery.set(false);
+  }
+
+  protected startDemo(): void {
+    if (this.demoBusy() || this.busy()) return;
+    this.error.set('');
+    this.demoBusy.set(true);
+    this.api
+      .session('/demo', {})
+      .pipe(finalize(() => this.demoBusy.set(false)))
+      .subscribe({
+        next: (profile) => void this.router.navigateByUrl(homeFor(profile.role)),
+        error: (error: ApiError) =>
+          this.error.set(
+            error.status === 503 || error.code === 'RATE_LIMITED'
+              ? 'The demo is busy right now. Try again in a little while, or create your own workspace.'
+              : error.message,
+          ),
+      });
   }
 
   protected submit(): void {

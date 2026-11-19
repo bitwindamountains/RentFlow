@@ -40,6 +40,11 @@ describe('authentication', () => {
     expect((await new Client(app).post('/auth/email/verify', { token })).status).toBe(400);
   });
 
+  it('a registered workspace is not a demo', async () => {
+    const { client } = await registerOwner(app);
+    expect((await client.get('/auth/me')).body.organization).toHaveProperty('demoExpiresAt', null);
+  });
+
   it('enforces the password policy and rejects duplicate emails', async () => {
     const email = `policy-${unique()}@rentflow.test`;
     const weak = await new Client(app).post('/auth/register', {

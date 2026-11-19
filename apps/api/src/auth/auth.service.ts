@@ -43,13 +43,20 @@ export const LOGIN_FAILURE_ACCOUNT_LIMIT = 50;
 const loginFailureWindow = 15 * 60 * 1000;
 
 /** Same rule as in resolveSession, for sessions being created. */
-async function ownerMfaSetupRequired(tx: Tx, userId: string, organizationId: string, role: MembershipRole): Promise<boolean> {
-  if (role !== 'OWNER') return false;
+async function sessionFlags(
+  tx: Tx,
+  userId: string,
+  organizationId: string,
+  role: MembershipRole,
+): Promise<{ mfaSetupRequired: boolean; demo: boolean }> {
   const [organization, user] = await Promise.all([
-    tx.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { requireOwnerMfa: true } }),
+    tx.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { requireOwnerMfa: true, demoExpiresAt: true } }),
     tx.user.findUniqueOrThrow({ where: { id: userId }, select: { mfaEnabledAt: true } }),
   ]);
-  return organization.requireOwnerMfa && !user.mfaEnabledAt;
+  return {
+    mfaSetupRequired: role === 'OWNER' && organization.requireOwnerMfa && !user.mfaEnabledAt,
+    demo: organization.demoExpiresAt !== null,
+  };
 }
 
 export interface IssuedSession {
@@ -380,7 +387,7 @@ export class AuthService {
         status: 'ACTIVE',
         organization: { status: 'ACTIVE' },
       },
-      select: { role: true, tenantId: true, tenant: { select: { status: true } }, organization: { select: { requireOwnerMfa: true } } },
+      select: { role: true, tenantId: true, tenant: { select: { status: true } }, organization: { select: { requireOwnerMfa: true, demoExpiresAt: true } } },
     });
     if (!membership) return undefined;
     // An archived tenant loses portal access immediately.
@@ -400,6 +407,7 @@ export class AuthService {
       expiresAt: session.expiresAt,
       emailVerified: Boolean(session.user.emailVerifiedAt),
       mfaSetupRequired: membership.role === 'OWNER' && membership.organization.requireOwnerMfa && !session.user.mfaEnabledAt,
+      demo: membership.organization.demoExpiresAt !== null,
     };
   }
 
@@ -439,6 +447,7 @@ export class AuthService {
         currency: membership.organization.currency,
         timezone: membership.organization.timezone,
         requireOwnerMfa: membership.organization.requireOwnerMfa,
+        demoExpiresAt: membership.organization.demoExpiresAt?.toISOString() ?? null,
       },
       role: membership.role,
       mfaSetupRequired: context.mfaSetupRequired,
@@ -631,7 +640,7 @@ export class AuthService {
         tenantId: role === 'TENANT' ? membership.tenantId : null,
         expiresAt,
         emailVerified,
-        mfaSetupRequired: await ownerMfaSetupRequired(tx, userId, organizationId, role),
+        ...(await sessionFlags(tx, userId, organizationId, role)),
       },
     };
   }

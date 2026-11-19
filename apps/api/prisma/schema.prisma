@@ -178,6 +178,8 @@ model Organization {
   /// Owners must turn on two-step sign-in before using the workspace.
   /// On for new workspaces; the migration left existing ones off.
   requireOwnerMfa     Boolean              @default(true)
+  /// Non-null for a demo workspace from "Try the demo": it is deleted after this time.
+  demoExpiresAt       DateTime?            @db.Timestamptz(3)
   createdAt           DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
   memberships         Membership[]

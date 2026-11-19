@@ -14,6 +14,10 @@ export interface AppEnvironment {
   TRUST_PROXY: number;
   LOG_LEVEL: 'error' | 'warn' | 'log' | 'debug' | 'verbose';
   ENABLE_JOBS: boolean;
+  /** "Try the demo" on the sign-in page. Off unless set. */
+  DEMO_ENABLED: boolean;
+  /** Live demo workspaces allowed at once. */
+  DEMO_MAX_ACTIVE: number;
   MAIL_PROVIDER: MailProvider;
   MAIL_FROM: string;
   MAIL_ENCRYPTION_KEY: Buffer;
@@ -169,6 +173,8 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     TRUST_PROXY: integer(input, 'TRUST_PROXY', production ? 1 : 0, 0, 5),
     LOG_LEVEL: logLevel as AppEnvironment['LOG_LEVEL'],
     ENABLE_JOBS: String(input['ENABLE_JOBS'] ?? (nodeEnv === 'test' ? 'false' : 'true')) === 'true',
+    DEMO_ENABLED: String(input['DEMO_ENABLED'] ?? 'false') === 'true',
+    DEMO_MAX_ACTIVE: integer(input, 'DEMO_MAX_ACTIVE', 25, 1, 200),
     MAIL_PROVIDER: mailProvider,
     MAIL_FROM: mailFrom,
     MAIL_ENCRYPTION_KEY: mailKey,

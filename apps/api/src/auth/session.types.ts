@@ -14,6 +14,8 @@ export interface SessionContext {
   emailVerified: boolean;
   /** An owner of a workspace that requires two-step sign-in, who has not turned it on yet. */
   mfaSetupRequired: boolean;
+  /** A demo workspace from "Try the demo". */
+  demo: boolean;
 }
 
 export type AuthenticatedRequest = FastifyRequest & {

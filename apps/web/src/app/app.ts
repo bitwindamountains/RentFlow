@@ -48,6 +48,8 @@ interface PendingPayment {
 
 const FINANCE: Role[] = ['OWNER', 'MANAGER', 'COLLECTOR', 'VIEWER'];
 
+const LEAVE_DEMO = 'Leave the demo? This sample workspace will be deleted, and your own workspace starts empty.';
+
 @Component({
   selector: 'app-root',
   imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet, MoneyPipe, LabelPipe],
@@ -63,6 +65,8 @@ export class App {
   protected readonly profile = this.api.profile;
   /** Wall clock for the demo countdown, ticked once a minute (Date.now() alone is not reactive). */
   private readonly now = signal(Date.now());
+  /** True in a demo workspace from "Try the demo". */
+  protected readonly inDemo = computed(() => Boolean(this.profile()?.organization.demoExpiresAt));
   /** Hours until a demo workspace is deleted, rounded up; null outside a demo. */
   protected readonly demoHoursLeft = computed(() => {
     const expiresAt = this.profile()?.organization.demoExpiresAt;
@@ -479,13 +483,16 @@ export class App {
     });
   }
 
-  /** Leaves the demo and opens registration for a real workspace. */
+  /** Leaves the demo (which deletes it) and opens registration for a real workspace. */
   protected createOwnWorkspace(): void {
+    if (!confirm(LEAVE_DEMO)) return;
     const toRegister = () => void this.router.navigateByUrl('/auth?register=1');
     this.api.logout().subscribe({ next: toRegister, error: toRegister });
   }
 
   protected signOut(): void {
+    // Signing out of a demo deletes it (its owner has no password to come back with).
+    if (this.inDemo() && !confirm(LEAVE_DEMO)) return;
     this.api.logout().subscribe({
       next: () => void this.router.navigate(['/auth']),
       error: () => void this.router.navigate(['/auth']),

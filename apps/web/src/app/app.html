@@ -40,7 +40,7 @@
             ><small>{{ profile()?.role | label }} · Account</small></span
           >
         </a>
-        <button type="button" class="secondary" (click)="signOut()">Sign out</button>
+        <button type="button" class="secondary" (click)="signOut()">{{ inDemo() ? 'Leave demo' : 'Sign out' }}</button>
         <a class="sidebar-legal" routerLink="/privacy" (click)="closeMenu()">Privacy notice</a>
       </div>
     </aside>
@@ -115,8 +115,12 @@
       }
       @if (demoHoursLeft(); as hours) {
         <div class="app-banner demo-banner" role="status" animate.enter="enter" animate.leave="leave">
-          You’re in a demo. The data is made up and is deleted in about {{ hours }} {{ hours === 1 ? 'hour' : 'hours' }}.
-          <button class="text-button" type="button" (click)="createOwnWorkspace()">Create your own workspace</button>
+          <span class="demo-pill">Demo</span>
+          <span class="wide-text">Sample data, deleted in about {{ hours }} {{ hours === 1 ? 'hour' : 'hours' }}.</span>
+          <span class="narrow-text">Deleted in {{ hours }}h</span>
+          <button class="text-button" type="button" aria-label="Create your own workspace" (click)="createOwnWorkspace()">
+            <span class="wide-text">Create your own workspace</span><span class="narrow-text">Create yours</span>
+          </button>
         </div>
       }
       @if (profile() && !profile()!.user.emailVerified) {

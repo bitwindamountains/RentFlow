@@ -22,6 +22,7 @@ export class DashboardPage implements OnInit {
   protected readonly data = signal<Dashboard | null>(null);
   protected readonly reminders = signal<Reminder[]>([]);
   protected readonly showTable = signal(false);
+  protected readonly inDemo = computed(() => Boolean(this.api.profile()?.organization.demoExpiresAt));
   protected readonly skeletonAreas = ['hero', 'overdue', 'billed', 'occupancy', 'arrears', 'trend', 'upcoming'];
   protected readonly otherReminders = computed(() =>
     this.reminders()

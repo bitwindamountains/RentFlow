@@ -28,6 +28,8 @@ export class AuthPage {
   protected readonly demoBusy = signal(false);
   /** Shown under the demo button, so it isn't read as a sign-in problem. */
   protected readonly demoError = signal('');
+  /** The demo is at capacity or rate limited: offer registration instead. */
+  protected readonly demoFull = signal(false);
   private challenge = '';
 
   constructor() {
@@ -63,12 +65,11 @@ export class AuthPage {
       .pipe(finalize(() => this.demoBusy.set(false)))
       .subscribe({
         next: (profile) => void this.router.navigateByUrl(homeFor(profile.role)),
-        error: (error: ApiError) =>
-          this.demoError.set(
-            error.status === 503 || error.code === 'RATE_LIMITED'
-              ? 'The demo is busy right now. Try again in a little while, or create your own workspace.'
-              : error.message,
-          ),
+        error: (error: ApiError) => {
+          const full = error.status === 503 || error.code === 'RATE_LIMITED';
+          this.demoFull.set(full);
+          this.demoError.set(full ? 'The demo is busy right now. Try again in a little while, or create your own workspace.' : error.message);
+        },
       });
   }
 

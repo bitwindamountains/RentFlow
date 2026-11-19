@@ -62,6 +62,23 @@ describe('sign-in page demo', () => {
     expect(element.querySelectorAll('[role="alert"]').length).toBe(1);
   });
 
+  it('says what RentFlow is and welcomes back only once', async () => {
+    const { element } = await render({ enabled: true });
+    expect(element.textContent).toContain('for Philippine landlords');
+    expect((element.textContent ?? '').match(/welcome back/gi)?.length ?? 0).toBeLessThanOrEqual(1);
+  });
+
+  it('the busy message offers to create an account', async () => {
+    const { api, fixture, element, demoButton } = await render({ enabled: true });
+    vi.spyOn(api, 'session').mockReturnValue(throwError(() => ({ status: 503, code: 'DEMO_UNAVAILABLE', message: 'x' })));
+    demoButton()!.click();
+    fixture.detectChanges();
+    const create = [...element.querySelectorAll('.auth-demo button')].find((button) => button.textContent?.includes('Create an account')) as HTMLButtonElement;
+    create.click();
+    fixture.detectChanges();
+    expect(element.querySelector('h2')?.textContent).toContain('Create your account');
+  });
+
   it('opens in register mode with ?register=1', async () => {
     const { element } = await render({ enabled: true, query: { register: '1' } });
     expect(element.querySelector('h2')?.textContent).toContain('Create your account');

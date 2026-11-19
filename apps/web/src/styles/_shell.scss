@@ -450,6 +450,26 @@ kbd {
   }
 }
 
+/* A mode marker, not a warning: the brand's soft green with a lime pill. */
+.app-banner.demo-banner {
+  border-color: var(--border);
+  background: var(--primary-soft);
+  color: var(--primary-soft-fg);
+
+  .narrow-text {
+    display: none;
+  }
+}
+.demo-pill {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
 /* ---------- Page frame ---------- */
 .page {
   max-width: var(--content-max);
@@ -628,6 +648,24 @@ kbd {
 }
 
 @media (max-width: 520px) {
+  /* One line on phones, so the dashboard starts higher. */
+  .app-banner.demo-banner {
+    flex-wrap: nowrap;
+    padding: 6px 6px 6px 10px;
+    gap: var(--space-2);
+
+    .wide-text {
+      display: none;
+    }
+    .narrow-text {
+      display: inline;
+      white-space: nowrap;
+    }
+    .text-button {
+      margin-left: auto;
+      white-space: nowrap;
+    }
+  }
   .top-action .label {
     display: none;
   }

@@ -38,7 +38,7 @@
               ? 'Enter your account email and we will send you a reset link.'
               : mode() === 'mfa'
                 ? (useRecovery() ? 'Enter one of the recovery codes you saved. Each code works once.' : 'Open your authenticator app and enter the 6-digit code for RentFlow.')
-                : 'Welcome back. Sign in to your rental workspace.'
+                : 'Rent, balances, and GCash payments for Philippine landlords, in one place.'
         }}
       </p>
       @if (mode() === 'register') {
@@ -144,9 +144,17 @@
           <span class="auth-divider" aria-hidden="true">or</span>
           <button class="secondary auth-demo-button" type="button" (click)="startDemo()" [disabled]="demoBusy() || busy()" [attr.aria-busy]="demoBusy()">
             {{ demoBusy() ? 'Setting up your demo…' : 'Try the demo' }}
+            @if (!demoBusy()) {
+              <svg class="ui-icon inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6" /></svg>
+            }
           </button>
           @if (demoError()) {
-            <div class="auth-error" role="alert">{{ demoError() }}</div>
+            <div class="auth-error" role="alert">
+              {{ demoError() }}
+              @if (demoFull()) {
+                <button class="text-button" type="button" (click)="switchMode('register')">Create an account</button>
+              }
+            </div>
           }
           <small>No sign-up. A private sample workspace, deleted after 24 hours.</small>
         </div>

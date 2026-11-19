@@ -152,6 +152,23 @@ main.auth-page {
 .auth-submit:disabled {
   cursor: progress;
 }
+.demo-hint {
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+
+  p {
+    margin: 0;
+    font-weight: 600;
+  }
+}
 .auth-demo {
   margin-top: var(--space-4);
   display: grid;
@@ -177,9 +194,26 @@ main.auth-page {
     border-top: 1px solid var(--border);
   }
 }
+/* The one thing a stranger can do here: give it more presence than an outline button. */
 .auth-demo-button {
   width: 100%;
   min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-color: transparent;
+  background: var(--primary-soft);
+  color: var(--primary-soft-fg);
+  font-weight: 700;
+}
+.auth-demo-button:hover:not(:disabled) {
+  border-color: var(--primary-soft-fg);
+}
+.auth-demo .auth-error .text-button {
+  margin-left: var(--space-1);
+  color: inherit;
+  text-decoration: underline;
 }
 .auth-demo-button:disabled {
   cursor: progress;

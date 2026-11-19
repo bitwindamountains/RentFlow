@@ -11,7 +11,7 @@
       </p>
     </div>
     <div class="heading-actions">
-      @if (api.hasRole('OWNER', 'MANAGER')) {
+      @if (api.hasRole('OWNER', 'MANAGER') && !inDemo()) {
         <a class="secondary button-link" routerLink="/setup">Guided setup</a>
       }
       <button class="secondary" type="button" (click)="refresh()" [disabled]="loading()">
@@ -19,6 +19,13 @@
       </button>
     </div>
   </section>
+
+  @if (inDemo() && canCollect() && data()?.topArrears?.[0]; as first) {
+    <div class="demo-hint">
+      <p>Try it: collect {{ first.tenantName }}’s {{ first.overdue | money }} and get a receipt.</p>
+      <button class="primary" type="button" (click)="collect(first.leaseId)">Collect payment</button>
+    </div>
+  }
 
   @if (error()) {
     <div class="inline-notice" role="alert">
@@ -59,7 +66,15 @@
       <a class="tile tile-overdue" [class.has-overdue]="d.overdue !== '0.00'" routerLink="/billing" [queryParams]="{ status: 'overdue' }">
         <p class="tile-label">Overdue now</p>
         <strong class="tile-value" [class.danger-text]="d.overdue !== '0.00'" [appCountUp]="d.overdue | money"></strong>
-        <p class="tile-note">{{ d.outstanding | money }} total outstanding</p>
+        <p class="tile-note">
+          @if (d.overdue === '0.00') {
+            {{ d.outstanding === '0.00' ? 'Nothing outstanding' : (d.outstanding | money) + ' outstanding, none past due' }}
+          } @else if (d.outstanding === d.overdue) {
+            Past due, across all months
+          } @else {
+            {{ d.outstanding | money }} outstanding in all
+          }
+        </p>
       </a>
 
       <a class="tile tile-billed" routerLink="/billing">

@@ -4,7 +4,7 @@ import { MaintenancePriority, PaymentMethod } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsEmail, IsEnum, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { Auth, COLLECTORS, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '../auth/decorators.js';
+import { Auth, COLLECTORS, FINANCE_READERS, MANAGERS, RateLimit, Roles, DemoRestricted } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { DomainError } from '../common/errors.js';
 import { requireIdempotencyKey } from '../common/idempotency.service.js';
@@ -141,6 +141,7 @@ export class PortalAdminController {
 
   @Roles(...MANAGERS)
   @RateLimit(30, '1 hour')
+  @DemoRestricted()
   @Post('tenants/:id/portal/invite')
   invite(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string, @Body() input: InviteDto) {
     return this.admin.invite(auth.organizationId, auth.userId, id, input.email);

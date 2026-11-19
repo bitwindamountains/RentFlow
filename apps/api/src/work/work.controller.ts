@@ -29,7 +29,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '../auth/decorators.js';
+import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, RateLimit, Roles, DemoRestricted } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { DomainError } from '../common/errors.js';
 import { IsDateOnly, IsMoney, PageQuery } from '../common/validation.js';
@@ -147,6 +147,7 @@ export class WorkController {
   }
 
   @Roles(...MANAGERS)
+  @DemoRestricted()
   @Post('documents')
   createDocument(@Auth() auth: SessionContext, @Body() input: DocumentDto) {
     return this.work.createDocument(auth.organizationId, auth.userId, input);
@@ -158,6 +159,7 @@ export class WorkController {
    */
   @Roles(...MANAGERS)
   @RateLimit(30, '10 minutes')
+  @DemoRestricted()
   @Post('documents/files')
   uploadDocument(
     @Auth() auth: SessionContext,

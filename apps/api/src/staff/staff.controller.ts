@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from
 import { ApiTags } from '@nestjs/swagger';
 import type { MembershipRole } from '@prisma/client';
 import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { ALL_ROLES, Auth, Public, RateLimit, Roles } from '../auth/decorators.js';
+import { ALL_ROLES, Auth, Public, RateLimit, Roles, DemoRestricted } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { PASSWORD_MAX_LENGTH } from '../common/crypto.js';
 import { StaffService } from './staff.service.js';
@@ -34,6 +34,7 @@ export class StaffController {
   }
 
   @RateLimit(20, '1 hour')
+  @DemoRestricted()
   @Post('invitations')
   invite(@Auth() auth: SessionContext, @Body() input: InvitationDto) {
     return this.staff.invite(auth.organizationId, auth.userId, input);

@@ -72,7 +72,7 @@ describe('durable transactional email', () => {
     const other = new MailerService(db);
     await Promise.all([mailer.processPending(), other.processPending()]);
     expect([...mailer.outbox, ...other.outbox].filter(m => m.idempotencyKey === `mail-${id}`)).toHaveLength(1);
-    const failedId = await db.$transaction(tx => mailer.enqueue(tx, { to: owner.email, subject: 'Retry test', text: 'Message' }, 'TEST', { organizationId: owner.profile.organization.id }));
+    const failedId = (await db.$transaction(tx => mailer.enqueue(tx, { to: owner.email, subject: 'Retry test', text: 'Message' }, 'TEST', { organizationId: owner.profile.organization.id })))!;
     await db.mailDelivery.update({ where: { id: failedId }, data: { status: 'FAILED', attempts: 8 } });
     const outsider = await registerOwner(app);
     expect((await outsider.client.get('/notifications/mail/failed')).body.map((r: { id: string }) => r.id)).not.toContain(failedId);

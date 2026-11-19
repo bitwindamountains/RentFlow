@@ -1,5 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { Auth, MANAGERS, Roles } from '../auth/decorators.js';
+import { Auth, MANAGERS, Roles, DemoRestricted } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { MailerService } from '../mail/mailer.service.js';
@@ -20,6 +20,7 @@ export class NotificationsController {
     });
   }
 
+  @DemoRestricted()
   @Post('mail/:id/retry')
   async retryMail(@Auth() session: SessionContext, @Param('id', ParseUUIDPipe) id: string) {
     const updated = await this.prisma.mailDelivery.updateMany({

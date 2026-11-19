@@ -17,7 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, RateLimit, Roles } from '../auth/decorators.js';
+import { ALL_ROLES, Auth, FINANCE_READERS, MANAGERS, RateLimit, Roles, DemoRestricted } from '../auth/decorators.js';
 import type { SessionContext } from '../auth/session.types.js';
 import { requireIdempotencyKey } from '../common/idempotency.service.js';
 import { IsDateOnly, IsMoney } from '../common/validation.js';
@@ -166,6 +166,7 @@ export class RentalsController {
 
   /** Everything the workspace holds about one tenant, for a data-subject access request. */
   @Roles(...MANAGERS)
+  @DemoRestricted()
   @Get('tenants/:id/export')
   exportTenant(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.privacy.export(auth.organizationId, auth.userId, id);
@@ -175,6 +176,7 @@ export class RentalsController {
   @Roles('OWNER')
   // The owner's password is checked here, so guesses are limited like other password checks.
   @RateLimit(10, '15 minutes')
+  @DemoRestricted()
   @Post('tenants/:id/erase')
   eraseTenant(@Auth() auth: SessionContext, @Param('id', ParseUUIDPipe) id: string, @Body() input: EraseTenantDto) {
     return this.privacy.erase(auth.organizationId, auth.userId, id, input.password);

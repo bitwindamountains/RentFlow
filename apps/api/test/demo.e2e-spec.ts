@@ -1,8 +1,72 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BillingService } from '../src/billing/billing.service.js';
+import { DEMO_RESTRICTED } from '../src/auth/decorators.js';
 import { resetEnvironmentCache } from '../src/config/environment.js';
-import { Client, prismaOf, registerOwner, startApp, today } from './helpers.js';
+import { JobsService } from '../src/jobs/jobs.service.js';
+import { Client, lastEmail, prismaOf, registerOwner, routesOf, startApp, today } from './helpers.js';
+
+/** Routes a demo workspace may not use: they send email, store files, export data, or change account security. */
+const DEMO_RESTRICTED_EXPECTED = [
+  'POST /auth/mfa/setup',
+  'POST /auth/mfa/enable',
+  'POST /auth/mfa/disable',
+  'POST /auth/mfa/owner-requirement',
+  'POST /auth/mfa/recovery-codes',
+  'POST /auth/switch-workspace',
+  'POST /auth/email/resend',
+  'POST /auth/password',
+  'POST /staff/invitations',
+  'POST /tenants/:id/portal/invite',
+  'POST /notifications/mail/:id/retry',
+  'POST /documents',
+  'POST /documents/files',
+  'GET /tenants/:id/export',
+  'POST /tenants/:id/erase',
+];
+
+/** Signed-in routes that change data and stay open in a demo. A new one fails the sweep until it is listed here or above. */
+const DEMO_ALLOWED = [
+  'POST /auth/logout',
+  'POST /auth/sessions/revoke-others',
+  'DELETE /auth/sessions/:id',
+  'POST /billing-schedules',
+  'POST /billing/run',
+  'POST /charges',
+  'POST /charges/:id/adjustments',
+  'POST /charges/:id/void',
+  'POST /payments',
+  'POST /payments/:id/reverse',
+  'POST /leases/:id/deposits',
+  'POST /portal/maintenance',
+  'POST /portal/payment-notices',
+  'POST /portal/payment-notices/:id/withdraw',
+  'POST /portal/payment-notices/:id/proof',
+  'DELETE /tenants/:id/portal',
+  'POST /payment-notices/:id/confirm',
+  'POST /payment-notices/:id/reject',
+  'POST /properties',
+  'PATCH /properties/:id',
+  'POST /properties/:id/units',
+  'PATCH /units/:id',
+  'POST /tenants',
+  'PATCH /tenants/:id',
+  'POST /tenants/:id/archive',
+  'POST /leases',
+  'POST /leases/:id/renew',
+  'POST /leases/:id/rent-change',
+  'POST /leases/:id/terminate',
+  'POST /rental-setup',
+  'DELETE /staff/invitations/:id',
+  'PATCH /staff/:membershipId',
+  'DELETE /staff/:membershipId',
+  'POST /expenses',
+  'POST /expenses/:id/void',
+  'POST /maintenance',
+  'PATCH /maintenance/:id',
+  'PATCH /documents/:id/sharing',
+  'DELETE /documents/:id',
+];
 
 const settings = ['DEMO_ENABLED', 'DEMO_MAX_ACTIVE'] as const;
 
@@ -135,4 +199,53 @@ describe('demo workspaces', () => {
     const { client } = await startDemo();
     expect((await client.get(`/tenants/${tenant.body.id}`)).status).toBe(404);
   });
+it('every route is classified for demo mode', async () => {
+    const routes = routesOf(app, DEMO_RESTRICTED);
+    const mutating = routes
+      .filter((route) => !route.isPublic && (route.method !== 'GET' || route.key === 'GET /tenants/:id/export'))
+      .map((route) => route.key);
+    expect(DEMO_RESTRICTED_EXPECTED.filter((key) => DEMO_ALLOWED.includes(key))).toEqual([]);
+    expect(mutating.filter((key) => !DEMO_RESTRICTED_EXPECTED.includes(key) && !DEMO_ALLOWED.includes(key))).toEqual([]);
+    expect([...DEMO_RESTRICTED_EXPECTED, ...DEMO_ALLOWED].filter((key) => !mutating.includes(key))).toEqual([]);
+    expect(routes.filter((route) => route.flagged).map((route) => route.key).sort()).toEqual([...DEMO_RESTRICTED_EXPECTED].sort());
+  });
+
+  it('restricted routes refuse a demo session', async () => {
+    const { client } = await startDemo();
+    for (const key of DEMO_RESTRICTED_EXPECTED) {
+      const [method, template] = key.split(' ') as ['GET' | 'POST', string];
+      const path = template.replace(/:[A-Za-z]+/g, crypto.randomUUID());
+      const response = await client.request(method, path, method === 'GET' ? undefined : {});
+      expect([response.status, response.body?.code], key).toEqual([403, 'DEMO_RESTRICTED']);
+    }
+  });
+
+  it('restricted routes still work for real workspaces', async () => {
+    const { client } = await registerOwner(app);
+    const invite = await client.post('/staff/invitations', { email: `staff-${crypto.randomUUID()}@example.com`, role: 'VIEWER' });
+    expect(invite.status).toBe(201);
+  });
+
+  it('no mail leaves a demo', async () => {
+    const { client, response } = await startDemo();
+    const organizationId: string = response.body.organization.id;
+    const prisma = prismaOf(app);
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { organizationId, lastName: 'Garcia' } });
+    const lease = await prisma.lease.findFirstOrThrow({ where: { organizationId, primaryTenantId: tenant.id } });
+    const realAddress = `real-${crypto.randomUUID()}@example.com`;
+    expect((await client.patch(`/tenants/${tenant.id}`, { firstName: tenant.firstName, lastName: tenant.lastName, email: realAddress })).status).toBe(200);
+    expect((await client.post(`/tenants/${tenant.id}/portal/invite`)).status).toBe(403);
+    const payment = await client.post(
+      '/payments',
+      { tenantId: tenant.id, leaseId: lease.id, amount: '500.00', method: 'CASH', paidAt: new Date().toISOString(), allocations: [] },
+      { 'idempotency-key': crypto.randomUUID() },
+    );
+    expect(payment.status).toBe(201);
+    await app.get(JobsService).runAll();
+    expect(await prisma.mailDelivery.count({ where: { organizationId } })).toBe(0);
+    expect(lastEmail(app, realAddress)).toBeUndefined();
+    const demoOwner = await prisma.membership.findFirstOrThrow({ where: { organizationId }, include: { user: true } });
+    expect(lastEmail(app, demoOwner.user.email)).toBeUndefined();
+  });
 });
+

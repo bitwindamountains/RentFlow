@@ -5,7 +5,7 @@ import { PASSWORD_MAX_LENGTH } from '../common/crypto.js';
 import { sessionCookieName } from '../config/environment.js';
 import { AuthService, type IssuedSession } from './auth.service.js';
 import { type CookieReply, sessionCookieOptions, startSessionReply } from './session-reply.js';
-import { AllowWithoutMfa, ANY_MEMBER, Auth, Public, RateLimit, Roles } from './decorators.js';
+import { AllowWithoutMfa, ANY_MEMBER, Auth, Public, RateLimit, Roles, DemoRestricted } from './decorators.js';
 import type { SessionContext } from './session.types.js';
 
 class RegisterDto {
@@ -104,6 +104,7 @@ export class AuthController {
   @Roles(...ANY_MEMBER)
   @RateLimit(10, '15 minutes')
   @HttpCode(200)
+  @DemoRestricted()
   @Post('mfa/setup')
   mfaSetup(@Auth() session: SessionContext, @Body() input: PasswordDto) {
     return this.auth.startMfaSetup(session, input.password);
@@ -112,6 +113,7 @@ export class AuthController {
   @Roles(...ANY_MEMBER)
   @RateLimit(10, '15 minutes')
   @HttpCode(200)
+  @DemoRestricted()
   @Post('mfa/enable')
   mfaEnable(@Auth() session: SessionContext, @Body() input: MfaCodeDto) {
     return this.auth.enableMfa(session, input.code);
@@ -120,6 +122,7 @@ export class AuthController {
   @Roles(...ANY_MEMBER)
   @RateLimit(10, '15 minutes')
   @HttpCode(204)
+  @DemoRestricted()
   @Post('mfa/disable')
   async mfaDisable(@Auth() session: SessionContext, @Body() input: MfaChangeDto) {
     await this.auth.disableMfa(session, input.password, input.code);
@@ -128,6 +131,7 @@ export class AuthController {
   @Roles('OWNER')
   @RateLimit(10, '15 minutes')
   @HttpCode(200)
+  @DemoRestricted()
   @Post('mfa/owner-requirement')
   ownerMfaRequirement(@Auth() session: SessionContext, @Body() input: OwnerMfaRequirementDto) {
     return this.auth.setOwnerMfaRequirement(session, input.required, input.password, input.code);
@@ -136,6 +140,7 @@ export class AuthController {
   @Roles(...ANY_MEMBER)
   @RateLimit(10, '15 minutes')
   @HttpCode(200)
+  @DemoRestricted()
   @Post('mfa/recovery-codes')
   mfaRecoveryCodes(@Auth() session: SessionContext, @Body() input: MfaChangeDto) {
     return this.auth.regenerateRecoveryCodes(session, input.password, input.code);
@@ -157,6 +162,7 @@ export class AuthController {
 
   @Roles(...ANY_MEMBER)
   @HttpCode(200)
+  @DemoRestricted()
   @Post('switch-workspace')
   async switchWorkspace(
     @Auth() session: SessionContext,
@@ -197,6 +203,7 @@ export class AuthController {
   @Roles(...ANY_MEMBER)
   @RateLimit(3, '15 minutes')
   @HttpCode(202)
+  @DemoRestricted()
   @Post('email/resend')
   async resendVerification(@Auth() session: SessionContext) {
     await this.auth.resendVerification(session);
@@ -206,6 +213,7 @@ export class AuthController {
   @Roles(...ANY_MEMBER)
   @RateLimit(10, '15 minutes')
   @HttpCode(204)
+  @DemoRestricted()
   @Post('password')
   async changePassword(@Auth() session: SessionContext, @Body() input: ChangePasswordDto) {
     await this.auth.changePassword(session, input.currentPassword, input.newPassword);

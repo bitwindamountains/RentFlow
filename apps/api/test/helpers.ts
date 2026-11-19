@@ -43,10 +43,12 @@ export interface RouteInfo {
   path: string;
   isPublic: boolean;
   roles: string[];
+  /** Set when routesOf was asked about a metadata key and the route carries it. */
+  flagged?: boolean;
 }
 
 /** Every route the API serves, read from the controllers' own metadata, so a sweep can prove it covered them all. */
-export function routesOf(app: NestFastifyApplication): RouteInfo[] {
+export function routesOf(app: NestFastifyApplication, flag?: string): RouteInfo[] {
   const routes: RouteInfo[] = [];
   for (const module of app.get(ModulesContainer).values())
     for (const wrapper of module.controllers.values()) {
@@ -59,7 +61,10 @@ export function routesOf(app: NestFastifyApplication): RouteInfo[] {
         const method = RequestMethod[Reflect.getMetadata(METHOD_METADATA, handler) as RequestMethod];
         const path = `/${[base, String(Reflect.getMetadata(PATH_METADATA, handler))].filter((part) => part && part !== '/').join('/')}`.replace(/\/+/g, '/');
         const meta = (key: string) => Reflect.getMetadata(key, handler) ?? Reflect.getMetadata(key, controller);
-        routes.push({ key: `${method} ${path}`, method, path, isPublic: meta(IS_PUBLIC) === true, roles: meta(ROLES) ?? [] });
+        routes.push({
+          key: `${method} ${path}`, method, path, isPublic: meta(IS_PUBLIC) === true, roles: meta(ROLES) ?? [],
+          ...(flag ? { flagged: meta(flag) === true } : {}),
+        });
       }
     }
   return routes;

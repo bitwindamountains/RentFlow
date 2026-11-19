@@ -16,6 +16,11 @@ export interface MailMessage {
  * Transactional email. `log` is for development only and is rejected by
  * environment validation in production.
  */
+/** `.invalid` is reserved (RFC 2606) and can never receive mail; demo owners use it. */
+function isDemoAddress(to: string): boolean {
+  return /\.invalid$/i.test(to.trim());
+}
+
 @Injectable()
 export class MailerService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(MailerService.name);
@@ -39,7 +44,11 @@ export class MailerService implements OnApplicationBootstrap, OnModuleDestroy {
   /** Must be called in the transaction that issues the token or changes business state. */
   async enqueue(tx: Tx, message: MailMessage, kind: string, options: {
     organizationId?: string; userId?: string; tokenId?: string; invitationId?: string; expiresAt?: Date;
-  } = {}): Promise<string> {
+  } = {}): Promise<string | null> {
+    if (await this.isDemoMail(tx, message.to, options.organizationId)) {
+      this.logger.log({ event: 'MAIL_SUPPRESSED_DEMO', kind });
+      return null;
+    }
     const id = randomUUID();
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', environment().MAIL_ENCRYPTION_KEY, iv);
@@ -50,6 +59,14 @@ export class MailerService implements OnApplicationBootstrap, OnModuleDestroy {
       ...options, id, kind, encryptedBody, expiresAt: options.expiresAt ?? new Date(Date.now() + 7 * 86_400_000),
     } });
     return id;
+  }
+
+  /** Demo workspaces never send email: their owners have `.invalid` addresses, and visitors could type real ones. */
+  private async isDemoMail(tx: Tx, to: string, organizationId?: string): Promise<boolean> {
+    if (isDemoAddress(to)) return true;
+    if (!organizationId) return false;
+    const organization = await tx.organization.findUnique({ where: { id: organizationId }, select: { demoExpiresAt: true } });
+    return organization?.demoExpiresAt != null;
   }
 
   kick(): void {
@@ -119,6 +136,10 @@ export class MailerService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async send(message: MailMessage): Promise<void> {
+    if (isDemoAddress(message.to)) {
+      this.logger.log({ event: 'MAIL_SUPPRESSED_DEMO', kind: 'direct' });
+      return;
+    }
     const env = environment();
     if (env.NODE_ENV !== 'production') {
       this.outbox.push(message);

@@ -96,7 +96,7 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 - The public notice is `/privacy`; production requires `PRIVACY_CONTACT_EMAIL`.
 
 **Demo mode.** `POST /demo` (`src/demo/`) creates a private, seeded demo workspace (`Organization.demoExpiresAt` set), deleted by the job after 24 hours. `SessionContext.demo` marks demo sessions.
-- Mark a route `@DemoRestricted()` when it sends email, stores files, exports personal data, or changes account security. `test/demo.e2e-spec.ts` lists every signed-in route that changes data as restricted or allowed, so a new one fails the suite until it is classified.
+- Mark a route `@DemoRestricted()` when it sends email, stores files, exports or erases one tenant's personal data (the privacy routes), or changes account security. Reports and CSVs stay open: a demo's data is made up, and trying them is part of the demo. `test/demo.e2e-spec.ts` lists every signed-in route that changes data as restricted or allowed, so a new one fails the suite until it is classified.
 - A new table with an `organizationId` must be added to `DEMO_DELETE_ORDER` in `demo/demo-cleanup.ts`; the clean-up test checks every such table is emptied.
 
 **Modules.** Feature modules live under `src/`:

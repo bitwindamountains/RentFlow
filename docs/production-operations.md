@@ -67,7 +67,8 @@ With `DEMO_ENABLED=true`, the sign-in page offers **Try the demo**. Each click c
 - **Marked by** `Organization.demoExpiresAt` (24 hours after creation). Real workspaces have it null.
 - **Limits:** 3 demos per IP per hour, and at most `DEMO_MAX_ACTIVE` (default 25) live at once. Demos are created one at a time in the API process, which also keeps the cap exact.
 - **No email leaves a demo.** Routes marked `@DemoRestricted()` answer `DEMO_RESTRICTED` (403): staff and portal invitations, document uploads, mail retry, tenant export and erasure, and account security changes (password, two-step sign-in, email resend, switching workspace). The mailer also drops any message to a `.invalid` address (demo owners use one) or for a demo workspace.
-- **Clean-up:** the background job deletes demos whose time is up, every row of them, plus their demo owners. The delete refuses any workspace whose `demoExpiresAt` is null. When the cap is full, creating a demo first clears expired ones.
+- **Clean-up:** the background job deletes demos whose time is up, every row of them, plus their demo owners. The delete refuses any workspace whose `demoExpiresAt` is null. A demo that fails to delete is logged (`DEMO_DELETE_FAILED`) and skipped; the rest of the job carries on.
+- **Ending early:** a demo's sessions stop working the moment its time is up, so an expired demo no longer counts toward the cap even before the job deletes it. Signing out of a demo (including "Create your own workspace") deletes it at once, since its owner has no password to sign back in with.
 - **Switching it off:** set `DEMO_ENABLED=false` and restart the API. The button disappears; existing demos are still deleted on schedule (jobs must stay on).
 
 ## Background jobs

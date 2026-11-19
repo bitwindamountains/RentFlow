@@ -10,6 +10,11 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-11-20: Dependency security update before v1 deploy.** `npm audit` had found 9 new advisories (1 high: `zod`; moderate: `nodemailer` address parsing, `fast-uri`, `ip-address`, `glob`/`minimatch`, `vitest`; low: `fastify`). Now 0.
+  - `npm audit fix`, then pin bumps: `fastify` 5.12.8, `@fastify/static` 10.1.12, `@nestjs/*` 12.5.1, `@nestjs/cli` 12.0.13, `vitest` ^4.1.12.
+  - All `@angular/*` moved to 22.3.0 together. With only `@angular/build` on 22.3 the lockfile split the packages, and `ng build` failed with "Cannot find module '@angular/service-worker/config'". Keep the Angular packages on one version.
+  - Verified after a clean `npm ci` + `db:generate`: audit 0, lint, typecheck, 65 unit, 128 e2e, 21 web tests, build, and script tests all pass. The Docker job was not run locally (no Docker here).
+
 - **2026-10-20: Second `/ship` review, and its 3 fixes.** Committed (`ee23284`..`4f8ca03`) and pushed; GitHub CI run 39375687252 passed both jobs. Verdict: GO for staging, NO-GO for real tenants' data until Next steps 0a is done. There were no Critical or High findings. CI passed on `9e416db`.
   - **Database TLS is now verified.**
     - Prisma's built-in engine knows only `sslmode` disable, prefer and require. It treats `verify-ca` and `verify-full` as `prefer`. `require` alone accepts any certificate.
@@ -210,18 +215,21 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 ## Next steps
 
 0. **Next in `tasks/todo.md`:** T8 (push with your OK, and confirm CI starts on push and passes the new image pins), then CP1 (you review the Phase 1 diff), then Phase 2. The production env now also needs `MFA_ENCRYPTION_KEY` and `PRIVACY_CONTACT_EMAIL`.
-0a. **Before real tenants' data (from the 2026-10-10 pre-ship review):**
-   - Production database with backups and point-in-time recovery: Supabase Pro, or the bundled Postgres with `deploy/backup.sh`.
-   - Generate `MAIL_ENCRYPTION_KEY` and `MFA_ENCRYPTION_KEY`, and back them up.
-   - Staging run on the real domain: smoke script, real email, and browser checks of sign-in, CSRF, MFA and PWA install/update. Confirm the API and `prisma migrate` connect with `sslaccept=strict` and the Supabase CA, and run an accessibility check (axe or Lighthouse).
-   - Restore drill on PostgreSQL 17 with the real backup locations.
-   - Privacy notice and a designated DPO.
-   - Check that CI passed on the release commit.
+0a. **Before real tenants' data (lean launch, decided 2026-10-20):** launch on the Supabase **free tier**, with no paid database while there are few or no users. Upgrade as the app grows.
+   - **Daily off-site backups.** Schedule `npm run db:backup` (server cron or Windows Task Scheduler) and copy the dumps off the machine. The free tier has no backups, so this is the one item that must not be skipped. It also counts as activity, which should keep the project from being paused.
+   - **One restore test** of a real backup into a throwaway database.
+   - **Keys:** generate `MAIL_ENCRYPTION_KEY` and `MFA_ENCRYPTION_KEY` (`openssl rand -base64 32`), and store them with the backups.
+   - **Privacy:** set `PRIVACY_CONTACT_EMAIL`. The owner can be the designated DPO.
+   - **Check on the live domain before inviting anyone:** sign up, reset a password, upload a document, and run `deploy/smoke.sh`. This confirms the API and `prisma migrate` connect with `sslaccept=strict` and the Supabase CA in `deploy/certs/`.
+   - **Skipped for now:** Supabase Pro, point-in-time recovery, and a separate staging server.
+   - **Free-tier caveats:**
+     - A project with about a week of no activity is paused, and must be restored in the dashboard.
+     - The project is shared with the other apps (about 60 connections in all; RentFlow's role is capped at 10).
+     - Daily backups mean up to a day of entries can be lost.
+   - **Upgrade when** landlords depend on it daily, losing a day of entries would hurt, the project pauses or runs out of connections, or more than one API instance is needed.
 0. **Supabase follow-ups:**
-   - Back up off-site regularly with `npm run db:backup`, because the free tier has no backups.
    - Keep each app's role connection limit within the shared budget of about 60 connections.
    - Point the S3 upload driver at Supabase Storage.
-   - Upgrade to Pro before real tenants' data goes in.
 1. **Superseded by Supabase.** This step is only needed for the old local DB: apply the migrations to the local dev database. The automatic attempt was blocked by permissions.
    1. Run `npm run db:local --workspace api`.
    2. In a second terminal, run `npm run db:deploy --workspace api`.

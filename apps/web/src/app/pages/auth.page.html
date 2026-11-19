@@ -145,6 +145,9 @@
           <button class="secondary auth-demo-button" type="button" (click)="startDemo()" [disabled]="demoBusy() || busy()" [attr.aria-busy]="demoBusy()">
             {{ demoBusy() ? 'Setting up your demo…' : 'Try the demo' }}
           </button>
+          @if (demoError()) {
+            <div class="auth-error" role="alert">{{ demoError() }}</div>
+          }
           <small>No sign-up. A private sample workspace, deleted after 24 hours.</small>
         </div>
       }

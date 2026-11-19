@@ -26,6 +26,8 @@ export class AuthPage {
   /** "Try the demo" is offered only when the server has demo mode on. */
   protected readonly demoEnabled = signal(false);
   protected readonly demoBusy = signal(false);
+  /** Shown under the demo button, so it isn't read as a sign-in problem. */
+  protected readonly demoError = signal('');
   private challenge = '';
 
   constructor() {
@@ -45,6 +47,7 @@ export class AuthPage {
   protected switchMode(mode: Mode): void {
     this.mode.set(mode);
     this.error.set('');
+    this.demoError.set('');
     this.notice.set('');
     this.code = '';
     this.useRecovery.set(false);
@@ -53,6 +56,7 @@ export class AuthPage {
   protected startDemo(): void {
     if (this.demoBusy() || this.busy()) return;
     this.error.set('');
+    this.demoError.set('');
     this.demoBusy.set(true);
     this.api
       .session('/demo', {})
@@ -60,7 +64,7 @@ export class AuthPage {
       .subscribe({
         next: (profile) => void this.router.navigateByUrl(homeFor(profile.role)),
         error: (error: ApiError) =>
-          this.error.set(
+          this.demoError.set(
             error.status === 503 || error.code === 'RATE_LIMITED'
               ? 'The demo is busy right now. Try again in a little while, or create your own workspace.'
               : error.message,
@@ -71,6 +75,7 @@ export class AuthPage {
   protected submit(): void {
     if (this.busy()) return;
     this.error.set('');
+    this.demoError.set('');
     this.busy.set(true);
     if (this.mode() === 'forgot') {
       this.api

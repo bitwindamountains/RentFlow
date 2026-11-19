@@ -53,6 +53,15 @@ describe('sign-in page demo', () => {
     );
   });
 
+  it('shows a demo error under the demo button, not in the sign-in form', async () => {
+    const { api, fixture, element, demoButton } = await render({ enabled: true });
+    vi.spyOn(api, 'session').mockReturnValue(throwError(() => ({ status: 0, code: 'NETWORK', message: 'Cannot reach RentFlow. Check your connection and try again.' })));
+    demoButton()!.click();
+    fixture.detectChanges();
+    expect(element.querySelector('.auth-demo [role="alert"]')?.textContent).toContain('Cannot reach RentFlow');
+    expect(element.querySelectorAll('[role="alert"]').length).toBe(1);
+  });
+
   it('opens in register mode with ?register=1', async () => {
     const { element } = await render({ enabled: true, query: { register: '1' } });
     expect(element.querySelector('h2')?.textContent).toContain('Create your account');

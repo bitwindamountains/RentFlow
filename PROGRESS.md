@@ -13,7 +13,8 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 - **2026-11-20: Dependency security update before v1 deploy.** `npm audit` had found 9 new advisories (1 high: `zod`; moderate: `nodemailer` address parsing, `fast-uri`, `ip-address`, `glob`/`minimatch`, `vitest`; low: `fastify`). Now 0.
   - `npm audit fix`, then pin bumps: `fastify` 5.12.8, `@fastify/static` 10.1.12, `@nestjs/*` 12.5.1, `@nestjs/cli` 12.0.13, `vitest` ^4.1.12.
   - All `@angular/*` moved to 22.3.0 together. With only `@angular/build` on 22.3 the lockfile split the packages, and `ng build` failed with "Cannot find module '@angular/service-worker/config'". Keep the Angular packages on one version.
-  - Verified after a clean `npm ci` + `db:generate`: audit 0, lint, typecheck, 65 unit, 128 e2e, 21 web tests, build, and script tests all pass. The Docker job was not run locally (no Docker here).
+  - Verified after a clean `npm ci` + `db:generate`: audit 0, lint, typecheck, 65 unit, 128 e2e, 21 web tests, build, and script tests all pass.
+  - Committed (`8dfafeb`, `f5634cc`) and pushed. GitHub CI run 44562761491 passed both jobs, including `containers` (images build, the production stack starts and passes the proxy, readiness and PWA checks).
 
 - **2026-10-20: Second `/ship` review, and its 3 fixes.** Committed (`ee23284`..`4f8ca03`) and pushed; GitHub CI run 39375687252 passed both jobs. Verdict: GO for staging, NO-GO for real tenants' data until Next steps 0a is done. There were no Critical or High findings. CI passed on `9e416db`.
   - **Database TLS is now verified.**

@@ -12,14 +12,15 @@ export interface MailMessage {
   idempotencyKey?: string;
 }
 
-/**
- * Transactional email. `log` is for development only and is rejected by
- * environment validation in production.
- */
 /** `.invalid` is reserved (RFC 2606) and can never receive mail; demo owners use it. */
 function isDemoAddress(to: string): boolean {
   return /\.invalid$/i.test(to.trim());
 }
+
+/**
+ * Transactional email. `log` is for development only and is rejected by
+ * environment validation in production.
+ */
 
 @Injectable()
 export class MailerService implements OnApplicationBootstrap, OnModuleDestroy {

@@ -312,6 +312,43 @@ it('every route is classified for demo mode', async () => {
     expect(after.status).toBe(401);
   });
 
+  it('an expired demo stops working before the job deletes it', async () => {
+    const { client, response } = await startDemo();
+    await expire(response.body.organization.id);
+    expect((await client.get('/dashboard')).status).toBe(401);
+  });
+
+  it('signing out of a demo deletes it and frees its slot', async () => {
+    const { client, response } = await startDemo();
+    const before = await liveDemos();
+    expect((await client.post('/auth/logout')).status).toBe(204);
+    expect(await prismaOf(app).organization.findUnique({ where: { id: response.body.organization.id } })).toBeNull();
+    expect(await liveDemos()).toBe(before - 1);
+  });
+
+  it('one demo that cannot be deleted does not stop the job', async () => {
+    const prisma = prismaOf(app);
+    const stuck = (await startDemo()).response.body.organization.id as string;
+    const other = (await startDemo()).response.body.organization.id as string;
+    await expire(stuck);
+    await expire(other);
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION test_block_demo_delete() RETURNS trigger AS $$ BEGIN IF OLD.id = '${stuck}' THEN RAISE EXCEPTION 'blocked'; END IF; RETURN OLD; END $$ LANGUAGE plpgsql`,
+    );
+    await prisma.$executeRawUnsafe(
+      'CREATE TRIGGER test_block_demo_delete BEFORE DELETE ON "Organization" FOR EACH ROW EXECUTE FUNCTION test_block_demo_delete()',
+    );
+    try {
+      await expect(app.get(JobsService).runAll()).resolves.toBeDefined();
+      expect(await prisma.organization.findUnique({ where: { id: other } })).toBeNull();
+      expect(await prisma.organization.findUnique({ where: { id: stuck } })).not.toBeNull();
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TRIGGER test_block_demo_delete ON "Organization"');
+      await prisma.$executeRawUnsafe('DROP FUNCTION test_block_demo_delete()');
+      await deleteDemoOrganization(prisma, stuck);
+    }
+  });
+
   it('the job tick removes expired demos', async () => {
     const { response } = await startDemo();
     await expire(response.body.organization.id);

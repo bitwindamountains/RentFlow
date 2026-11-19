@@ -1,4 +1,7 @@
+import { Logger } from '@nestjs/common';
 import type { PrismaService, Tx } from '../common/prisma.service.js';
+
+const logger = new Logger('DemoCleanup');
 
 /**
  * Every table holding a demo workspace's rows, children before parents, so no
@@ -66,9 +69,17 @@ export async function deleteExpiredDemos(prisma: PrismaService, now = new Date()
   const expired = await prisma.organization.findMany({
     where: { demoExpiresAt: { not: null, lte: now } },
     select: { id: true },
+    orderBy: { demoExpiresAt: 'asc' },
     take: 100,
   });
   let deleted = 0;
-  for (const { id } of expired) if (await deleteDemoOrganization(prisma, id)) deleted += 1;
+  for (const { id } of expired) {
+    try {
+      if (await deleteDemoOrganization(prisma, id)) deleted += 1;
+    } catch (error) {
+      // One demo that can't be deleted must not keep the others (or the rest of the job) waiting.
+      logger.error({ event: 'DEMO_DELETE_FAILED', organizationId: id, type: (error as Error)?.name });
+    }
+  }
   return deleted;
 }

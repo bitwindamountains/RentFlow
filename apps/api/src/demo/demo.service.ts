@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { AuthService, type IssuedSession } from '../auth/auth.service.js';
+import { AuthService, uniqueSlug, type IssuedSession } from '../auth/auth.service.js';
 import { BalancesService } from '../billing/balances.service.js';
 import { BillingService } from '../billing/billing.service.js';
 import { audit } from '../common/audit.js';
@@ -12,7 +12,7 @@ import { PaymentsService } from '../payments/payments.service.js';
 import { PropertiesService } from '../rentals/properties.service.js';
 import { RentalSetupService } from '../rentals/setup.service.js';
 import { WorkService } from '../work/work.service.js';
-import { deleteDemoOrganization, deleteExpiredDemos } from './demo-cleanup.js';
+import { deleteDemoOrganization } from './demo-cleanup.js';
 import { seedDemo } from './demo-seed.js';
 
 const DEMO_LIFETIME_MS = 24 * 3_600_000;
@@ -54,12 +54,9 @@ export class DemoService {
   private async createNow(userAgent?: string): Promise<IssuedSession> {
     const env = environment();
     if (!env.DEMO_ENABLED) throw new DomainError('DEMO_UNAVAILABLE', 503);
-    if ((await this.liveDemos()) >= env.DEMO_MAX_ACTIVE) {
-      await deleteExpiredDemos(this.prisma);
-      if ((await this.liveDemos()) >= env.DEMO_MAX_ACTIVE) throw new DomainError('DEMO_UNAVAILABLE', 503);
-    }
+    // Expired demos don't count (their sessions are already refused); the job deletes them.
+    if ((await this.liveDemos()) >= env.DEMO_MAX_ACTIVE) throw new DomainError('DEMO_UNAVAILABLE', 503);
 
-    const suffix = randomBytes(4).toString('hex');
     const issued = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -72,7 +69,7 @@ export class DemoService {
       const organization = await tx.organization.create({
         data: {
           name: 'Demo Rentals',
-          slug: `demo-${suffix}`,
+          slug: await uniqueSlug(tx, `demo-${randomBytes(4).toString('hex')}`),
           receiptPrefix: 'DEMO',
           requireOwnerMfa: false,
           demoExpiresAt: new Date(Date.now() + DEMO_LIFETIME_MS),

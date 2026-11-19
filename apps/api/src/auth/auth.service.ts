@@ -13,6 +13,7 @@ import {
 import { DomainError } from '../common/errors.js';
 import { isUniqueViolation, PrismaService, type Tx } from '../common/prisma.service.js';
 import { environment } from '../config/environment.js';
+import { deleteDemoOrganization } from '../demo/demo-cleanup.js';
 import { MailerService } from '../mail/mailer.service.js';
 import {
   assertMfaAvailable,
@@ -390,6 +391,9 @@ export class AuthService {
       select: { role: true, tenantId: true, tenant: { select: { status: true } }, organization: { select: { requireOwnerMfa: true, demoExpiresAt: true } } },
     });
     if (!membership) return undefined;
+    // A demo whose time is up is closed now, not when the job gets to deleting it.
+    const demoExpiresAt = membership.organization.demoExpiresAt;
+    if (demoExpiresAt && demoExpiresAt.getTime() <= now) return undefined;
     // An archived tenant loses portal access immediately.
     if (membership.role === 'TENANT' && (!membership.tenantId || membership.tenant?.status === 'ARCHIVED')) return undefined;
     if (now - session.lastSeenAt.getTime() > touchInterval)
@@ -411,9 +415,14 @@ export class AuthService {
     };
   }
 
-  async logout(sessionId: string): Promise<void> {
+  async logout(session: SessionContext): Promise<void> {
+    // A demo owner has no password, so a signed-out demo can never be reopened: delete it and free its slot.
+    if (session.demo) {
+      await deleteDemoOrganization(this.prisma, session.organizationId);
+      return;
+    }
     await this.prisma.session.updateMany({
-      where: { id: sessionId, revokedAt: null },
+      where: { id: session.sessionId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
@@ -697,7 +706,7 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-async function uniqueSlug(tx: Tx, name: string): Promise<string> {
+export async function uniqueSlug(tx: Tx, name: string): Promise<string> {
   const base =
     name
       .toLowerCase()

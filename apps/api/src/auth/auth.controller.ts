@@ -156,7 +156,7 @@ export class AuthController {
   @HttpCode(204)
   @Post('logout')
   async logout(@Auth() session: SessionContext, @Res({ passthrough: true }) reply: CookieReply) {
-    await this.auth.logout(session.sessionId);
+    await this.auth.logout(session);
     reply.clearCookie(sessionCookieName(), sessionCookieOptions());
   }
 

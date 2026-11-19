@@ -23,6 +23,7 @@ npm run db:seed:test                       # demo@rentflow.local / RentFlowDemo!
 **Dev database is Supabase.** `apps/api/.env` points at a free-tier Supabase project that is shared with other apps.
 - RentFlow has its own `rentflow` role and schema; never use `public`. The `rentflow` role is capped at 10 connections.
 - Connect through the session pooler (port 5432; the exact URL is in `.env`). It works for both the app and `prisma migrate`.
+- The free tier hibernates the project when idle. Then Prisma fails with P1001 ("Can't reach database server") even though the network is fine; a plain `pg` connection shows `authentication query failed`, and the Supabase MCP tools say "password authentication failed for user postgres" or "currently hibernated". `get_project` still says `ACTIVE_HEALTHY` and `restore_project` refuses. Waking it took over 30 minutes and did not finish on 2026-11-20. Ask the user to open the project in the Supabase dashboard (and reset the database password there if it still fails); don't loop retries. Migrations waiting to be applied are listed in PROGRESS.md.
 - The old local Postgres URL is kept as a comment in `.env`. Tests always use their own embedded database, never `.env`.
 
 To check your work, run the same steps as CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)):

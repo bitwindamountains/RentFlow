@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { BillingService } from '../src/billing/billing.service.js';
 import { DEMO_RESTRICTED } from '../src/auth/decorators.js';
 import { resetEnvironmentCache } from '../src/config/environment.js';
+import { deleteDemoOrganization, deleteExpiredDemos } from '../src/demo/demo-cleanup.js';
 import { JobsService } from '../src/jobs/jobs.service.js';
 import { Client, lastEmail, prismaOf, registerOwner, routesOf, startApp, today } from './helpers.js';
 
@@ -247,5 +248,76 @@ it('every route is classified for demo mode', async () => {
     const demoOwner = await prisma.membership.findFirstOrThrow({ where: { organizationId }, include: { user: true } });
     expect(lastEmail(app, demoOwner.user.email)).toBeUndefined();
   });
+/** Ends a demo's time without waiting 24 hours. */
+  const expire = (organizationId: string) =>
+    prismaOf(app).organization.update({ where: { id: organizationId }, data: { demoExpiresAt: new Date(Date.now() - 60_000) } });
+  /** Rows left for an organization in every table that has an "organizationId" column. */
+  const leftovers = async (organizationId: string) => {
+    const prisma = prismaOf(app);
+    const tables = await prisma.$queryRaw<Array<{ table_name: string }>>`
+      SELECT table_name FROM information_schema.columns
+      WHERE column_name = 'organizationId' AND table_schema = current_schema()`;
+    const counts: Record<string, number> = {};
+    for (const { table_name } of tables) {
+      const [row] = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT count(*) AS count FROM "${table_name}" WHERE "organizationId" = $1::uuid`,
+        organizationId,
+      );
+      if (Number(row!.count) > 0) counts[table_name] = Number(row!.count);
+    }
+    return counts;
+  };
+
+  it('expired demos are deleted with every row', async () => {
+    const { client, response } = await startDemo();
+    const organizationId: string = response.body.organization.id;
+    const prisma = prismaOf(app);
+    const lease = await prisma.lease.findFirstOrThrow({ where: { organizationId, primaryTenant: { lastName: 'Garcia' } } });
+    const payment = await client.post(
+      '/payments',
+      { tenantId: lease.primaryTenantId, leaseId: lease.id, amount: '700.00', method: 'GCASH', paidAt: new Date().toISOString(), allocations: [] },
+      { 'idempotency-key': crypto.randomUUID() },
+    );
+    expect(payment.status).toBe(201);
+    expect((await client.post(`/payments/${payment.body.id}/reverse`, { reason: 'Entered twice' })).status).toBe(201);
+    const ownerId = (await prisma.membership.findFirstOrThrow({ where: { organizationId } })).userId;
+
+    await expire(organizationId);
+    expect(await deleteExpiredDemos(prisma)).toBeGreaterThanOrEqual(1);
+    expect(await leftovers(organizationId)).toEqual({});
+    expect(await prisma.organization.findUnique({ where: { id: organizationId } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: ownerId } })).toBeNull();
+  });
+
+  it('a real workspace is never deleted', async () => {
+    const { client, profile } = await registerOwner(app);
+    expect((await client.post('/tenants', { firstName: 'Kept', lastName: 'Safe' })).status).toBe(201);
+    const prisma = prismaOf(app);
+    expect(await deleteDemoOrganization(prisma, profile.organization.id)).toBe(false);
+    expect(await prisma.tenant.count({ where: { organizationId: profile.organization.id } })).toBe(1);
+    expect(await prisma.organization.findUnique({ where: { id: profile.organization.id } })).not.toBeNull();
+  });
+
+  it('live demos are kept', async () => {
+    const { response } = await startDemo();
+    await deleteExpiredDemos(prismaOf(app));
+    expect(await prismaOf(app).organization.findUnique({ where: { id: response.body.organization.id } })).not.toBeNull();
+  });
+
+  it('a session in a deleted demo gets 401', async () => {
+    const { client, response } = await startDemo();
+    await expire(response.body.organization.id);
+    await deleteExpiredDemos(prismaOf(app));
+    const after = await client.get('/dashboard');
+    expect(after.status).toBe(401);
+  });
+
+  it('the job tick removes expired demos', async () => {
+    const { response } = await startDemo();
+    await expire(response.body.organization.id);
+    await app.get(JobsService).runAll();
+    expect(await prismaOf(app).organization.findUnique({ where: { id: response.body.organization.id } })).toBeNull();
+  });
 });
+
 

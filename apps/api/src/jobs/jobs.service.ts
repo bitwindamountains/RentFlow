@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { todayInZone } from '../common/dates.js';
+import { deleteExpiredDemos } from '../demo/demo-cleanup.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { environment } from '../config/environment.js';
 import { BillingService } from '../billing/billing.service.js';
@@ -91,7 +92,8 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
 
   async runAll(checkLease: () => Promise<void> = async () => undefined) {
     const organizations = await this.prisma.organization.findMany({
-      where: { status: 'ACTIVE' },
+      // Demo workspaces past their time are deleted below, not billed.
+      where: { status: 'ACTIVE', OR: [{ demoExpiresAt: null }, { demoExpiresAt: { gt: new Date() } }] },
       select: { id: true, timezone: true },
     });
     let charges = 0;
@@ -119,6 +121,9 @@ export class JobsService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.storage.processPending();
     await checkLease();
     await this.mailer.processPending();
+    await checkLease();
+    const demos = await deleteExpiredDemos(this.prisma);
+    if (demos) this.logger.log({ event: 'DEMOS_DELETED', count: demos });
     const now = new Date();
     await this.prisma.userToken.deleteMany({ where: { expiresAt: { lt: new Date(now.getTime() - 86_400_000) } } });
     await this.prisma.loginFailure.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 86_400_000) } } });

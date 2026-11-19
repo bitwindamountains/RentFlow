@@ -120,7 +120,7 @@ export class AuthService {
           entityId: organization.id,
         });
         await this.sendVerification(tx, user.id, email);
-        return this.createSession(tx, user.id, organization.id, { role: 'OWNER', tenantId: null }, false, input.userAgent);
+        return this.issueSession(tx, user.id, organization.id, { role: 'OWNER', tenantId: null }, false, input.userAgent);
       });
       this.mailer.kick();
       return issued;
@@ -157,7 +157,7 @@ export class AuthService {
       return { mfaRequired: true, challenge: await this.issueToken(user.id, 'MFA_CHALLENGE', mfaChallengeLifetime) };
     await this.clearLoginFailures(email);
     return this.prisma.$transaction((tx) =>
-      this.createSession(
+      this.issueSession(
         tx,
         user.id,
         membership.organizationId,
@@ -192,7 +192,7 @@ export class AuthService {
     if (factor === 'recovery') await this.noticeRecoveryCodeUsed(user, membership.organizationId);
     await this.clearLoginFailures(user.email);
     return this.prisma.$transaction((tx) =>
-      this.createSession(tx, user.id, membership.organizationId, membership, Boolean(user.emailVerifiedAt), input.userAgent),
+      this.issueSession(tx, user.id, membership.organizationId, membership, Boolean(user.emailVerifiedAt), input.userAgent),
     );
   }
 
@@ -469,7 +469,7 @@ export class AuthService {
     if (!membership) throw new DomainError('RESOURCE_NOT_FOUND', 404);
     return this.prisma.$transaction(async (tx) => {
       await tx.session.update({ where: { id: context.sessionId }, data: { revokedAt: new Date() } });
-      return this.createSession(
+      return this.issueSession(
         tx,
         context.userId,
         membership.organizationId,
@@ -606,7 +606,8 @@ export class AuthService {
     return result.count;
   }
 
-  private async createSession(
+  /** Starts a session for an active membership (also used by demo workspaces). */
+  async issueSession(
     tx: Tx,
     userId: string,
     organizationId: string,

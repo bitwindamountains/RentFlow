@@ -33,6 +33,11 @@ describe('passwords', () => {
     }
   });
 
+  it('never verifies the placeholder hash of a demo owner', async () => {
+    for (const password of ['!demo', 'demo', '', 'correct horse battery staple'])
+      expect(await verifyPassword(password, '!demo'), password).toBe(false);
+  });
+
   it('returns false (after doing the same work) when there is no account', async () => {
     expect(await verifyPassword('anything at all', undefined)).toBe(false);
   });

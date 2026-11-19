@@ -11,6 +11,6 @@ import { TenantsService } from './tenants.service.js';
   imports: [BillingModule],
   controllers: [RentalsController],
   providers: [PropertiesService, TenantsService, TenantPrivacyService, LeasesService, RentalSetupService],
-  exports: [LeasesService],
+  exports: [LeasesService, PropertiesService, RentalSetupService],
 })
 export class RentalsModule {}

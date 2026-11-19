@@ -29,6 +29,8 @@ const messages: Record<string, string> = {
   MFA_NOT_ENABLED: 'Two-step sign-in is not on.',
   MFA_SETUP_REQUIRED: 'Start setup again to get a new code.',
   MFA_UNAVAILABLE: 'Two-step sign-in is not available on this server yet.',
+  DEMO_RESTRICTED: 'Not available in the demo. Create your own workspace to use this.',
+  DEMO_UNAVAILABLE: 'The demo is busy right now. Try again in a little while, or create your own workspace.',
   DOCUMENT_NOT_SHAREABLE: 'Only documents attached to a tenant or a lease can be shared with the tenant.',
   FILE_EMPTY: 'Choose a file to upload.',
   FILE_TOO_LARGE: 'The file is too large.',

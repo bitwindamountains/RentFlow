@@ -1,10 +1,10 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, Ip, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import type { FastifyReply } from 'fastify';
 import { PASSWORD_MAX_LENGTH } from '../common/crypto.js';
-import { environment, sessionCookieName } from '../config/environment.js';
+import { sessionCookieName } from '../config/environment.js';
 import { AuthService, type IssuedSession } from './auth.service.js';
+import { type CookieReply, sessionCookieOptions, startSessionReply } from './session-reply.js';
 import { AllowWithoutMfa, ANY_MEMBER, Auth, Public, RateLimit, Roles } from './decorators.js';
 import type { SessionContext } from './session.types.js';
 
@@ -53,10 +53,6 @@ class SwitchWorkspaceDto {
   @IsString() @MinLength(1) @MaxLength(160) workspace!: string;
 }
 
-type CookieReply = FastifyReply & {
-  setCookie(name: string, value: string, options: Record<string, unknown>): void;
-  clearCookie(name: string, options: Record<string, unknown>): void;
-};
 
 @ApiTags('authentication')
 // Account routes stay usable while an owner still has to turn on required two-step sign-in.
@@ -156,7 +152,7 @@ export class AuthController {
   @Post('logout')
   async logout(@Auth() session: SessionContext, @Res({ passthrough: true }) reply: CookieReply) {
     await this.auth.logout(session.sessionId);
-    reply.clearCookie(sessionCookieName(), this.cookieOptions());
+    reply.clearCookie(sessionCookieName(), sessionCookieOptions());
   }
 
   @Roles(...ANY_MEMBER)
@@ -235,20 +231,7 @@ export class AuthController {
     await this.auth.revokeSession(session, id);
   }
 
-  private async startSession(reply: CookieReply, issued: IssuedSession) {
-    reply.setCookie(sessionCookieName(), issued.token, {
-      ...this.cookieOptions(),
-      maxAge: environment().SESSION_ABSOLUTE_HOURS * 3600,
-    });
-    return this.auth.profile(issued.context);
-  }
-
-  private cookieOptions() {
-    return {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: environment().NODE_ENV === 'production',
-      path: '/',
-    };
+  private startSession(reply: CookieReply, issued: IssuedSession) {
+    return startSessionReply(reply, this.auth, issued);
   }
 }

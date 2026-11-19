@@ -7,6 +7,7 @@ import { CommonModule } from './common/common.module.js';
 import { ErrorFilter } from './common/error.filter.js';
 import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
+import { DemoModule } from './demo/demo.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { PortalModule } from './portal/portal.module.js';
 import { RentalsModule } from './rentals/rentals.module.js';
@@ -26,6 +27,7 @@ import { WorkModule } from './work/work.module.js';
     WorkModule,
     PortalModule,
     JobsModule,
+    DemoModule,
     HealthModule,
   ],
   providers: [

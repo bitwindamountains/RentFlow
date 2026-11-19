@@ -15,6 +15,11 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
   - Off unless `DEMO_ENABLED=true`. `DEMO_MAX_ACTIVE` (default 25) caps live demos; 3 demos per IP per hour.
   - No email can leave a demo: `@DemoRestricted()` routes answer `DEMO_RESTRICTED`, and the mailer drops `.invalid` recipients and demo workspaces. `demo.e2e-spec` makes every signed-in route that changes data choose restricted or allowed.
   - Found while testing: parallel demo seeds hit serialization failures (409 RETRY). Demos are now created one at a time in the API process.
+  - Reviewed before merge: code review, security review (no vulnerabilities), break-ui, and an Impeccable critique (26/40). Fixes from them:
+    - An expired demo stops working at once. Signing out of a demo deletes it, after a "Leave the demo?" question ("Sign out" reads "Leave demo" there). One demo that fails to delete is logged and skipped, so the rest of the job still runs.
+    - Sign-in says what RentFlow is and gives "Try the demo" more weight; demo errors show under the demo button. The demo banner is a calm one-line brand bar, and the demo dashboard suggests collecting the top overdue balance.
+    - On phones, dashboard chart tooltips are centred on the chart so they no longer widen the page. The visual review now names the element that overflows.
+  - Not done: the disabled "Sign in" button looks almost enabled in dark mode (an app-wide button style).
   - New migration `20261120090000_demo_mode` (`Organization.demoExpiresAt`). **Not applied to Supabase yet.**
 
 - **2026-11-20: Dependency security update before v1 deploy.** `npm audit` had found 9 new advisories (1 high: `zod`; moderate: `nodemailer` address parsing, `fast-uri`, `ip-address`, `glob`/`minimatch`, `vitest`; low: `fastify`). Now 0.

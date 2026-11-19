@@ -254,7 +254,17 @@ async function review(browser, storageState, label, routes) {
         const name = `${label}${route.replaceAll('/', '-')}-${width}${colorScheme === 'dark' ? '-dark' : ''}`;
         await page.screenshot({ path: join(out, `${name}.png`), fullPage: true, animations: 'disabled' });
         const sizes = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
-        if (sizes.scroll > sizes.width + 1) problems.push(`${name}: horizontal overflow ${sizes.scroll - sizes.width}px`);
+        if (sizes.scroll > sizes.width + 1) {
+          // Name the innermost elements that stick out, so the report says what to fix.
+          const culprits = await page.evaluate((limit) => {
+            const wide = [...document.body.querySelectorAll('*')].filter((el) => el.getBoundingClientRect().right > limit + 1);
+            return wide
+              .filter((el) => !wide.some((other) => other !== el && el.contains(other)))
+              .slice(0, 5)
+              .map((el) => `${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/s+/).join('.') : ''} (right ${Math.round(el.getBoundingClientRect().right)}px)`);
+          }, sizes.width);
+          problems.push(`${name}: horizontal overflow ${sizes.scroll - sizes.width}px: ${culprits.join('; ')}`);
+        }
         // Amounts must read as one figure: on one line and inside their card.
         const broken = await page.$$eval('.tile-value', (values) =>
           values

@@ -29,6 +29,8 @@ interface SampleRental {
   phone: string;
   rent: string;
   monthsAgo: number;
+  /** Day of the month rent falls due (default 5). Differs per lease so arrears don't all match. */
+  dueDay?: number;
   standing: Standing;
   /** Days from today the lease ends; otherwise a one-year lease. */
   endsInDays?: number;
@@ -44,11 +46,23 @@ const RENTALS: SampleRental[] = [
   { property: 'Mabini Residences', unit: '1A', firstName: 'Maria', lastName: 'Santos', phone: '0917 000 0101', rent: '8500.00', monthsAgo: 5, standing: 'paid', deposit: '17000.00' },
   { property: 'Mabini Residences', unit: '1B', firstName: 'Jose', lastName: 'Reyes', phone: '0917 000 0102', rent: '12000.00', monthsAgo: 4, standing: 'paid' },
   { property: 'Mabini Residences', unit: '2A', firstName: 'Ana', lastName: 'Cruz', phone: '0917 000 0103', rent: '9500.00', monthsAgo: 3, standing: 'paid' },
-  { property: 'Sampaguita Apartments', unit: '101', firstName: 'Mark', lastName: 'Bautista', phone: '0917 000 0104', rent: '15000.00', monthsAgo: 4, standing: 'partial' },
+  { property: 'Sampaguita Apartments', unit: '101', firstName: 'Mark', lastName: 'Bautista', phone: '0917 000 0104', rent: '15000.00', monthsAgo: 4, standing: 'partial', dueDay: 10 },
   { property: 'Sampaguita Apartments', unit: '102', firstName: 'Liza', lastName: 'Garcia', phone: '0917 000 0105', rent: '7000.00', monthsAgo: 4, standing: 'overdue', endsInDays: 20 },
 ];
 
 const METHODS: PaymentMethod[] = ['CASH', 'GCASH', 'BANK_TRANSFER', 'MAYA'];
+
+/**
+ * A few days either side of the due date, at a daytime hour in Manila, never in
+ * the future. Fixed per payment (not random) so every demo looks the same.
+ */
+function lifelikePaidAt(dueDate: Date, index: number): Date {
+  const dayShift = [-3, 0, -1, 2, -2, 1][index % 6]!;
+  const hoursUtc = 1 + ((index * 5) % 11); // 9:00 to 19:00 in Manila (UTC+8)
+  const minutes = (index * 23) % 60;
+  const at = dueDate.getTime() + dayShift * 86_400_000 + hoursUtc * 3_600_000 + minutes * 60_000;
+  return new Date(Math.min(at, Date.now() - (1 + (index % 5)) * 3_600_000));
+}
 
 /** First day of the month `monthsAgo` months before `today`. */
 function monthStart(today: string, monthsAgo: number): string {
@@ -80,12 +94,12 @@ export async function seedDemo(services: DemoSeedServices, organizationId: strin
         endDate,
         monthlyRent: rental.rent,
         billingDay: 1,
-        dueDay: 5,
+        dueDay: rental.dueDay ?? 5,
         gracePeriodDays: 0,
         ...(rental.deposit ? { depositRequired: rental.deposit } : {}),
         firstMonth: 'FULL',
       },
-      charge: { description: `Rent for ${periodOf(startDate)}`, dueDate: addDays(startDate, 4), billingPeriod: periodOf(startDate) },
+      charge: { description: `Rent for ${periodOf(startDate)}`, dueDate: addDays(startDate, (rental.dueDay ?? 5) - 1), billingPeriod: periodOf(startDate) },
     });
     leases.push({ rental, leaseId: created.leaseId, tenantId: created.tenantId, propertyId: created.propertyId, unitId: created.unitId });
   }
@@ -99,6 +113,7 @@ export async function seedDemo(services: DemoSeedServices, organizationId: strin
   const lastMonth = periodOf(monthStart(today, 1));
   const thisMonth = periodOf(today);
   let method = 0;
+  let paymentIndex = 0;
   for (const lease of leases) {
     const charges = (await balances.charges(organizationId, { leaseId: lease.leaseId, status: 'open' }))
       .slice()
@@ -107,7 +122,7 @@ export async function seedDemo(services: DemoSeedServices, organizationId: strin
       let amount = new Prisma.Decimal(charge.outstanding);
       if (lease.rental.standing === 'overdue' && (charge.billingPeriod === lastMonth || charge.billingPeriod === thisMonth)) continue;
       if (lease.rental.standing === 'partial' && charge.billingPeriod === lastMonth) amount = amount.div(2).toDecimalPlaces(2);
-      const paidAt = charge.dueDate.getTime() < Date.now() ? charge.dueDate : new Date();
+      const paidAt = lifelikePaidAt(charge.dueDate, paymentIndex++);
       await payments.create(
         organizationId,
         actorUserId,

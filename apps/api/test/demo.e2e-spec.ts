@@ -142,6 +142,17 @@ describe('demo workspaces', () => {
     expect(overdueOf('Garcia')).toBeGreaterThanOrEqual(rentOf('Garcia'));
   });
 
+  it('the sample data looks lived-in, not machine-made', async () => {
+    const { client, response } = await startDemo();
+    const payments = await prismaOf(app).payment.findMany({ where: { organizationId: response.body.organization.id }, select: { paidAt: true } });
+    // Times of day in Manila (UTC+8): not every payment at the same minute.
+    const times = new Set(payments.map((payment) => new Date(payment.paidAt.getTime() + 8 * 3_600_000).toISOString().slice(11, 16)));
+    expect(times.size).toBeGreaterThan(3);
+    const arrears: Array<{ daysOverdue: number }> = (await client.get('/dashboard')).body.topArrears;
+    expect(arrears.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(arrears.map((row) => row.daysOverdue)).size).toBe(arrears.length);
+  });
+
   it('recording a payment works in a demo', async () => {
     const { client, response } = await startDemo();
     const organizationId: string = response.body.organization.id;

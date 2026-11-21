@@ -9,6 +9,13 @@ import {
 import { Prisma } from '@prisma/client';
 import { DomainError } from './errors.js';
 
+/** Prisma's error code (e.g. P2028) for logs; never the message, which can hold query values. */
+export function prismaErrorCode(error: unknown): string | undefined {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) return error.code;
+  if (error instanceof Prisma.PrismaClientInitializationError) return error.errorCode;
+  return undefined;
+}
+
 interface ErrorBody {
   statusCode: number;
   code: string;
@@ -95,6 +102,7 @@ export class ErrorFilter implements ExceptionFilter {
       event: 'UNEXPECTED_REQUEST_ERROR',
       requestId,
       type: (error as Error)?.constructor?.name,
+      prismaCode: prismaErrorCode(error),
       frames: (error as Error)?.stack
         ?.split('\n')
         .filter((line) => /^\s+at /.test(line))

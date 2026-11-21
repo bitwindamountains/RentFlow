@@ -5,6 +5,7 @@ import { BalancesService } from '../billing/balances.service.js';
 import { BillingService } from '../billing/billing.service.js';
 import { audit } from '../common/audit.js';
 import { todayInZone } from '../common/dates.js';
+import { prismaErrorCode } from '../common/error.filter.js';
 import { DomainError } from '../common/errors.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { environment } from '../config/environment.js';
@@ -98,8 +99,10 @@ export class DemoService {
         todayInZone('Asia/Manila'),
       );
     } catch (error) {
-      this.logger.error({ event: 'DEMO_SEED_FAILED', type: (error as Error)?.name });
-      await deleteDemoOrganization(this.prisma, organizationId).catch(() => undefined);
+      this.logger.error({ event: 'DEMO_SEED_FAILED', type: (error as Error)?.name, prismaCode: prismaErrorCode(error) });
+      await deleteDemoOrganization(this.prisma, organizationId).catch((cleanup: unknown) =>
+        this.logger.error({ event: 'DEMO_CLEANUP_FAILED', organizationId, type: (cleanup as Error)?.name, prismaCode: prismaErrorCode(cleanup) }),
+      );
       throw error;
     }
     return issued;

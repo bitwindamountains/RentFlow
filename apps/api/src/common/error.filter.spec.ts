@@ -1,4 +1,5 @@
 import { type ArgumentsHost, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { ErrorFilter } from './error.filter.js';
 import { DomainError } from './errors.js';
@@ -46,5 +47,17 @@ describe('ErrorFilter', () => {
     expect(body).toMatchObject({ statusCode: 500, code: 'INTERNAL' });
     expect(JSON.stringify(body)).not.toContain('hunter2');
     expect(JSON.stringify(log.mock.calls)).not.toContain('hunter2');
+  });
+
+  it('logs the Prisma error code of an unexpected database error, not its message', () => {
+    const target = host();
+    const filter = new ErrorFilter();
+    const logger = (filter as unknown as { logger: { error: (value: unknown) => void } }).logger;
+    const log = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const error = new Prisma.PrismaClientKnownRequestError('Transaction already closed: tenant Juan', { code: 'P2028', clientVersion: 'test' });
+    filter.catch(error, target.value);
+    expect(target.send.mock.calls[0]![0]).toMatchObject({ statusCode: 500, code: 'INTERNAL' });
+    expect(log.mock.calls[0]![0]).toMatchObject({ event: 'UNEXPECTED_REQUEST_ERROR', prismaCode: 'P2028' });
+    expect(JSON.stringify(log.mock.calls)).not.toContain('Juan');
   });
 });

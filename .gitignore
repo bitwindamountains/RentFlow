@@ -25,3 +25,6 @@ graphify-out/
 secrets/
 .claude/settings.local.json
 Thumbs.db
+
+.vercel
+.env.local

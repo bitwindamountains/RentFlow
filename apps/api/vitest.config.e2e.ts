@@ -18,6 +18,7 @@ export default defineConfig({
       STORAGE_DIR: join(tmpdir(), `rentflow-e2e-uploads-${process.pid}`),
       UPLOAD_MAX_MB: '1',
       STORAGE_QUOTA_MB: '10',
+      CRON_SECRET: 'e2e-cron-secret-0123456789abcdef',
     },
     testTimeout: 60_000,
     hookTimeout: 180_000,

@@ -39,6 +39,8 @@ export interface AppEnvironment {
   MFA_ENCRYPTION_KEY: Buffer | null;
   /** Shown on the public privacy notice as the contact for personal-data requests. */
   PRIVACY_CONTACT_EMAIL: string;
+  /** Bearer secret for GET /jobs/run (Vercel Cron); empty turns the endpoint off. */
+  CRON_SECRET: string;
 }
 
 const environments = new Set<Environment>(['development', 'test', 'production']);
@@ -155,6 +157,8 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
   if (production && !mfaKeyText) throw new Error('MFA_ENCRYPTION_KEY is required in production');
   const mfaKey = mfaKeyText ? Buffer.from(mfaKeyText, 'base64') : null;
   if (mfaKey && mfaKey.length !== 32) throw new Error('MFA_ENCRYPTION_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)');
+  const cronSecret = String(input['CRON_SECRET'] ?? '').trim();
+  if (cronSecret && cronSecret.length < 32) throw new Error('CRON_SECRET must be at least 32 characters');
   const privacyContact = String(input['PRIVACY_CONTACT_EMAIL'] ?? '').trim();
   // The Data Privacy Act requires the privacy notice to name a contact.
   if (production && !privacyContact) throw new Error('PRIVACY_CONTACT_EMAIL is required in production');
@@ -190,10 +194,11 @@ export function validateEnvironment(input: Record<string, unknown>): AppEnvironm
     S3_ACCESS_KEY_ID: s3.accessKeyId,
     S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
     S3_FORCE_PATH_STYLE: String(input['S3_FORCE_PATH_STYLE'] ?? 'false') === 'true',
-    UPLOAD_MAX_BYTES: integer(input, 'UPLOAD_MAX_MB', 10, 1, 50) * 1_048_576,
+    UPLOAD_MAX_BYTES: integer(input, 'UPLOAD_MAX_MB', 4, 1, 50) * 1_048_576,
     STORAGE_QUOTA_BYTES: integer(input, 'STORAGE_QUOTA_MB', 2048, 10, 1_048_576) * 1_048_576,
     MFA_ENCRYPTION_KEY: mfaKey,
     PRIVACY_CONTACT_EMAIL: privacyContact,
+    CRON_SECRET: cronSecret,
   };
 }
 

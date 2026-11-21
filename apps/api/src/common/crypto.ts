@@ -40,6 +40,13 @@ function parseHash(stored: string) {
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 128;
 
+/** Constant-time comparison for secrets such as CSRF tokens and the cron secret. */
+export function sameSecret(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 export function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }

@@ -54,7 +54,7 @@ The API validates its configuration at startup and exits with a clear message if
 | `MAIL_ENCRYPTION_KEY` | Required in production: 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts queued email, including one-time links. Use the same stable key on every API instance and preserve it with encrypted backups. Do not replace it while messages are pending. |
 | `SESSION_ABSOLUTE_HOURS` / `SESSION_IDLE_MINUTES` | Default 12 h absolute, 120 min idle |
 | `STORAGE_DRIVER` | `local` (default: the `uploads` volume at `STORAGE_DIR=/data/uploads`) or `s3` (any S3-compatible bucket; see the example env file). The bucket must be **private**; files are only served through the API. |
-| `UPLOAD_MAX_MB` / `STORAGE_QUOTA_MB` | Per-file limit (default 10 MB) and per-workspace total (default 2 GB) |
+| `UPLOAD_MAX_MB` / `STORAGE_QUOTA_MB` | Per-file limit (default 4 MB; Vercel refuses request bodies over 4.5 MB) and per-workspace total (default 2 GB) |
 | `MFA_ENCRYPTION_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`). It encrypts authenticator-app secrets for two-step sign-in. Without it, people cannot turn on two-step sign-in. Keep a copy with your backups: if it is lost, accounts with two-step sign-in can only sign in with recovery codes until an admin clears `mfaSecret`. |
 
 ## 3. Launch

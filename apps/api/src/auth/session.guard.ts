@@ -7,19 +7,13 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { MembershipRole } from '@prisma/client';
-import { timingSafeEqual } from 'node:crypto';
+import { sameSecret } from '../common/crypto.js';
 import { sessionCookieName } from '../config/environment.js';
 import { AuthService } from './auth.service.js';
 import { ALLOW_WITHOUT_MFA, DEMO_RESTRICTED, IS_PUBLIC, ROLES } from './decorators.js';
 import type { AuthenticatedRequest } from './session.types.js';
 
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-function sameSecret(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
 
 /**
  * Global guard: authenticates the session cookie, enforces @Roles on the

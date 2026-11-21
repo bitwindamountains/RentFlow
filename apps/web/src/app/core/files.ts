@@ -6,6 +6,9 @@ export const ACCEPTED_FILE_TYPES: Record<string, string> = {
   'image/webp': 'WebP',
 };
 
+/** Mirrors the API's UPLOAD_MAX_MB default; Vercel refuses request bodies over 4.5 MB. */
+export const MAX_UPLOAD_BYTES = 4 * 1_048_576;
+
 /** "PDF · 240 KB" style description of an uploaded file. */
 export function describeFile(type: string | null | undefined, size: number | null | undefined): string {
   const kind = ACCEPTED_FILE_TYPES[type ?? ''] ?? 'File';

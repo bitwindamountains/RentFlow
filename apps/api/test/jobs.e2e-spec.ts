@@ -7,7 +7,7 @@ import { NotificationsService } from '../src/notifications/notifications.service
 import { LeasesService } from '../src/rentals/leases.service.js';
 import { StorageService } from '../src/storage/storage.service.js';
 import { PrismaService } from '../src/common/prisma.service.js';
-import { createRental, monthStart, prismaOf, registerOwner, startApp } from './helpers.js';
+import { Client, createRental, monthStart, prismaOf, registerOwner, startApp } from './helpers.js';
 
 /** Background jobs against the real database: the JobLock row is the only thing keeping two API instances apart. */
 describe('background job lock', () => {
@@ -23,6 +23,30 @@ describe('background job lock', () => {
     await prismaOf(app).jobLock.deleteMany({});
   });
   afterAll(async () => app.close());
+
+  it('runs once through GET /jobs/run only with the cron secret (Vercel Cron)', async () => {
+    const cron = new Client(app);
+    const bearer = `Bearer ${process.env.CRON_SECRET}`;
+    expect((await cron.get('/jobs/run')).status).toBe(404);
+    expect((await cron.get('/jobs/run', { authorization: 'Bearer wrong-secret' })).status).toBe(404);
+    expect((await cron.get('/jobs/run', { authorization: process.env.CRON_SECRET! })).status).toBe(404);
+    const ran = await cron.get('/jobs/run', { authorization: bearer });
+    expect(ran.status).toBe(200);
+    expect(ran.body).toMatchObject({ ran: true, organizations: expect.any(Number) });
+
+    // Another instance holding the lock: the cron call answers without running.
+    const holder = otherInstance();
+    let finish!: () => void;
+    const holding = new Promise<void>((resolve) => { finish = resolve; });
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => { started = resolve; });
+    vi.spyOn(holder, 'runAll').mockImplementation(async () => { started(); await holding; return result; });
+    const held = holder.tick();
+    await running;
+    expect((await cron.get('/jobs/run', { authorization: bearer })).body).toEqual({ ran: false });
+    finish();
+    await held;
+  });
 
   it('lets only one instance run while the other holds the lock', async () => {
     const first = otherInstance();

@@ -4,10 +4,9 @@ import { ActivatedRoute } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiClient, type ApiError } from '../core/api-client.service';
 import { MomentPipe } from '../core/format';
-import { ACCEPTED_FILE_TYPES as ACCEPTED, describeFile } from '../core/files';
+import { ACCEPTED_FILE_TYPES as ACCEPTED, MAX_UPLOAD_BYTES, describeFile } from '../core/files';
 import type { DocumentRecord, Property, TenantSummary } from '../core/models';
 import { appendPage } from '../core/pagination';
-const MAX_BYTES = 10 * 1_048_576;
 
 @Component({
   selector: 'app-documents-page',
@@ -30,7 +29,7 @@ const MAX_BYTES = 10 * 1_048_576;
       </div>
       <fieldset [disabled]="saving()" class="document-fields">
         @if (mode() === 'file') {
-          <label class="field"><span>File <em>PDF, JPEG, PNG, or WebP · up to 10 MB</em></span>
+          <label class="field"><span>File <em>PDF, JPEG, PNG, or WebP · up to 4 MB</em></span>
             <input name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="pick($event)" required />
             @if (file(); as chosen) { <small>{{ describeFile(chosen.type, chosen.size) }}</small> }
           </label>
@@ -164,8 +163,8 @@ export class DocumentsPage implements OnInit {
       this.file.set(null);
       return;
     }
-    if (chosen && chosen.size > MAX_BYTES) {
-      this.error.set('That file is larger than 10 MB. Scan at a lower resolution or split the PDF.');
+    if (chosen && chosen.size > MAX_UPLOAD_BYTES) {
+      this.error.set('That file is larger than 4 MB. Scan at a lower resolution or split the PDF.');
       input.value = '';
       this.file.set(null);
       return;

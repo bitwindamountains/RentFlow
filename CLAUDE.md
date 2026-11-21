@@ -108,7 +108,7 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 - `reports`: dashboard, arrears, reminders, CSV
 - `staff`
 - `portal`: `PortalController` for tenants under `/portal/*`; `PortalAdminController` for staff review of payment notices and portal access
-- `jobs`: background billing, expiry, cleanup every 15 minutes under a DB lock; gated by `ENABLE_JOBS`
+- `jobs`: background billing, expiry, cleanup every 15 minutes under a DB lock; gated by `ENABLE_JOBS`. On Vercel, Vercel Cron calls `GET /jobs/run` with `Authorization: Bearer $CRON_SECRET` instead (404 without it)
 - `notifications`: staff email alerts through the `OutboxEvent` table.
   - Call `enqueueStaffAlert(tx, …)` inside the business transaction, so an alert exists only if the write commits and replays never alert twice.
   - Then call `kick()`. The job retries failed sends with backoff.
@@ -160,6 +160,7 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 ## Docs
 
 - [docs/deployment.md](docs/deployment.md): Docker Compose with Caddy, and the environment variables.
+- [docs/deployment-vercel.md](docs/deployment-vercel.md): the free Vercel Hobby deployment (one project: CDN for the PWA, the API as one function in Seoul via `api/index.mjs` and `apps/api/src/vercel.ts`; `vercel.json` holds routing, headers and cron). Uploads are capped at 4 MB because Vercel refuses bodies over 4.5 MB.
 - [docs/production-operations.md](docs/production-operations.md): safeguards, tenant portal, background jobs, rent rules, known limitations. Update it when behaviour changes.
 
 ## Session workflow

@@ -5,6 +5,7 @@ import { forkJoin } from 'rxjs';
 import { ApiClient, type ApiError, isUncertain } from '../core/api-client.service';
 import { DayPipe, LabelPipe, MomentPipe, MoneyPipe } from '../core/format';
 import type { PaymentNotice, PortalHome, PortalPayment } from '../core/models';
+import { MAX_UPLOAD_BYTES } from '../core/files';
 import { isMoney } from '../core/money';
 import { appendPage } from '../core/pagination';
 
@@ -57,7 +58,7 @@ const PROOF_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
           <label class="field"><span>Date paid</span>
             <input name="paidOn" type="date" [(ngModel)]="draft.paidOn" [max]="today()" required /></label>
         </div>
-        <label class="field"><span>Screenshot or receipt <em>Optional · JPEG, PNG, WebP, or PDF up to 10 MB</em></span>
+        <label class="field"><span>Screenshot or receipt <em>Optional · JPEG, PNG, WebP, or PDF up to 4 MB</em></span>
           <input name="proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" (change)="pick($event)" /></label>
         <label class="field"><span>Note <em>Optional</em></span>
           <textarea name="note" [(ngModel)]="draft.note" maxlength="500" placeholder="e.g. Paid for October rent and water"></textarea></label>
@@ -220,8 +221,8 @@ export class PortalPaymentsPage implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
     this.error.set('');
-    if (file && (!PROOF_TYPES.includes(file.type) || file.size > 10 * 1_048_576)) {
-      this.error.set('Attach a JPEG, PNG, WebP, or PDF up to 10 MB. On an iPhone, share the screenshot as JPEG.');
+    if (file && (!PROOF_TYPES.includes(file.type) || file.size > MAX_UPLOAD_BYTES)) {
+      this.error.set('Attach a JPEG, PNG, WebP, or PDF up to 4 MB. On an iPhone, share the screenshot as JPEG.');
       input.value = '';
       this.proof = null;
       return;

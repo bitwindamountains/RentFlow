@@ -101,7 +101,7 @@ describe('validateEnvironment', () => {
     ).toThrow('https');
     expect(
       validateEnvironment({ ...base, STORAGE_DRIVER: 's3', S3_BUCKET: 'docs', S3_REGION: 'auto', S3_ACCESS_KEY_ID: 'k', S3_SECRET_ACCESS_KEY: 's' }),
-    ).toMatchObject({ STORAGE_DRIVER: 's3', UPLOAD_MAX_BYTES: 10 * 1_048_576 });
+    ).toMatchObject({ STORAGE_DRIVER: 's3', UPLOAD_MAX_BYTES: 4 * 1_048_576 });
     expect(() => validateEnvironment({ ...base, UPLOAD_MAX_MB: '500' })).toThrow('UPLOAD_MAX_MB');
   });
 });

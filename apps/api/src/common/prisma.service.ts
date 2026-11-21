@@ -8,6 +8,12 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  constructor() {
+    // Wait for a pooled connection instead of failing with P2028 after Prisma's 2 s default:
+    // a serverless instance with a small pool serves many requests at once.
+    super({ transactionOptions: { maxWait: 10_000 } });
+  }
+
   async onModuleInit(): Promise<void> {
     await this.$connect();
   }

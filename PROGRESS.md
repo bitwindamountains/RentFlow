@@ -10,6 +10,17 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-11-22: Vercel deployment target (free Hobby plan; not deployed yet).** The user's cards were declined by Oracle, and hosting must be free. RentFlow is free for now, so Vercel Hobby's non-commercial rule is met. Move off Hobby (Pro or Docker) once it earns money. Guide: `docs/deployment-vercel.md`.
+  - One project: the PWA from the CDN, and the whole API as one function in `icn1` (`api/index.mjs` re-exports `apps/api/src/vercel.ts`). `vercel.json` holds the build, routing, headers (scoped away from `/api`), cron and region. The Docker setup is unchanged.
+  - New `GET /api/v1/jobs/run` for Vercel Cron: `@Public`, and 404 unless `Authorization: Bearer $CRON_SECRET` (at least 32 characters) matches; it runs `JobsService.tick()` under the existing lock. `sameSecret` moved to `common/crypto.ts`.
+  - On Vercel, queued mail and staff alerts are sent after each mutating response through `waitUntil` (new dependency `@vercel/functions`).
+  - Upload limit is now **4 MB everywhere** (API default plus the shared `MAX_UPLOAD_BYTES` in the web app), because Vercel refuses bodies over 4.5 MB.
+  - **Found while testing the transaction pooler (port 6543, `pgbouncer=true`):** 5 simultaneous identical payments with one idempotency key gave one payment, but 4 of the 5 requests got 500 (`P2028`: no connection within Prisma's 2 s `maxWait`). `PrismaService` now waits up to 10 s for a connection. Re-run twice with `connection_limit=3`: all 5 requests got 201 with the same payment, and exactly one payment was recorded each time.
+  - Proof against Supabase through the transaction pooler: the account/document/alert walk passed 40/40 and the portal walk 24/24. The local handler smoke test (both URL forms, body parsing, auth, cron 404) passed. Throwaway workspaces were deleted.
+  - Checks: audit 0, lint, typecheck, 69 unit, 151 e2e, 39 web tests, and the build pass. One e2e run had a 500 in `mfa.e2e-spec` "blocks everything…"; it passed on two re-runs of that file. It is unrelated to these changes, but cause unknown.
+  - **Not verified until a real deploy:** the bundled CA path (`/var/task/deploy/certs/`), whether Hobby accepts the 15-minute cron, how Vercel passes the rewritten path (both forms are handled), and the client IP header.
+  - **Waiting on the user:** a Vercel account, a Gmail app password, a Supabase Storage bucket and S3 key, and the Supabase CA file.
+
 - **2026-11-22: Pre-deployment review against Supabase.** CI on `main` is green (`adbd999`).
   - **Account security, documents and alerts: 40/40 checks passed, no errors logged** (throwaway workspaces deleted afterwards).
     - A new owner gets `MFA_SETUP_REQUIRED` until two-step sign-in is on. Email verification by the mailed link works. Two-step setup issues 10 recovery codes.

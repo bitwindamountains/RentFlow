@@ -13,7 +13,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 - **2026-11-21: Deployment and workflow review.** All CI verify steps pass locally: audit 0, lint, typecheck, 66 unit, 150 e2e, 39 web, build, and 7 script tests. `check-ui.mjs` passes for every public, staff, portal and demo page at all widths in light and dark.
   - Found: `deploy/proxy.test.mjs` (Caddy headers, caching, keeping the API's sandbox CSP) had never been run by CI. It is now a `verify` step that takes Caddy from the pinned `caddy:2.11.7-alpine` image; keep that tag in step with the Dockerfile.
   - Its first run (CI 44893220557) found 3 Caddyfile bugs, now fixed (CI 44893643412 passed both jobs): Caddy replaced the API's CSP, so documents lost `sandbox` in production (now `?Content-Security-Policy`); `/` had no `no-cache`; a missing asset got `index.html` with 200, marked immutable when hashed. Now only paths without a file extension fall back to `index.html`, so app routes must not contain a dot.
-  - Supabase dev was still hibernated (P1001), so `20261120090000_demo_mode` is still not applied.
+  - The user woke the hibernated Supabase dev project; `20261120090000_demo_mode` is now applied there (all 19 migrations, schema up to date).
 
 - **2026-11-20: Demo mode** (merged into `main` and pushed as `e01d3d1`; GitHub CI run 44622262416 passed both jobs, including `containers`; design `docs/superpowers/specs/2026-11-20-demo-mode-design.md`, plan `docs/superpowers/plans/2026-11-20-demo-mode.md`).
   - "Try the demo" on the sign-in page gives a stranger a private "Demo Rentals" workspace with sample data made through the real services. It is deleted after 24 hours by the background job. A banner links to registration. Landlord side only; the tenant portal is not part of the demo.
@@ -25,7 +25,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
     - Sign-in says what RentFlow is and gives "Try the demo" more weight; demo errors show under the demo button. The demo banner is a calm one-line brand bar, and the demo dashboard suggests collecting the top overdue balance.
     - On phones, dashboard chart tooltips are centred on the chart so they no longer widen the page. The visual review now names the element that overflows.
   - Not done: the disabled "Sign in" button looks almost enabled in dark mode (an app-wide button style).
-  - New migration `20261120090000_demo_mode` (`Organization.demoExpiresAt`). **Not applied to Supabase yet.**
+  - New migration `20261120090000_demo_mode` (`Organization.demoExpiresAt`). Applied to Supabase 2026-11-21.
 
 - **2026-11-20: Dependency security update before v1 deploy.** `npm audit` had found 9 new advisories (1 high: `zod`; moderate: `nodemailer` address parsing, `fast-uri`, `ip-address`, `glob`/`minimatch`, `vitest`; low: `fastify`). Now 0.
   - `npm audit fix`, then pin bumps: `fastify` 5.12.8, `@fastify/static` 10.1.12, `@nestjs/*` 12.5.1, `@nestjs/cli` 12.0.13, `vitest` ^4.1.12.

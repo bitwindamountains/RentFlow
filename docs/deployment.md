@@ -10,7 +10,7 @@ RentFlow ships as three containers built from the root `Dockerfile`:
 
 PostgreSQL 17 is required. A managed database with point-in-time recovery (e.g. DigitalOcean, AWS RDS, Supabase Postgres, Neon) is strongly recommended over the bundled container.
 
-For a managed database, set `DATABASE_URL` to that service and add `-f compose.managed.yaml` to every Compose command below (Compose 2.24.4+). This disables the bundled database and removes the migration dependency on it. Keep `POSTGRES_PASSWORD` set to an unused placeholder because the base file still interpolates it; no bundled database runs in this mode. Use the provider's backups instead of the bundled database backup script.
+For a managed database, set `DATABASE_URL` to that service and add `-f compose.managed.yaml` to every Compose command below (Compose 2.24.4+). This disables the bundled database and removes the migration dependency on it. Keep `POSTGRES_PASSWORD` set to an unused placeholder because the base file still interpolates it; no bundled database runs in this mode. Use the provider's backups instead of the bundled database backup script; without provider backups, see section 5.
 
 **Supabase, or any database shared with other apps:**
 - **Own role and schema:** give RentFlow its own login role and its own schema, for example `rentflow`, never `public`.
@@ -80,6 +80,14 @@ The review-fix release adds four migrations: `20261009090000_durable_operations`
 ## 5. Backups and restore
 
 With a managed database, enable daily snapshots **and** point-in-time recovery (7+ days).
+
+With a managed database that has no backups (the Supabase free tier), you must take them yourself. `deploy/backup.sh` does not cover this setup.
+- **Database:** schedule `npm run db:backup --workspace api` nightly with `BACKUP_DIR` set. It runs on any machine with this repository, Node 24, `npm ci`, and `pg_dump`/`pg_restore` 17 or later (for example `postgresql-client-17` on the server). Run it with the production `DATABASE_URL`; with `sslcert=`, the CA path must exist on that machine.
+- **Uploads** (`STORAGE_DRIVER=local`): archive the volume on the server:
+
+  ```sh
+  docker compose -f compose.prod.yaml -f compose.managed.yaml --env-file .env.production run --rm --no-deps -T --entrypoint tar api -C /data -czf - uploads > /var/backups/rentflow/uploads-$(date -u +%Y%m%dT%H%M%SZ).tar.gz
+  ```
 
 With the bundled database and local uploads, run the backup script nightly (example cron; configure the server's cron timezone to Manila):
 

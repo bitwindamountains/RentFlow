@@ -10,6 +10,17 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-11-22: Pre-deployment review against Supabase.** CI on `main` is green (`adbd999`).
+  - **Account security, documents and alerts: 40/40 checks passed, no errors logged** (throwaway workspaces deleted afterwards).
+    - A new owner gets `MFA_SETUP_REQUIRED` until two-step sign-in is on. Email verification by the mailed link works. Two-step setup issues 10 recovery codes.
+    - Sign-in: the password alone gives no session; a wrong code gets 401; the right code signs in.
+    - Documents: a tenant PNG uploads and downloads byte for byte, with `image/png`, a sandboxed CSP, `nosniff` and `no-store`. A fake PDF is refused (415).
+    - A tenant's urgent repair emails the verified owner ("Urgent repair: …").
+    - Password reset by the mailed link works; the old password is refused; two-step is still required after the reset.
+  - **Blocker: the Supabase CA is missing.** `deploy/certs/prod-ca-2021.crt` was never downloaded. Tested against the real pooler: `sslmode=require&sslaccept=strict` without it fails with P1011 (untrusted root); `require` alone connects. Production refuses non-strict TLS, so `migrate` and the API cannot start until the file is in place.
+  - **Backups gap (docs fixed):** with Supabase, `deploy/backup.sh` covers nothing, and the docs said "use the provider's backups", which the free tier does not have. `docs/deployment.md` section 5 now says where to run `npm run db:backup` (Node 24 plus `pg_dump` 17 or later) and gives the uploads-volume archive command. Not run against Supabase: this machine has no `pg_dump`.
+  - Not tested against Supabase: background jobs (`ENABLE_JOBS=true` would bill the dev data), and the browser UI (it passed `check-ui.mjs` against a local database).
+
 - **2026-11-21: Deployment and workflow review.** All CI verify steps pass locally: audit 0, lint, typecheck, 66 unit, 150 e2e, 39 web, build, and 7 script tests. `check-ui.mjs` passes for every public, staff, portal and demo page at all widths in light and dark.
   - Found: `deploy/proxy.test.mjs` (Caddy headers, caching, keeping the API's sandbox CSP) had never been run by CI. It is now a `verify` step that takes Caddy from the pinned `caddy:2.11.7-alpine` image; keep that tag in step with the Dockerfile.
   - Its first run (CI 44893220557) found 3 Caddyfile bugs, now fixed (CI 44893643412 passed both jobs): Caddy replaced the API's CSP, so documents lost `sandbox` in production (now `?Content-Security-Policy`); `/` had no `no-cache`; a missing asset got `index.html` with 200, marked immutable when hashed. Now only paths without a file extension fall back to `index.html`, so app routes must not contain a dot.
@@ -47,7 +58,7 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 - **2026-10-20: Second `/ship` review, and its 3 fixes.** Committed (`ee23284`..`4f8ca03`) and pushed; GitHub CI run 39375687252 passed both jobs. Verdict: GO for staging, NO-GO for real tenants' data until Next steps 0a is done. There were no Critical or High findings. CI passed on `9e416db`.
   - **Database TLS is now verified.**
     - Prisma's built-in engine knows only `sslmode` disable, prefer and require. It treats `verify-ca` and `verify-full` as `prefer`. `require` alone accepts any certificate.
-    - Production now requires `sslmode=require&sslaccept=strict` for a remote database. If the provider's CA is private, `sslcert=` must point at it by absolute path. For Supabase that is `prod-ca-2021.crt`, saved in `deploy/certs/`; `compose.managed.yaml` mounts it at `/etc/rentflow/db-certs`.
+    - Production now requires `sslmode=require&sslaccept=strict` for a remote database. If the provider's CA is private, `sslcert=` must point at it by absolute path. For Supabase that is `prod-ca-2021.crt`, to be saved in `deploy/certs/` (**not downloaded yet**, as of 2026-11-22); `compose.managed.yaml` mounts it at `/etc/rentflow/db-certs`.
     - `postgresConnection` (the backup helper) maps these to libpq: `sslmode=verify-full`, plus `sslrootcert` set to the file or `system`.
     - The dev `.env` is not affected, since only production enforces this.
     - **Not yet tested against the real Supabase pooler.** Do that in the staging run.

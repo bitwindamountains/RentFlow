@@ -10,6 +10,10 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-11-21: Deployment and workflow review.** All CI verify steps pass locally: audit 0, lint, typecheck, 66 unit, 150 e2e, 39 web, build, and 7 script tests. `check-ui.mjs` passes for every public, staff, portal and demo page at all widths in light and dark.
+  - Found: `deploy/proxy.test.mjs` (Caddy headers, caching, keeping the API's sandbox CSP) had never been run by CI. It is now a `verify` step that takes Caddy from the pinned `caddy:2.11.7-alpine` image; keep that tag in step with the Dockerfile. Not run locally (no Caddy or Docker here), so the next CI run is its first proof. Not committed yet.
+  - Supabase dev was still hibernated (P1001), so `20261120090000_demo_mode` is still not applied.
+
 - **2026-11-20: Demo mode** (merged into `main` and pushed as `e01d3d1`; GitHub CI run 44622262416 passed both jobs, including `containers`; design `docs/superpowers/specs/2026-11-20-demo-mode-design.md`, plan `docs/superpowers/plans/2026-11-20-demo-mode.md`).
   - "Try the demo" on the sign-in page gives a stranger a private "Demo Rentals" workspace with sample data made through the real services. It is deleted after 24 hours by the background job. A banner links to registration. Landlord side only; the tenant portal is not part of the demo.
   - Off unless `DEMO_ENABLED=true`. `DEMO_MAX_ACTIVE` (default 25) caps live demos; 3 demos per IP per hour.

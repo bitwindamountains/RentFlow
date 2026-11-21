@@ -54,6 +54,13 @@ jobs:
         run: sh -n deploy/backup.sh && sh -n deploy/smoke.sh
       - name: Backup failure handling and test process status
         run: node --test deploy/backup.test.mjs apps/api/scripts/backup.test.mjs apps/api/scripts/disposable-postgres.test.mjs
+      # Keep the image tag in step with the Dockerfile's web target.
+      - name: Caddyfile routing, caching and header behaviour
+        run: |
+          docker create --name caddy-bin caddy:2.11.7-alpine
+          docker cp caddy-bin:/usr/bin/caddy "$RUNNER_TEMP/caddy"
+          docker rm caddy-bin
+          CADDY_PATH="$RUNNER_TEMP/caddy" node --test deploy/proxy.test.mjs
 
   containers:
     runs-on: ubuntu-24.04

@@ -71,7 +71,8 @@ export class App {
   protected readonly demoHoursLeft = computed(() => {
     const expiresAt = this.profile()?.organization.demoExpiresAt;
     if (!expiresAt) return null;
-    return Math.max(1, Math.ceil((Date.parse(expiresAt) - this.now()) / 3_600_000));
+    this.now(); // re-runs each minute; the real clock, since `now` may predate a demo started seconds ago
+    return Math.max(1, Math.ceil((Date.parse(expiresAt) - Date.now()) / 3_600_000));
   });
   protected readonly online = this.api.online;
   @ViewChild('globalSearch') private searchInput?: ElementRef<HTMLInputElement>;

@@ -166,6 +166,21 @@ const demoProfile = (hoursLeft: number): Profile => {
     expect(banner?.textContent).toContain('Create your own workspace');
   });
 
+  it('a demo started after the page loaded shows 24 hours, not 25', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      vi.setSystemTime(Date.now() + 30_000); // the visitor reads the sign-in page, then starts a demo
+      TestBed.inject(ApiClient).profile.set(demoProfile(24));
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('deleted in about 24 hours');
+      fixture.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('the demo banner counts down while the tab stays open', () => {
     vi.useFakeTimers();
     try {

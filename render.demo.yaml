@@ -29,9 +29,9 @@ services:
           name: rentflow-demo-db
           property: connectionString
       - key: WEB_ORIGIN
-        value: https://rentflow-demo.onrender.com
+        value: https://rentflow-demo-x6iq.onrender.com
       - key: APP_URL
-        value: https://rentflow-demo.onrender.com
+        value: https://rentflow-demo-x6iq.onrender.com
       - key: DEMO_ENABLED
         value: "true"
       - key: DEMO_MAX_ACTIVE

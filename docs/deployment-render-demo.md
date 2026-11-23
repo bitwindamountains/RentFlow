@@ -24,7 +24,7 @@ TindaBot's Blueprint flow asked for a card, and the card was declined. If that h
 4. If Render gives different `.onrender.com` names, update `WEB_ORIGIN` and `APP_URL` on the API, and the rewrite destination on the static site.
 5. **Check** (the API sleeps after about 15 minutes idle, so the first request can take about a minute):
    - `https://rentflow-demo-api.onrender.com/api/v1/health/ready` answers ready.
-   - On `https://rentflow-demo.onrender.com`, **Try the demo** opens a seeded "Demo Rentals" workspace, and a payment can be recorded.
+   - On `https://rentflow-demo-x6iq.onrender.com`, **Try the demo** opens a seeded "Demo Rentals" workspace, and a payment can be recorded.
    - Reload a deep link such as `/dashboard`: it loads the app, not a 404.
    - **Client IP:** in the API logs, create two demos from two different networks (Wi-Fi and mobile data). If the 4th demo within an hour from *one* network is refused (`429`) but other networks still work, `TRUST_PROXY=2` is right. If every visitor shares one limit, the API is seeing a Render proxy address; raise or lower `TRUST_PROXY` and check again.
 

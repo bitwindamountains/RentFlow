@@ -12,9 +12,8 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 - **2026-11-24: Render public demo deployed (by hand in the dashboard).** Live at https://rentflow-demo-x6iq.onrender.com (static site), with the API at https://rentflow-demo-api.onrender.com. `rentflow-demo.onrender.com` was taken by someone else, so `render.demo.yaml` and the guide now use the `x6iq` URL.
   - Checked from here: the static site serves the app; `/api/v1/health/ready` through the rewrite returns ready; a sign-in attempt through the rewrite reaches the API (401 as expected).
-  - **To do:** set `WEB_ORIGIN` and `APP_URL` on the Render API to `https://rentflow-demo-x6iq.onrender.com` (they were set to the old guess).
   - **Open question:** `POST /demo` through the rewrite returned 429 on the 2nd request from the user's network. Either earlier clicks used up the 3-per-hour limit, or Render's `X-Forwarded-For` chain differs and every visitor shares one key (`TRUST_PROXY`). Run the guide's Wi-Fi versus mobile-data check; if both are refused, adjust `TRUST_PROXY` from the API logs.
-  - A full demo walk on Render (Try the demo, payment, receipt reload, Leave demo) is not done yet.
+  - `WEB_ORIGIN` and `APP_URL` on the Render API are now the `x6iq` URL. **Live walk passed (13/13):** demo created in about 6 s; the cookie is HttpOnly + SameSite=Strict through the rewrite; staff reads 140-720 ms; payment `DEMO-2026-000024`, and its replay returns the same payment; the staff invite gets `DEMO_RESTRICTED`; Leave demo deletes the session. Browser: Try the demo opens the dashboard with the 24-hour banner, a reload keeps the session, Leave demo confirms and returns to sign-in, no console errors.
 
 - **2026-11-24: Render public demo config.** This follows TindaBot's demo at tindabot.onrender.com. `render.demo.yaml` plus `docs/deployment-render-demo.md` describe three free resources in Singapore:
   - a free Render Postgres, which expires after 30 days (the user chose it over the Supabase dev DB);

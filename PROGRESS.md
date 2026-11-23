@@ -16,7 +16,18 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
   - a static site that rewrites `/api/*` to the API.
   - No code changes.
   - **To do by hand in the dashboard**, since TindaBot's Blueprint flow wanted a card. Then run the guide's checks.
-  - **Not verified until deployed:** that the rewrite passes cookies and the CSRF header; `TRUST_PROXY=2` (all visitors may share one demo rate limit); whether static-site headers touch proxied API responses.
+  - **Local review of the Render setup (same day).** Builds use Render's exact commands. The API ran with exactly the YAML env and no `.env`, on a throwaway Postgres. A static server stood in for Render's static site: real file first, `/api/*` forwarded with a 2-hop `X-Forwarded-For`, everything else gets `index.html`.
+    - Demo e2e: 21/21. HTTP walk: 33/33.
+      - The static rules work, and the session cookie (HttpOnly, SameSite=Strict) survives the rewrite.
+      - Every staff read endpoint returns 200, including the CSV.
+      - A payment works with CSRF and idempotency, and its replay returns the same payment; without the CSRF header it is refused (403).
+      - A staff invite gets `DEMO_RESTRICTED`.
+      - The 4th demo from one IP is refused (429) while another IP still gets one, so `TRUST_PROXY=2` is right if Render's chain is really 2 hops.
+      - Signing out deletes the demo.
+    - Browser walk: Try the demo, then collect the suggested payment through the 3-step form, then the receipt; a deep-link reload keeps the session. All 13 staff pages load with no console errors; the blocked invite shows "Not available in the demo"; phone width is fine; Leave demo confirms and deletes. No errors in the API log.
+    - **Bug fixed:** the banner said "deleted in about 25 hours" right after starting a demo. The countdown used a clock last updated when the sign-in page loaded (it ticks once a minute) and rounds up. It now reads the real clock on each recompute. Regression test in `app.spec.ts`; web tests 40/40.
+    - Known and accepted: a missing asset gets `index.html` with 200 on Render (Render's `/*` rewrite can't tell), unlike Caddy's 404.
+  - **Still not verified until deployed:** Render's real `X-Forwarded-For` chain (guide step 5); whether static-site headers touch proxied API responses; rewrite latency.
 
 - **2026-11-22: Vercel deployment target (free Hobby plan; not deployed yet).** The user's cards were declined by Oracle, and hosting must be free. RentFlow is free for now, so Vercel Hobby's non-commercial rule is met. Move off Hobby (Pro or Docker) once it earns money. Guide: `docs/deployment-vercel.md`.
   - One project: the PWA from the CDN, and the whole API as one function in `icn1` (`api/index.mjs` re-exports `apps/api/src/vercel.ts`). `vercel.json` holds the build, routing, headers (scoped away from `/api`), cron and region. The Docker setup is unchanged.

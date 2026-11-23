@@ -161,6 +161,7 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 
 - [docs/deployment.md](docs/deployment.md): Docker Compose with Caddy, and the environment variables.
 - [docs/deployment-vercel.md](docs/deployment-vercel.md): the free Vercel Hobby deployment (one project: CDN for the PWA, the API as one function in Seoul via `api/index.mjs` and `apps/api/src/vercel.ts`; `vercel.json` holds routing, headers and cron). Uploads are capped at 4 MB because Vercel refuses bodies over 4.5 MB.
+- [docs/deployment-render-demo.md](docs/deployment-render-demo.md): the public "Try the demo" site on Render's free plan (`render.demo.yaml`: free Postgres, the API in development mode, and a static site that rewrites `/api/*` to it).
 - [docs/production-operations.md](docs/production-operations.md): safeguards, tenant portal, background jobs, rent rules, known limitations. Update it when behaviour changes.
 
 ## Session workflow

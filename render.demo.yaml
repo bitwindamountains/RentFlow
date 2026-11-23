@@ -1,0 +1,81 @@
+# Public demo on Render's free plan: "Try the demo" workspaces only. Guide: docs/deployment-render-demo.md.
+# No secrets and no real mail (MAIL_PROVIDER=log). The free database is deleted by Render after
+# 30 days; recreate it, since demo workspaces are throwaway. Never point this at a real database.
+databases:
+  - name: rentflow-demo-db
+    plan: free
+    region: singapore
+    postgresMajorVersion: "17"
+
+services:
+  # The API. The static site below proxies /api/* here, so the browser sees one origin.
+  - type: web
+    name: rentflow-demo-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci && npm run db:generate --workspace api && npm run build --workspace api
+    # The free plan has no pre-deploy step, so migrations run at start.
+    startCommand: npm run db:deploy --workspace api && npm run start:prod --workspace api
+    healthCheckPath: /api/v1/health/ready
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # development: production requires real mail, keys and a privacy contact. See the guide's caveats.
+      - key: NODE_ENV
+        value: development
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rentflow-demo-db
+          property: connectionString
+      - key: WEB_ORIGIN
+        value: https://rentflow-demo.onrender.com
+      - key: APP_URL
+        value: https://rentflow-demo.onrender.com
+      - key: DEMO_ENABLED
+        value: "true"
+      - key: DEMO_MAX_ACTIVE
+        value: "10"
+      - key: ENABLE_JOBS
+        value: "true"
+      - key: MAIL_PROVIDER
+        value: log
+      - key: LOG_LEVEL
+        value: log
+      # Render's edge, then the static site's rewrite. Verify after deploy (guide step 5).
+      - key: TRUST_PROXY
+        value: "2"
+
+  # The PWA. Real files are served first; rules apply only to paths with no file.
+  - type: web
+    name: rentflow-demo
+    runtime: static
+    buildCommand: npm ci && npm run build --workspace web
+    staticPublishPath: apps/web/dist/web/browser
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://rentflow-demo-api.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=(), payment=()
+      - path: /*
+        name: Cross-Origin-Opener-Policy
+        value: same-origin
+      # Everything revalidates (ETag). No immutable rule: an overlapping one could pin ngsw-worker.js.
+      - path: /*
+        name: Cache-Control
+        value: no-cache

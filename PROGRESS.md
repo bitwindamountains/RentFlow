@@ -10,6 +10,14 @@ Pushes to `main` start CI again (fixed 2026-10-17). The remaining production blo
 
 ## Done (newest first)
 
+- **2026-11-24: Render public demo config (not deployed yet).** This follows TindaBot's demo at tindabot.onrender.com. `render.demo.yaml` plus `docs/deployment-render-demo.md` describe three free resources in Singapore:
+  - a free Render Postgres, which expires after 30 days (the user chose it over the Supabase dev DB);
+  - the API with `DEMO_ENABLED=true` in development mode;
+  - a static site that rewrites `/api/*` to the API.
+  - No code changes.
+  - **To do by hand in the dashboard**, since TindaBot's Blueprint flow wanted a card. Then run the guide's checks.
+  - **Not verified until deployed:** that the rewrite passes cookies and the CSRF header; `TRUST_PROXY=2` (all visitors may share one demo rate limit); whether static-site headers touch proxied API responses.
+
 - **2026-11-22: Vercel deployment target (free Hobby plan; not deployed yet).** The user's cards were declined by Oracle, and hosting must be free. RentFlow is free for now, so Vercel Hobby's non-commercial rule is met. Move off Hobby (Pro or Docker) once it earns money. Guide: `docs/deployment-vercel.md`.
   - One project: the PWA from the CDN, and the whole API as one function in `icn1` (`api/index.mjs` re-exports `apps/api/src/vercel.ts`). `vercel.json` holds the build, routing, headers (scoped away from `/api`), cron and region. The Docker setup is unchanged.
   - New `GET /api/v1/jobs/run` for Vercel Cron: `@Public`, and 404 unless `Authorization: Bearer $CRON_SECRET` (at least 32 characters) matches; it runs `JobsService.tick()` under the existing lock. `sameSecret` moved to `common/crypto.ts`.

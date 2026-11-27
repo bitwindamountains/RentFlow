@@ -165,8 +165,8 @@ The global guard and error filter are registered in `app.module.ts`. Raw-body up
 - [docs/production-operations.md](docs/production-operations.md): safeguards, tenant portal, background jobs, rent rules, known limitations. Update it when behaviour changes.
 
 ## Session workflow
-- At the start of each session, read PROGRESS.md to see current status and next steps.
-- After any major or relevant change (new feature, architecture change, important decision, bug fix, new commands), update PROGRESS.md with what was done and what's next.
+- At the start of each session, read docs/dev-notes/PROGRESS.md to see current status and next steps.
+- After any major or relevant change (new feature, architecture change, important decision, bug fix, new commands), update docs/dev-notes/PROGRESS.md with what was done and what's next.
 - If the change affects lasting project knowledge (structure, setup, commands, conventions), also update CLAUDE.md.
-- Keep CLAUDE.md concise; put task-specific details in PROGRESS.md.
+- Keep CLAUDE.md concise; put task-specific details in docs/dev-notes/PROGRESS.md.
 - Before the user runs /clear or /compact, make sure both files are up to date.

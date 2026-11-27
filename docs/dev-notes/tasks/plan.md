@@ -1,6 +1,6 @@
 # Plan: from pre-ship review to real tenants
 
-Source: the 2026-10-10 pre-ship review (PROGRESS.md), [docs/deployment.md](../docs/deployment.md), [docs/production-operations.md](../docs/production-operations.md). There is no SPEC.md; those docs are the spec.
+Source: the 2026-10-10 pre-ship review (PROGRESS.md), [docs/deployment.md](../../deployment.md), [docs/production-operations.md](../../production-operations.md). There is no SPEC.md; those docs are the spec.
 
 Owner key: **C** = Claude can do it in the repo. **U** = needs you (accounts, money, DNS, legal). **C+U** = Claude prepares, you run or decide.
 

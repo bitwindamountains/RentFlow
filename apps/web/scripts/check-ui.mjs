@@ -8,7 +8,7 @@
 // database. Screenshots go to apps/web/.ui-review/.
 //
 // Prerequisites: `npm run build --workspace api`, ports 3000 and 4200 free, and
-// Playwright in the local tool cache (see docs/ui-visual-review.md).
+// Playwright in the local tool cache (see docs/dev-notes/reviews/ui-visual-review.md).
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
